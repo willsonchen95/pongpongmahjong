@@ -84,9 +84,11 @@ let showFinal = false             // the match is over and the final standings a
 let celebrate = false             // confetti pending — shown once, not on every re-render
 let faanCardOpen = false          // the "Your hand" details card, tapped open (it also opens on hover)
 const HELP_KEY = 'mahjong-help-open'
-// Open by default only when it fits beside the table (on narrow screens it would cover the table).
+// Open by default only when it fits beside the table. On a narrow screen (a phone) it would cover
+// the table, so there it always starts closed, whatever was chosen last time.
 let helpOpen = (() => {
   const roomy = window.innerWidth > 1150
+  if (!roomy) return false
   try { const saved = localStorage.getItem(HELP_KEY); return saved === null ? roomy : saved === '1' } catch { return roomy }
 })()
 
