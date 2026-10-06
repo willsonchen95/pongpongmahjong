@@ -1,13 +1,13 @@
 import './style.css'
 import {
-  type Tile, type GameState, type ClaimKind, type FaanItem, type HaveItem, type CloseTo, SEATS, deal, drawTile, sortHand, makeTile, isWinningHand,
-  botDiscard, botWantsKong, canPong, canKong, canWinOn, chowOptions, claimDiscard, kongOptions, declareKong, botClaim, winningTiles,
-  parse, sameTile, seatWind, scoreHand, settle, payout, handProgress, planToMinimum, type Plan, MAX_FAAN, claimEffects,
-  progressInput, isAddedKong, isConcealedKong, type ScoreInput,
+  type Tile, type GameState, type ClaimKind, type HaveItem, type CloseTo, SEATS, sortHand, makeTile, isWinningHand,
+  kongOptions, winningTiles, parse, seatWind, payout, handProgress, planToMinimum, type Plan, MAX_FAAN,
+  claimEffects, progressInput, isConcealedKong,
 } from './engine'
 import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
 import * as motion from './motion'
+import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw } from './table'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -21,10 +21,9 @@ const fmt = (n: number) => n.toLocaleString('en-US')
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
 const points = (n: number) => (n < 0 ? `−${fmt(-n)}` : fmt(n))      // a player's balance
 
-// ---------- The match: several hands, scores carried over, dealer and round wind moving on ----------
-// Everyone starts with the same stack of points; each win moves points from the payers to the winner.
-// If anyone's points drop below zero they're bust and the game ends there.
-// Before the game the table agrees a minimum faan: a complete hand scoring less can't be declared.
+// ---------- The match ----------
+// The rules of play — the turn flow, claims, scoring, the match moving on — live in table.ts; this
+// file shows the table and plays the bots' moves at a pace you can follow.
 
 // What the players agree before a game; remembered for next time.
 interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number }
@@ -37,43 +36,22 @@ function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* storage unavailable — keep it in memory */ }
 }
 
-interface HandResult {
-  winner: number | null                // null = the wall ran out
-  from: number | null                  // who threw the winning tile; null = self-drawn
-  faan: number
-  limit: boolean
-  items: FaanItem[]
-  deltas: number[]                     // score change per player
-  dealerStays: boolean
-}
-interface Match {
-  rounds: number                       // 1 = East round only, 4 = full game
-  minFaan: number                      // the agreed minimum to declare a win
-  startPoints: number                  // everyone's stack at the start
-  scores: number[]                     // each player's points now
-  bust: number | null                  // who ran out of points, ending the game early
-  roundWind: number                    // 0 = East round …
-  dealer: number                       // who deals the next/current hand
-  passes: number                       // times the deal has passed on; every 4 the round wind moves on
-  hand: number                         // hand number within the match, from 1
-  result: HandResult | null            // the hand just finished
-  over: boolean
-}
-const newMatch = (s: Settings): Match => ({
-  rounds: s.rounds, minFaan: s.minFaan, startPoints: s.startPoints, scores: [0, 0, 0, 0].map(() => s.startPoints),
-  bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
-})
-let match: Match = newMatch(settings)
+// You play seat 0; the other three are bots.
+const SEAT_IS_PERSON = [true, false, false, false]
+let table = new Table(settings, SEAT_IS_PERSON)
 
-// ---------- One hand ----------
-
-let game: GameState = deal()
-let started = false               // a match is under way (enables "Resume" in the menu)
+// The screen reads the table through these, refreshed from it by sync() after every change.
+let match: Match = table.match
+let game: GameState = table.game
 let mustDiscard = false           // it's your turn and you must discard (or declare a kong)
 let winFrom: number | null = null // player whose discard won the hand; null = self-drawn
 let lastDiscard: number | null = null  // player whose latest discard is the newest tile on the table (for highlighting)
 let pool: Tile[] = []             // every discard still on the table, in the order thrown — shown in the middle
-let wallBreak = 0                 // where the wall is broken open, in ring slots — cosmetic, random per hand
+
+// ---------- One hand ----------
+
+let started = false               // a match is under way (enables "Resume" in the menu)
+let wallBreak = 0                // where the wall is broken open, in ring slots — cosmetic, random per hand
 let gen = 0                       // bumped on every new hand, so a bot loop from an old hand stops
 let inMenu = true                 // the menu is showing — bot turns carry on but don't redraw over it
 // Short pop-up banners ("Your turn", "Mei: Pong!") waiting to be shown on the next render.
@@ -94,109 +72,43 @@ let helpOpen = (() => {
   try { return localStorage.getItem(HELP_KEY) === '1' } catch { return false }
 })()
 
-// A discard you may claim. Only options that would actually succeed are offered —
-// anything a higher-priority bot claim would beat is already left out.
-// `robbing`: not a discard but the tile `from` is adding to a pong — you may only win with it.
-interface Offer { from: number; tile: Tile; win: boolean; pong: boolean; kong: boolean; chows: number[][]; robbing?: boolean }
-let offer: Offer | null = null
+let offer: Offer | null = null    // a tile you may take right now (see Offer in table.ts), or null
 
-type Draw = 'normal' | 'replacement' | 'none'     // replacement = from the back of the wall, after a kong
-const nextSeat = (seat: number) => (seat + 1) % 4
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const BOT_THINK_MS = 900          // pause before each bot move, so you can follow the play
 const CLAIM_PAUSE_MS = 1100       // extra pause after a bot claims a discard
 // What players see and hear for each call. (The rules code calls a run a "chow"; on screen it's "Chi".)
 const CALL_WORDS: Record<ClaimKind, string> = { pong: 'Pong!', kong: 'Kong!', chow: 'Chi!' }
 
-// The winning tile is always the last one added to the hand (the draw, or the claimed discard).
-function win(seat: number, from: number | null = null, robbing = false) {
-  const hand = game.hands[seat]
-  winTile = hand[hand.length - 1]
-  const input = scoreInput(seat, hand, from === null, robbing)     // before the hand is marked over
-  game.over = true; game.winner = seat; winFrom = from; game.drawn = null; mustDiscard = false
-  celebrate = seat === HUMAN
-  sfx.win()
-  endHand(seat, from, input)
-}
-function wallExhausted() {
-  game.over = true; game.drawn = null; mustDiscard = false
-  endHand(null, null)
-}
-
-// Score the hand, pay out, and move the match on: the dealer keeps the deal after winning or a
-// draw, otherwise it passes to the next player; after four passes the round wind moves on.
-function endHand(winner: number | null, from: number | null, input?: ScoreInput) {
-  const dealerStays = winner === null || winner === game.dealer
-  let result: HandResult
-  if (winner === null || !input) {
-    result = { winner, from, faan: 0, limit: false, items: [], deltas: [0, 0, 0, 0], dealerStays }
-  } else {
-    const s = scoreHand(input)
-    result = { winner, from, ...s, deltas: settle(winner, from, s.faan), dealerStays }
-  }
-  result.deltas.forEach((d, p) => { match.scores[p] += d })
-  match.result = result
-  if (!dealerStays) {
-    match.dealer = nextSeat(match.dealer)
-    match.passes++
-    if (match.passes % 4 === 0) match.roundWind++
-  }
-  // below zero is bust (the lowest, if a self-drawn win sinks two at once): the game stops here
-  const broke = [0, 1, 2, 3].filter(p => match.scores[p] < 0).sort((a, b) => match.scores[a] - match.scores[b])
-  match.bust = broke[0] ?? null
-  match.over = match.roundWind >= match.rounds || match.bust !== null
+// The screen's view of the table, refreshed after every change: the table owns the state, and these
+// module variables are what the drawing code reads.
+function sync() {
+  match = table.match
+  game = table.game
+  pool = table.pool
+  lastDiscard = table.lastDiscard
+  winFrom = table.winFrom
+  winTile = table.winTile
+  const p = table.phase
+  mustDiscard = p.kind === 'turn' && p.seat === HUMAN
+  offer = p.kind === 'claims' && !p.answers[HUMAN] ? p.offers[HUMAN] : null
 }
 
-// How a player would be scored winning right now with these concealed tiles, including the special
-// ways to win: on a kong's replacement tile, by robbing a kong, or with the last tile.
-function scoreInput(seat: number, concealed: Tile[], selfDrawn: boolean, robbing = false): ScoreInput {
-  return {
-    ...progressInput(game, seat, concealed), selfDrawn,
-    kongReplacement: selfDrawn && game.lastDrawFromBack, robbedKong: robbing, lastTile: game.wall.length === 0,
+// Turn the table's events into sounds and banners.
+function playEvents() {
+  for (const e of table.takeEvents()) {
+    if (e.type === 'draw') sfx.draw(e.seat !== HUMAN)
+    else if (e.type === 'flowers') announceFlowers(e.seat, e.tiles)
+    else if (e.type === 'discard') sfx.discard()
+    else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
+    else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn() }
+    else if (e.type === 'win') { celebrate = e.seat === HUMAN; sfx.win() }
   }
-}
-// The faan a player would score with these concealed tiles (assumed to make a complete hand) — right
-// now, or for hints about a later tile (`now` false: none of the special ways to win).
-function faanOf(seat: number, concealed: Tile[], selfDrawn: boolean, now = true, robbing = false): number {
-  const input = now ? scoreInput(seat, concealed, selfDrawn, robbing) : { ...progressInput(game, seat, concealed), selfDrawn }
-  return scoreHand(input).faan
-}
-// May this player declare a win — with the tile just drawn, or with someone's discard (or the tile
-// they're adding to a pong)? The hand must be complete AND reach the agreed minimum faan.
-function canDeclareSelfDrawn(seat: number): boolean {
-  const hand = game.hands[seat]
-  return isWinningHand(hand, game.melds[seat].length) && faanOf(seat, hand, true) >= match.minFaan
-}
-function canDeclareOn(seat: number, tile: Tile, robbing = false): boolean {
-  return canWinOn(game, seat, tile) && faanOf(seat, [...game.hands[seat], tile], false, true, robbing) >= match.minFaan
+  sync()
 }
 
-// Adding a fourth tile to an exposed pong can be robbed: anyone that tile completes may take it and
-// win. Bots in turn order before you win straight away; otherwise you're asked first. Returns true
-// if the kong is stopped — robbed, or waiting for your answer.
-function robKong(seat: number, tile: Tile, humanPassed = false): boolean {
-  const order = [1, 2, 3].map(k => (seat + k) % 4)
-  const robber = order.find(s => s !== HUMAN && canDeclareOn(s, tile, true))
-  const humanCan = seat !== HUMAN && !humanPassed && canDeclareOn(HUMAN, tile, true)
-  if (humanCan && (robber === undefined || order.indexOf(HUMAN) < order.indexOf(robber))) {
-    offer = { from: seat, tile, win: true, pong: false, kong: false, chows: [], robbing: true }
-    return true
-  }
-  if (robber === undefined) return false
-  const hand = game.hands[seat]
-  game.hands[robber].push(hand.splice(hand.findIndex(t => sameTile(t, tile)), 1)[0])
-  win(robber, seat, true)
-  return true
-}
-
-// Draw for a player, announcing any flowers/seasons that turn up (they're set aside and replaced).
-function drawFor(seat: number, fromBack: boolean): Tile | null {
-  const before = game.bonus[seat].length
-  const t = drawTile(game, seat, fromBack)
-  const found = game.bonus[seat].slice(before)
-  if (found.length) announceFlowers(seat, found)
-  return t
-}
+// The scoring helpers the hints use, for the current table.
+const faanOf = (seat: number, concealed: Tile[], selfDrawn: boolean, now = true) => table.faanOf(seat, concealed, selfDrawn, now)
 
 // "Kai: Flower!" banner and a bell — "Own flower! +1 faan" when one matches the player's seat.
 function announceFlowers(seat: number, tiles: Tile[]) {
@@ -212,183 +124,62 @@ function announceCall(seat: number, kind: ClaimKind, meld: Tile[]) {
   sfx.call(CALL_WORDS[kind])
   banners.push({ text: `${NAMES[seat]}: ${CALL_WORDS[kind]}`, kind: 'call', seat, tiles: meld })
 }
-const lastMeld = (seat: number) => game.melds[seat][game.melds[seat].length - 1]
-const kongMeld = (seat: number, t: Tile) => game.melds[seat].find(m => m.length === 4 && sameTile(m[0], t))!
 
-// Play from `seat`'s turn until you must act (discard or a claim decision) or the hand ends.
-// Bots pause before moving; the loop gives up if a new hand was started meanwhile.
-async function play(seat: number, draw: Draw) {
+// Play on from wherever the table is until it needs you (your move, a tile you may take) or the hand
+// ends. Bots pause before moving so you can follow, and again after taking someone's tile; the loop
+// gives up if a new hand was started meanwhile.
+async function drive() {
   const myGen = gen
   const stale = () => myGen !== gen
-  while (!game.over) {
-    game.current = seat
-    let drawn: Tile | null = null
-    if (draw !== 'none') {
-      drawn = drawFor(seat, draw === 'replacement')
-      if (drawn === null) { wallExhausted(); break }
-      sfx.draw(seat !== HUMAN)
-    }
-    if (seat === HUMAN) {
-      game.drawn = drawn
-      if (drawn && canDeclareSelfDrawn(HUMAN)) win(HUMAN)   // self-draw
-      else {
-        mustDiscard = true
-        // after your own pong/chow the call banner already says it's your move
-        if (drawn) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn() }
+  for (;;) {
+    const p = table.phase
+    if (p.kind === 'next') { table.startTurn(); playEvents(); continue }
+    if (p.kind === 'discarded') {
+      const taker = table.afterDiscard()
+      playEvents()
+      if (taker !== null && !game.over && table.phase.kind === 'next') {   // someone took the tile — let it register
+        refresh()
+        if (taker !== HUMAN) await coach('bot-call', TIPS.botCall(taker))   // first time only
+        await sleep(CLAIM_PAUSE_MS)
+        if (stale()) return
       }
-      break
+      continue
     }
-    botNext = { seat, draw: 'none' }              // saved with the match: this bot moves next
+    if (p.kind !== 'turn' || table.humans[p.seat]) break    // your move, your decision, or the hand is over
     refresh()
     await gameIdle()                              // a tip, the pause box or the menu is up: wait
     await sleep(BOT_THINK_MS)
     await gameIdle()
     if (stale()) return
-    botTurn(seat)
-    if (game.over || offer) break                 // won, or you may rob its kong
-    const r = resolveDiscard(seat)
-    if (r === null) break                         // you're deciding on a claim, or someone won
-    if (r[1] !== 'normal') {                      // a bot claimed the discard — let it register
-      botNext = { seat: r[0], draw: r[1] }
-      refresh()
-      if (r[0] !== HUMAN) await coach('bot-call', TIPS.botCall(r[0]))   // first time only
-      await sleep(CLAIM_PAUSE_MS)
-      if (stale()) return
-    }
-    ;[seat, draw] = r
+    table.botMove()
+    playEvents()
+    if (table.phase.kind === 'discarded') refresh()   // show the tile land before anyone takes it
   }
   refresh()
-}
-
-// A bot with a full hand: win if it can, declare any kongs worth making, then discard.
-function botTurn(seat: number) {
-  const hand = game.hands[seat]
-  if (canDeclareSelfDrawn(seat)) return win(seat)
-  let kong: Tile | undefined
-  while ((kong = kongOptions(game, seat).find(t => botWantsKong(game, seat, t, match.minFaan)))) {
-    if (isAddedKong(game, seat, kong) && robKong(seat, kong)) return
-    declareKong(game, seat, kong)
-    announceCall(seat, 'kong', kongMeld(seat, kong))
-    if (drawFor(seat, true) === null) return wallExhausted()
-    if (canDeclareSelfDrawn(seat)) return win(seat)
-  }
-  const [tile] = hand.splice(botDiscard(game, seat, match.minFaan), 1)
-  game.discards[seat].push(tile)
-  pool.push(tile)
-  lastDiscard = seat
-  sfx.discard()
-  refresh()
-}
-
-// Someone may claim seat `d`'s discard. Priority: win > pong/kong > chow (next seat only); tied wins go
-// to whoever is next in turn order. Returns who plays next, or null if the hand ended or you must decide.
-function resolveDiscard(d: number, humanPassed = false): [number, Draw] | null {
-  const tile = game.discards[d][game.discards[d].length - 1]
-  const order = [1, 2, 3].map(k => (d + k) % 4)
-  const bots = order.filter(s => s !== HUMAN)
-  const botWinner = bots.find(s => canDeclareOn(s, tile))
-  const claims = bots.map(seat => ({ seat, claim: botClaim(game, seat, d, tile, match.minFaan) }))
-  const botPong = claims.find(c => c.claim && c.claim.kind !== 'chow')
-  const botChow = claims.find(c => c.claim?.kind === 'chow')
-
-  if (d !== HUMAN && !humanPassed) {
-    const hand = game.hands[HUMAN]
-    const noBotWin = botWinner === undefined
-    const o: Offer = {
-      from: d, tile,
-      win: canDeclareOn(HUMAN, tile) && (noBotWin || order.indexOf(HUMAN) < order.indexOf(botWinner)),
-      pong: noBotWin && canPong(hand, tile),
-      kong: noBotWin && canKong(hand, tile),
-      chows: noBotWin && !botPong && nextSeat(d) === HUMAN ? chowOptions(hand, tile) : [],
-    }
-    if (o.win || o.pong || o.kong || o.chows.length) { offer = o; return null }
-  }
-
-  if (botWinner !== undefined) {
-    game.hands[botWinner].push(game.discards[d].pop()!)
-    pool.pop()
-    lastDiscard = null
-    win(botWinner, d)
-    return null
-  }
-  const c = botPong ?? botChow
-  if (c?.claim) {
-    claimDiscard(game, c.seat, d, c.claim.kind, c.claim.run)
-    pool.pop()
-    lastDiscard = null
-    announceCall(c.seat, c.claim.kind, lastMeld(c.seat))
-    return [c.seat, c.claim.kind === 'kong' ? 'replacement' : 'none']
-  }
-  return [nextSeat(d), 'normal']
 }
 
 function humanClaim(kind: ClaimKind | 'win', run?: number[]) {
   if (!offer) return
-  const { from, tile, robbing } = offer
-  offer = null
-  if (robbing) {                                      // take the tile from their hand, not the discards
-    const hand = game.hands[from]
-    game.hands[HUMAN].push(hand.splice(hand.findIndex(t => sameTile(t, tile)), 1)[0])
-    win(HUMAN, from, true)
-    refresh()
-    return
-  }
-  lastDiscard = null
-  pool.pop()                                          // the claimed tile leaves the middle
-  if (kind === 'win') {
-    game.hands[HUMAN].push(game.discards[from].pop()!)
-    win(HUMAN, from)
-    refresh()
-  } else {
-    claimDiscard(game, HUMAN, from, kind, run)
-    announceCall(HUMAN, kind, lastMeld(HUMAN))
-    void play(HUMAN, kind === 'kong' ? 'replacement' : 'none')
-  }
+  if (table.answer(HUMAN, { kind, run })) { playEvents(); void drive() }
 }
 
 function humanPass() {
   if (!offer) return
-  const { from, tile, robbing } = offer
-  offer = null
-  if (robbing) {                                      // let the kong stand (unless a bot robs it), and play on
-    if (robKong(from, tile, true)) { refresh(); return }
-    declareKong(game, from, tile)
-    announceCall(from, 'kong', kongMeld(from, tile))
-    void play(from, 'replacement')
-    return
-  }
-  const r = resolveDiscard(from, true)
-  if (r) void play(...r)
-  else refresh()
+  if (table.answer(HUMAN, { kind: 'pass' })) { playEvents(); void drive() }
 }
 
 function humanKong(tile: Tile) {
-  if (game.over || !mustDiscard) return
-  if (isAddedKong(game, HUMAN, tile) && robKong(HUMAN, tile)) { refresh(); return }
-  declareKong(game, HUMAN, tile)
-  announceCall(HUMAN, 'kong', kongMeld(HUMAN, tile))
-  mustDiscard = false
-  void play(HUMAN, 'replacement')
+  if (table.kong(HUMAN, tile)) { playEvents(); void drive() }
 }
 
 function humanDiscard(tile: Tile) {
-  if (game.over || !mustDiscard || offer) return
-  const hand = game.hands[HUMAN]
-  game.discards[HUMAN].push(hand.splice(hand.indexOf(tile), 1)[0])
-  pool.push(tile)
-  lastDiscard = HUMAN
-  mustDiscard = false
-  game.drawn = null
-  sfx.discard()
-  const r = resolveDiscard(HUMAN)
-  if (r) void play(...r)
-  else refresh()
+  if (table.discard(HUMAN, tile)) { playEvents(); void drive() }
 }
 
 function startMatch() {
   music.start()                                       // the Start click is the gesture browsers want before playing audio
   saveSettings()
-  match = newMatch(settings)
+  table = new Table(settings, SEAT_IS_PERSON)
   started = true
   nextHand()
 }
@@ -397,10 +188,9 @@ function startMatch() {
 // dealer draws first.
 function nextHand() {
   gen++
-  match.hand++
-  game = deal(match.dealer, match.roundWind)
-  offer = null; mustDiscard = false; winFrom = null; lastDiscard = null; pool = []
-  banners = []; winTile = null; resultClosed = false; showFinal = false; celebrate = false
+  table.newHand()
+  sync()
+  banners = []; resultClosed = false; showFinal = false; celebrate = false
   inMenu = false
   void runIntro()
 }
@@ -481,7 +271,8 @@ async function runIntro() {
   }
 
   intro = null
-  void play(game.dealer, 'normal')
+  table.begin()                                        // the dealer draws first
+  void drive()
 }
 
 const PIPS: Record<number, number[]> = {           // which cells of a 3×3 grid have a pip
@@ -631,8 +422,6 @@ async function startNewIfOk(start: () => void) {
 function endMatchEarly() {
   gen++                                                // stops the paused bot loop / deal for good
   started = false
-  offer = null
-  mustDiscard = false
   intro = null
   clearSave()
   wakeWaiters()
@@ -1882,52 +1671,65 @@ function confetti(): HTMLElement {
 // state is plain data; what needs care is restarting play, which only ever waits at a few points —
 // a bot about to move (or just after a claim), your move or claim, the deal, or the result card.
 
-const SAVE_KEY = 'mahjong-save-v1'
-type Resume = { kind: 'intro' } | { kind: 'over' } | { kind: 'you' } | { kind: 'bot'; seat: number; draw: Draw }
-let botNext: { seat: number; draw: Draw } = { seat: 0, draw: 'none' }   // set by play() before each wait
+const SAVE_KEY = 'mahjong-save-v2'
+const OLD_SAVE_KEY = 'mahjong-save-v1'               // before table.ts: converted on load, then removed
 let resumeSaved: (() => void) | null = null          // restarts play after a saved match is loaded
 
-interface Saved {
-  match: Match; game: GameState; pool: Tile[]; wallBreak: number; lastDiscard: number | null
-  winFrom: number | null; winTileAt: number; drawnAt: number; offer: Offer | null; mustDiscard: boolean
-  resultClosed: boolean; showFinal: boolean; next: Resume
-}
+// The table's own state, plus how the screen was showing it.
+interface Saved { table: TableData; wallBreak: number; resultClosed: boolean; showFinal: boolean }
 
 function saveMatch() {
   if (!started) return
-  const next: Resume = intro ? { kind: 'intro' } : game.over ? { kind: 'over' }
-    : offer || mustDiscard ? { kind: 'you' } : { kind: 'bot', ...botNext }
-  const s: Saved = {
-    match, game, pool, wallBreak, lastDiscard, winFrom, offer, mustDiscard, resultClosed, showFinal, next,
-    // tiles come back as copies, so remember these two by their place in the hand
-    winTileAt: game.winner !== null && winTile ? game.hands[game.winner].indexOf(winTile) : -1,
-    drawnAt: game.drawn ? game.hands[game.current].indexOf(game.drawn) : -1,
-  }
+  const s: Saved = { table: table.toData(), wallBreak, resultClosed, showFinal }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)) } catch { /* storage full or unavailable — play on unsaved */ }
 }
 
 function clearSave() {
-  try { localStorage.removeItem(SAVE_KEY) } catch { /* nothing saved */ }
+  try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(OLD_SAVE_KEY) } catch { /* nothing saved */ }
+}
+
+// A match saved by the version before table.ts: the same game state, with "what happens next" kept
+// separately. Turn that into the table's phase.
+type OldNext = { kind: 'intro' } | { kind: 'over' } | { kind: 'you' } | { kind: 'bot'; seat: number; draw: Draw }
+interface OldSaved {
+  match: Match; game: GameState; pool: Tile[]; wallBreak: number; lastDiscard: number | null; winFrom: number | null
+  winTileAt: number; drawnAt: number; offer: Offer | null; resultClosed: boolean; showFinal: boolean; next: OldNext
+}
+function fromOldSave(o: OldSaved): Saved {
+  const n = o.next
+  const phase: Phase = n.kind === 'intro' ? { kind: 'dealing' }
+    : n.kind === 'over' ? { kind: 'over' }
+    : n.kind === 'bot' ? { kind: 'next', seat: n.seat, draw: n.draw }
+    : o.offer ? { kind: 'claims', from: o.offer.from, tile: o.offer.tile, robbing: !!o.offer.robbing,
+      offers: [o.offer, null, null, null], answers: [null, null, null, null] }
+    : { kind: 'turn', seat: HUMAN }
+  return {
+    table: { match: o.match, game: o.game, pool: o.pool, lastDiscard: o.lastDiscard, winFrom: o.winFrom,
+      winTileAt: o.winTileAt, drawnAt: o.drawnAt, phase, humans: SEAT_IS_PERSON },
+    wallBreak: o.wallBreak, resultClosed: o.resultClosed, showFinal: o.showFinal,
+  }
 }
 
 // Load a match still being played, if one was saved. Returns whether there was one.
 function loadMatch(): boolean {
-  let s: Saved | null
-  try { s = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') } catch { s = null }
-  if (!s?.match || !s.game?.hands || s.match.over) { clearSave(); return false }
-  match = s.match; game = s.game; wallBreak = s.wallBreak; lastDiscard = s.lastDiscard; winFrom = s.winFrom
-  offer = s.offer; mustDiscard = s.mustDiscard; resultClosed = s.resultClosed; showFinal = s.showFinal
-  game.drawn = s.drawnAt >= 0 ? game.hands[game.current][s.drawnAt] : null
-  winTile = s.winTileAt >= 0 && game.winner !== null ? game.hands[game.winner][s.winTileAt] : null
-  // the middle of the table shows the very tiles lying in the discard piles
-  const thrown = game.discards.flat()
-  pool = s.pool.map(t => { const i = thrown.findIndex(d => sameTile(d, t)); return i >= 0 ? thrown.splice(i, 1)[0] : t })
+  let s: Saved | null = null
+  try {
+    s = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null')
+    const old: OldSaved | null = s ? null : JSON.parse(localStorage.getItem(OLD_SAVE_KEY) ?? 'null')
+    if (old?.match && old.game?.hands && old.next) {         // keep it in the new format from now on
+      s = fromOldSave(old)
+      localStorage.setItem(SAVE_KEY, JSON.stringify(s))
+      localStorage.removeItem(OLD_SAVE_KEY)
+    }
+  } catch { s = null }
+  if (!s?.table?.match || !s.table.game?.hands || s.table.match.over) { clearSave(); return false }
+  table = Table.fromData(s.table)
+  sync()
+  wallBreak = s.wallBreak; resultClosed = s.resultClosed; showFinal = s.showFinal
   started = true
-  const next = s.next
   resumeSaved = () => {
-    if (next.kind === 'intro') void runIntro()          // the tiles are already dealt; show the deal again
-    else if (next.kind === 'bot') void play(next.seat, next.draw)
-    // your move, your claim, or the result card: the screen itself is all that's needed
+    if (table.phase.kind === 'dealing') void runIntro()   // the tiles are already dealt; show the deal again
+    else void drive()                                     // carries on, or simply waits for you
   }
   return true
 }
