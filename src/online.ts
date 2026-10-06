@@ -75,6 +75,8 @@ export function turnView(v: SeatView, serverNow: number): LocalView {
     discards: rot(g.discards, me), bonus: rot(g.bonus, me),
     wall: Array.from({ length: v.wallCount }, () => HIDDEN),
   }
+  // the drawn tile arrives as a copy: point it at the very tile in your hand, so it's set apart (not shown twice)
+  if (game.drawn) game.drawn = game.hands[0].find(t => t.id === game.drawn!.id) ?? null
   const m = v.match
   const match: Match = {
     ...m, scores: rot(m.scores, me), dealer: seat(m.dealer, me), bust: seatOrNull(m.bust, me),

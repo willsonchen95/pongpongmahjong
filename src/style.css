@@ -352,10 +352,21 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   color: #1a1a1a;
   box-shadow: 0 0 20px rgba(255, 215, 94, 0.6);
 }
-.status.mine .status-pill { animation: status-pulse 1.6s ease-in-out infinite; }
+/* the pulse is a glow layer fading in and out — opacity, which the graphics chip does on its own,
+   rather than animating the shadow, which would repaint the pill every frame */
+.status.mine .status-pill { position: relative; box-shadow: 0 0 6px rgba(255, 215, 94, 0.25); }
+.status.mine .status-pill::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 20px rgba(255, 215, 94, 0.6);
+  pointer-events: none;
+  animation: status-pulse 1.6s ease-in-out infinite;
+}
 .status.mine .status-badge, .status.win .status-badge { background: #b8231f; }
-@keyframes status-pulse { 50% { box-shadow: 0 0 6px rgba(255, 215, 94, 0.25); } }
-@media (prefers-reduced-motion: reduce) { .status.mine .status-pill { animation: none; } }
+@keyframes status-pulse { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .status.mine .status-pill::after { animation: none; } }
 
 .action-bar { position: relative; z-index: 1; min-height: 60px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
 .act { padding: 10px 28px; border-radius: 12px; background: #4a4f57; color: #fff; font-size: 1.4rem; font-weight: 700; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45); }
@@ -1537,6 +1548,15 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .menu-card { padding-top: 8px; padding-bottom: 8px; }
   .mc-title { font-size: 1.15rem; }
   .mc-sub { font-size: 0.85rem; }
+}
+
+/* Phones and tablets: lighter 3D tiles. The blurred shadow under every tile and the shading layer on
+   each tile's sides cost a phone's graphics chip a lot (dozens of tiles, tilted in 3D) and hardly show
+   at phone size; the tiles' own colours still shade their sides. */
+@media (pointer: coarse) {
+  .box, .box.up.latest { box-shadow: none; }
+  .face.front, .face.back, .face.left, .face.right { box-shadow: none; }
+  .table { box-shadow: 0 0 0 calc(var(--u) * 0.25) #3f2410, 0 0 0 calc(var(--u) * 0.85) #6b3d1a, 0 0 0 calc(var(--u) * 1.05) #3a1f0b; }
 }
 
 /* On touch screens a tap lifts a tile (tap it again to throw it), so one stray tap doesn't cost a tile. */

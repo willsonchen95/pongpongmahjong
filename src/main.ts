@@ -1151,24 +1151,43 @@ function showCountdown(hintEl: HTMLElement) {
 }
 setInterval(() => document.querySelectorAll<HTMLElement>('.status-hint[data-base]').forEach(showCountdown), 500)
 
+// ---------- Redrawing only what changed ----------
+// The screen is rebuilt on every move, but most of it is the same as before. Each part of the table
+// (a player's side, the discards, the dice, your hand) is given a short description of what it shows;
+// if that's unchanged since the last redraw, the old elements are put back instead of building them
+// again — far less work for a phone than recreating a thousand 3D tile faces each move.
+let partsBefore = new Map<string, HTMLElement>()
+let partsNow = new Map<string, HTMLElement>()
+function part(name: string, key: string, build: () => HTMLElement): HTMLElement {
+  const old = partsBefore.get(name)
+  const e = old && old.dataset.part === key ? old : build()
+  e.dataset.part = key
+  partsNow.set(name, e)
+  return e
+}
+const ids = (tiles: Tile[]) => tiles.map(t => t.id ?? `${t.category}${t.value}`).join(',')
+
 // The wall is a ring of 144 slots (72 stacks of 2, 18 stacks per side). The remaining tiles are the
 // contiguous run [wallFront, wallFront + wall.length) of the original array, rotated by the break point.
-function wallRow(side: number): HTMLElement {
-  const row = el('div', 'wall')
+// How many tiles (0–2) are left in each of a side's 18 stacks:
+function wallHeights(side: number): number[] {
   let from = game.wallFront, to = game.wallFront + game.wall.length
   if (intro && intro.phase !== 'flowers') {           // mid-deal: tiles not yet handed out are still in the wall
     from = 0
     to += 52 - intro.shown.reduce((a, b) => a + b, 0)
   }
   const present = (slot: number) => { const i = (slot - wallBreak + 144) % 144; return i >= from && i < to }
-  for (let j = 0; j < 18; j++) {
+  return Array.from({ length: 18 }, (_, j) => { const k = side * 18 + j; return Number(present(2 * k)) + Number(present(2 * k + 1)) })
+}
+function wallRow(side: number): HTMLElement {
+  const row = el('div', 'wall')
+  wallHeights(side).forEach((height, j) => {
     const k = side * 18 + j
-    const height = Number(present(2 * k)) + Number(present(2 * k + 1))
     const stack = height === 2 ? box('down2', 1, 1.34, 1.1) : height === 1 ? box('down1', 1, 1.34, 0.55) : el('div', 'stack-gap')
     stack.dataset.stack = String(k)                    // motion.ts flies tiles taken from it to whoever drew them
     stack.dataset.height = String(height)
     row.appendChild(stack)
-  }
+  })
   return row
 }
 
@@ -1183,13 +1202,34 @@ const flowersVisible = (seat: number) => !intro || intro.flowersShown[seat]
 
 // One side of the table, laid out as if it were the bottom edge, then rotated into place.
 // Edge → centre: rack (hand, exposed melds, bonus tiles), then the wall; the player's name, score
-// and seat wind are printed on the felt just inside it.
+// and seat wind are printed on the felt just inside it. The side itself stays on screen; its three
+// pieces are each swapped only when they change (the name lights up every turn, the wall shrinks
+// with every draw, the rack changes far less often).
+function sideParts(seat: number): HTMLElement[] {
+  const w = seatWind(game, seat)
+  const labelKey = [NAMES[seat], match.scores[seat], w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current].join(';')
+  const rackKey = [
+    seat === game.winner,
+    seat === HUMAN ? '' : game.over ? ids(sortHand(game.hands[seat])) : handCount(seat),
+    game.melds[seat].map(m => ids(m) + (isConcealedKong(game, seat, m) ? '*' : '')).join('|'),
+    flowersVisible(seat) ? ids(game.bonus[seat]) : '',
+  ].join(';')
+  return [
+    part(`label${seat}`, labelKey, () => sideLabel(seat)),
+    part(`rack${seat}`, rackKey, () => sideRack(seat)),
+    part(`wall${seat}`, wallHeights(seat).join(''), () => wallRow(seat)),
+  ]
+}
+
 function sideLayer(seat: number): HTMLElement {
   const layer = el('div', 'layer')
   layer.dataset.seat = String(seat)
   layer.style.transform = `rotate(${-90 * seat}deg)`   // seats go counter-clockwise: right, top, left
+  return layer
+}
 
-  // Lights up on that player's turn.
+// The player's name, points and seat wind, printed on the felt. Lights up on their turn.
+function sideLabel(seat: number): HTMLElement {
   let labelCls = 'wind-label'
   if (seat === game.winner) labelCls += ' winner'
   else if (!game.over && seat === game.current) labelCls += ' active'
@@ -1200,8 +1240,11 @@ function sideLayer(seat: number): HTMLElement {
     el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`),
   )
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
-  layer.appendChild(label)
+  return label
+}
 
+// The player's rack: their hand (standing, or laid face-up once the hand is over), sets and flowers.
+function sideRack(seat: number): HTMLElement {
   const rack = el('div', 'rack-row' + (seat === game.winner ? ' winner' : ''))
   if (seat !== HUMAN) {                                // your own hand is on the big rack below the table
     const hand = sortHand(game.hands[seat])
@@ -1225,16 +1268,16 @@ function sideLayer(seat: number): HTMLElement {
     for (const t of game.bonus[seat]) g.appendChild(tag(lyingTile(t, 'bonus'), t, `bonus-${seat}`))
     rack.appendChild(g)
   }
-
-  layer.append(rack, wallRow(seat))
-  return layer
+  return rack
 }
 
-// All discards, pooled in the middle of the table in the order they were thrown, facing you.
-function discardPool(): HTMLElement {
-  const p = el('div', 'pool')
-  pool.forEach((t, i) => p.appendChild(tag(box('up', 1.02, 1.37, 0.7, lastDiscard !== null && i === pool.length - 1 ? 'latest' : '', t), t, 'pool')))
-  return p
+// All discards, pooled in the middle of the table in the order they were thrown, facing you. Each
+// tile is its own part, so a new discard adds one tile rather than redrawing the pile.
+function poolTiles(): HTMLElement[] {
+  return pool.map((t, i) => {
+    const latest = lastDiscard !== null && i === pool.length - 1
+    return part(`pool${ids([t])}`, String(latest), () => tag(box('up', 1.02, 1.37, 0.7, latest ? 'latest' : '', t), t, 'pool'))
+  })
 }
 
 // The button that moves the match on once a hand is over.
@@ -1492,7 +1535,6 @@ function tapTile(t: Tile, e: HTMLElement) {
 
 // Your hand on the big rack: sorted, with the freshly drawn tile set apart on the right.
 function playerRack(): HTMLElement {
-  const rack = el('div', 'player-rack' + (game.winner === HUMAN ? ' winner' : ''))
   const canDiscard = !game.over && mustDiscard && !offer
   const drawn = canDiscard ? game.drawn : null
   if (!canDiscard) lifted = null
@@ -1500,14 +1542,18 @@ function playerRack(): HTMLElement {
   const tiles = intro && intro.phase !== 'flowers'
     ? game.hands[HUMAN].slice(0, handCount(HUMAN))
     : sortHand(game.hands[HUMAN].filter(t => t !== drawn))
-  const add = (t: Tile, cls = '') => {
-    const e = tag(tileEl(t, cls + (t === lifted ? ' lifted' : '')), t, 'rack-0')
-    if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
-    rack.appendChild(e)
-  }
-  for (const t of tiles) add(t)
-  if (drawn) add(drawn, 'drawn')
-  return rack
+  const key = [ids(tiles), drawn ? ids([drawn]) : '', lifted ? ids([lifted]) : '', canDiscard, game.winner === HUMAN].join(';')
+  return part('rack', key, () => {
+    const rack = el('div', 'player-rack' + (game.winner === HUMAN ? ' winner' : ''))
+    const add = (t: Tile, cls = '') => {
+      const e = tag(tileEl(t, cls + (t === lifted ? ' lifted' : '')), t, 'rack-0')
+      if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
+      rack.appendChild(e)
+    }
+    for (const t of tiles) add(t)
+    if (drawn) add(drawn, 'drawn')
+    return rack
+  })
 }
 
 // ---------- Help panel ----------
@@ -1702,10 +1748,61 @@ function toggleHelp() {
 }
 
 function render() {
+  const t0 = performance.now()
+  try { renderTable() } finally {
+    // while developing: how long each redraw takes, and how big the page is (window.__perf)
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __perf?: { ms: number; nodes: number }[] }
+      ;(w.__perf ??= []).push({ ms: Math.round((performance.now() - t0) * 10) / 10, nodes: app.getElementsByTagName('*').length })
+    }
+  }
+}
+
+const stageTimes: Record<string, number> = {}        // while developing: where a redraw's time goes
+const stage = (name: string, since: number) => { if (import.meta.env.DEV) stageTimes[name] = (stageTimes[name] ?? 0) + performance.now() - since }
+;(window as unknown as { __stages?: Record<string, number> }).__stages = stageTimes
+
+// The frame of the game screen stays put between redraws: the layout, the game column and the tilted
+// table. Each redraw swaps in only the pieces that changed — the table's parts via part(), plus the
+// small bars and pop-ups around it — so the browser doesn't lay out and style the whole 3D table again
+// on every move. (Leaving the screen for a menu clears it; it's built afresh on the way back.)
+interface Shell {
+  layout: HTMLElement; main: HTMLElement; scene: HTMLElement; table: HTMLElement
+  sides: HTMLElement[]; pool: HTMLElement           // the four sides of the table, and the discards in the middle
+  top: HTMLElement | null; bar: HTMLElement | null; rack: HTMLElement | null; extras: HTMLElement[]; help: HTMLElement | null
+}
+let shell: Shell | null = null
+
+// Make `container`'s children exactly `wanted`, in order, touching only the ones that differ.
+function placeAll(container: HTMLElement, wanted: HTMLElement[]) {
+  wanted.forEach((e, i) => {
+    const at = container.children[i]
+    if (at === e) return
+    if (at) at.replaceWith(e)
+    else container.appendChild(e)
+  })
+  while (container.children.length > wanted.length) container.lastElementChild!.remove()
+}
+
+function renderTable() {
   inMenu = false
+  let t = performance.now()
   motion.capture(app)                                 // where every tile is now, to glide them after the rebuild
-  app.innerHTML = ''
-  const main = el('div', 'main-col')
+  stage('capture', t); t = performance.now()
+  if (!shell || !app.contains(shell.layout)) {
+    app.innerHTML = ''
+    const layout = el('div', 'layout'), main = el('div', 'main-col')
+    const scene = el('div', 'scene'), table = el('div', 'table')   // the scene supplies the perspective for the tilted table
+    const sides = [0, 1, 2, 3].map(sideLayer), poolEl = el('div', 'pool')
+    table.append(...sides, poolEl)
+    scene.appendChild(table)
+    main.appendChild(scene)
+    layout.appendChild(main)
+    app.appendChild(layout)
+    shell = { layout, main, scene, table, sides, pool: poolEl, top: null, bar: null, rack: null, extras: [], help: null }
+    partsBefore = new Map()                           // nothing drawn before is on screen any more
+  }
+  const sh = shell
   const top = el('div', 'topbar')
   // round and wall: "East round · Hand 3" over "87 tiles left"
   // mid-deal, tiles not yet handed out still count as being in the wall
@@ -1726,24 +1823,46 @@ function render() {
   rules.title = helpOpen ? 'Hide the rules panel' : 'Show the rules panel'
   rightGroup.append(round, rules, ...soundButtons(render))
   top.append(leftGroup, statusEl(), rightGroup)
+  if (sh.top) sh.top.replaceWith(top)
+  else sh.main.insertBefore(top, sh.scene)
+  sh.top = top
 
-  const table = el('div', 'table')
-  for (let seat = 0; seat < 4; seat++) table.appendChild(sideLayer(seat))
-  table.appendChild(discardPool())
-  if (intro && intro.phase !== 'flowers') table.appendChild(tableDice(intro))
-  const scene = el('div', 'scene')                    // supplies the perspective for the tilted table
-  scene.appendChild(table)
+  // the table: each side, the discards and the dice, swapped only if they changed
+  partsNow = new Map()
+  const it = intro
+  const diceKey = it && it.phase !== 'flowers' ? `${it.rolling}:${it.phase}:${it.dice}` : ''
+  sh.sides.forEach((side, seat) => placeAll(side, sideParts(seat)))
+  placeAll(sh.pool, poolTiles())
+  placeAll(sh.table, [...sh.sides, sh.pool, ...(it && diceKey ? [part('dice', diceKey, () => tableDice(it))] : [])])
 
-  main.append(top, scene, actionBar(), playerRack())
-  if (offer) main.appendChild(claimCard(offer))
+  // under the table: the action bar (small, rebuilt) and your hand (swapped if it changed)
+  const bar = actionBar()
+  if (sh.bar) sh.bar.replaceWith(bar)
+  else sh.scene.after(bar)
+  sh.bar = bar
+  const rack = playerRack()
+  if (rack !== sh.rack) {
+    if (sh.rack) sh.rack.replaceWith(rack)
+    else bar.after(rack)
+    sh.rack = rack
+  }
 
-  const layout = el('div', 'layout')
-  layout.appendChild(main)
-  if (helpOpen) layout.appendChild(helpPanel())
-  app.appendChild(layout)
-
-  if (game.over && !resultClosed) main.appendChild(showFinal ? finalCard() : resultCard())
+  // pop-ups over the game, and the rules panel beside it
+  for (const x of sh.extras) x.remove()
+  sh.extras = []
+  if (offer) sh.extras.push(claimCard(offer))
+  if (game.over && !resultClosed) sh.extras.push(showFinal ? finalCard() : resultCard())
+  sh.main.append(...sh.extras)
+  sh.help?.remove()
+  sh.help = helpOpen ? helpPanel() : null
+  if (sh.help) sh.layout.appendChild(sh.help)
+  const main = sh.main, scene = sh.scene
+  partsBefore = partsNow
+  stage('build', t); t = performance.now()
+  void app.offsetHeight                               // (lay the page out now, so the timing below is the animations alone)
+  stage('layout', t); t = performance.now()
   motion.play(app, motionHooks)
+  stage('play', t)
   music.start()                                      // carries on (or resumes, e.g. via Continue game)
   if (!coachOpen && !paused) music.duck(game.over && !resultClosed)   // quieter while the result card is showing
   if (celebrate) { celebrate = false; main.appendChild(confetti()) }
