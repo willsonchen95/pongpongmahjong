@@ -930,8 +930,16 @@ function menuHero(): HTMLElement {
   const hero = el('div', 'menu-hero')
   const fan = el('div', 'tile-fan')
   for (const spec of ['1p', '5z', '6z', '1s', '1z']) fan.appendChild(tileEl(parse(spec)[0], 'fan-tile'))
-  hero.append(fan, el('h1', 'menu-title', 'Pong Pong Mahjong!'), el('div', 'menu-cn', '麻雀'),
-    el('p', 'menu-tagline', 'Pong until you can’t Pong anymore!'))
+  // the name as a logo: "Pong Pong" over a bigger "Mahjong!", each word bouncing in after the last
+  const title = el('h1', 'menu-title')
+  title.setAttribute('aria-label', 'Pong Pong Mahjong!')
+  const top = el('span', 'mt-line')
+  top.append(el('span', 'mt-word', 'Pong'), el('span', 'mt-word', 'Pong'))
+  title.append(top, el('span', 'mt-line mt-big', ''))
+  title.lastElementChild!.appendChild(el('span', 'mt-word', 'Mahjong!'))
+  const tagline = el('p', 'menu-tagline')
+  tagline.append(el('span', 'mt-spark', '✦'), 'Pong until you can’t Pong anymore!', el('span', 'mt-spark', '✦'))
+  hero.append(fan, title, el('div', 'menu-cn', '麻雀'), tagline)
   return hero
 }
 

@@ -944,17 +944,65 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .tile-fan .fan-tile:nth-child(5) { --r: 24deg; animation-delay: 0.25s; }
 .tile-fan .fan-tile { rotate: var(--r); }
 @keyframes fan-in { from { rotate: 0deg; opacity: 0; } }
+/* The game's name as a logo: chunky gold letters with a raised red edge, like a shop sign.
+   (The gradient fill is clipped to the text, so the raised edge is built from drop-shadows.) */
 .menu-title {
-  margin: 6px 0 0;
-  font-size: 3.6rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  color: #fff6d6;
-  text-shadow: 0 3px 0 #7a1512, 0 8px 22px rgba(0, 0, 0, 0.45);
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Lilita One', system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  filter:
+    drop-shadow(0 1.5px 0 #e0a92e) drop-shadow(0 1.5px 0 #b8231f) drop-shadow(0 1.5px 0 #9a1b18)
+    drop-shadow(0 2px 0 #6e100e) drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45));
 }
-.menu-cn { margin-top: 6px; font-family: 'Noto Serif TC', 'KaiTi', serif; font-size: 1.9rem; font-weight: 900; letter-spacing: 0.3em; color: #ffd75e; }
-.menu-tagline { margin: 10px 0 26px; font-size: 1.12rem; opacity: 0.85; }
+.mt-line { display: flex; gap: 0.28em; font-size: 3.2rem; }
+.mt-line.mt-big { font-size: 5rem; }
+.mt-word {
+  display: inline-block;
+  background: linear-gradient(180deg, #fffbe8 0%, #ffe9a3 38%, #ffcf4a 62%, #f0a81c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: word-in 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.mt-line .mt-word:nth-child(1) { animation-delay: 0.15s; rotate: -4deg; }
+.mt-line .mt-word:nth-child(2) { animation-delay: 0.3s; rotate: 3deg; }
+.mt-big .mt-word { animation-delay: 0.48s; rotate: 0deg; }
+@keyframes word-in { from { opacity: 0; transform: translateY(-0.5em) scale(0.6); } }
+
+.menu-cn {
+  margin-top: 8px;
+  font-family: 'Noto Serif TC', 'KaiTi', serif;
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;                                   /* balances the letter-spacing after the last character */
+  color: #ffd75e;
+  text-shadow: 0 2px 0 #7a1512, 0 0 18px rgba(255, 207, 74, 0.35);
+}
+/* the tagline on a soft ribbon, a sparkle either side */
+.menu-tagline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 26px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 94, 0.35);
+  font-size: 1.08rem;
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: #fff3c4;
+  animation: word-in 0.5s 0.7s ease-out both;
+}
+.mt-spark { font-style: normal; font-size: 0.8em; color: #ffd75e; }
+@media (prefers-reduced-motion: reduce) { .mt-word, .menu-tagline { animation: none; } }
 
 /* big cards: icon badge, title and explanation */
 .menu-cards { width: 100%; display: flex; flex-direction: column; gap: 12px; }
