@@ -8,7 +8,7 @@ import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, newRoomCode, savedSession, type LocalView } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, TURN_MS, newRoomCode, savedSession, type LocalView } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -92,8 +92,9 @@ function sync() {
   winFrom = table.winFrom
   winTile = table.winTile
   const p = table.phase
-  mustDiscard = p.kind === 'turn' && p.seat === HUMAN
-  offer = p.kind === 'claims' && !p.answers[HUMAN] ? p.offers[HUMAN] : null
+  const away = !!online?.away                         // (online, away: a bot is playing your seat)
+  mustDiscard = p.kind === 'turn' && p.seat === HUMAN && !away
+  offer = p.kind === 'claims' && !p.answers[HUMAN] && !away ? p.offers[HUMAN] : null
 }
 
 // Turn the table's events (or, online, the room's) into sounds and banners.
@@ -204,7 +205,7 @@ function goOnline(code: string, name: string) {
   room.onRoom = () => {
     NAMES = room.names()
     if (!room.room?.started || !room.view) { if (lobbyShowing()) renderLobby() }
-    else refresh()                                     // someone left or came back: their name on the table
+    else { sync(); refresh() }                         // someone left, came back or went away: their name on the table
   }
   room.onState = (view, events) => applyOnline(view, events)
   room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
@@ -1116,6 +1117,8 @@ function statusEl(): HTMLElement {
       : wonByRobbing() ? `Robbed ${possessive(winFrom)} kong` : `On ${possessive(winFrom)} thrown-away tile`
   } else if (game.over) {
     mood = 'done'; badge = '–'; title.textContent = 'Draw'; hint = 'The wall ran out'
+  } else if (online?.away) {
+    badge = '🤖'; title.textContent = 'A bot is playing for you'; hint = 'Tap “I’m back” to play again'
   } else if (offer) {
     mood = 'mine'; badge = windChar(offer.from)
     title.append(`${NAMES[offer.from]} ${offer.robbing ? 'adds to a pong' : 'threw away'}`, mini(offer.tile))
@@ -1212,7 +1215,7 @@ const flowersVisible = (seat: number) => !intro || intro.flowersShown[seat]
 // with every draw, the rack changes far less often).
 function sideParts(seat: number): HTMLElement[] {
   const w = seatWind(game, seat)
-  const labelKey = [NAMES[seat], match.scores[seat], w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current].join(';')
+  const labelKey = [NAMES[seat], match.scores[seat], w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current, turnDeadlineOf(seat)].join(';')
   const rackKey = [
     tileScale(), seat === game.winner,
     seat === HUMAN ? '' : game.over ? ids(sortHand(game.hands[seat])) : handCount(seat),
@@ -1245,7 +1248,28 @@ function sideLabel(seat: number): HTMLElement {
     el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`),
   )
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
+  const deadline = turnDeadlineOf(seat)
+  if (deadline) label.appendChild(turnTimer(deadline))
   return label
+}
+
+// Online: when the player whose turn it is runs out of time (and the room plays for them), or null.
+function turnDeadlineOf(seat: number): number | null {
+  const d = online?.view?.turnDeadline
+  return d && !game.over && seat === game.current ? d : null
+}
+
+// The bar under a name that shrinks as their turn's time runs out, red for the last few seconds.
+// It's a CSS animation set going from where the time stands now, so nothing redraws it each second.
+function turnTimer(deadline: number): HTMLElement {
+  const bar = el('div', 'turn-timer')
+  const fill = el('div', 'turn-timer-fill')
+  const left = Math.max(0, deadline - Date.now())
+  fill.style.setProperty('--from', String(Math.min(1, left / TURN_MS)))
+  fill.style.setProperty('--left', `${left}ms`)
+  fill.style.setProperty('--hurry-in', `${Math.max(0, left - 5000)}ms`)
+  bar.appendChild(fill)
+  return bar
 }
 
 // The player's rack: their hand (standing, or laid face-up once the hand is over), sets and flowers.
@@ -1526,6 +1550,17 @@ function claimEffectsEl(kind: ClaimKind, tile: Tile, run?: number[]): HTMLElemen
   for (const c of ruined) box.appendChild(el('span', 'ce-bad', `✗ Ruins ${c.name} (+${c.faan})`))
   for (const i of gained) box.appendChild(el('span', 'ce-good', `✓ ${i.name} +${i.faan}`))
   return box
+}
+
+// Online, after running out of time on your turn twice in a row: a bot has your seat until you're back.
+function awayCard(): HTMLElement {
+  const card = el('div', 'claim-card away-card')
+  card.append(
+    el('div', 'claim-head', 'You were away, so a bot is playing for you'),
+    el('p', 'away-text', 'Your time ran out twice in a row. Tap below when you’re ready to play again.'),
+    button('I’m back', () => online?.back(), 'act primary big'),
+  )
+  return card
 }
 
 // The pop-up when another player's discard is yours to take.
@@ -1892,7 +1927,8 @@ function renderTable() {
   // pop-ups over the game, and the rules panel beside it
   for (const x of sh.extras) x.remove()
   sh.extras = []
-  if (offer) sh.extras.push(claimCard(offer))
+  if (online?.away) sh.extras.push(awayCard())
+  else if (offer) sh.extras.push(claimCard(offer))
   if (game.over && !resultClosed) sh.extras.push(showFinal ? finalCard() : resultCard())
   sh.main.append(...sh.extras)
   sh.help?.remove()

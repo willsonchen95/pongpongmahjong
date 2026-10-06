@@ -290,8 +290,12 @@ export class Table {
   autoPlay(seat: number) {
     const p = this.phase
     if (p.kind === 'turn' && p.seat === seat) {
+      // out of time: the tile they just drew goes (after a pong or chi there isn't one: the bot's pick)
+      const hand = this.game.hands[seat], drawn = this.game.drawn
+      let i = drawn ? hand.findIndex(t => t === drawn || (t.id !== undefined && t.id === drawn.id)) : -1
+      if (i < 0) i = botDiscard(this.game, seat, this.match.minFaan)
       this.game.drawn = null
-      this.throwTile(seat, this.game.hands[seat].splice(botDiscard(this.game, seat, this.match.minFaan), 1)[0])
+      this.throwTile(seat, hand.splice(i, 1)[0])
     } else if (p.kind === 'claims' && p.offers[seat] && !p.answers[seat]) {
       this.answer(seat, { kind: 'pass' })
     }

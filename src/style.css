@@ -145,6 +145,27 @@ button { font: inherit; cursor: pointer; border: 0; }
   opacity: 0.85;
 }
 .wl-name { font-size: calc(var(--u) * 0.95); font-weight: 800; color: #f1d7a8; }
+/* Online: the time left on this player's turn, shrinking away (red for the last 5 seconds) */
+.turn-timer {
+  width: calc(var(--u) * 7);
+  height: calc(var(--u) * 0.42);
+  margin: calc(var(--u) * 0.25) auto 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.turn-timer-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #ffe066;
+  transform-origin: left;
+  animation: timer-run var(--left) linear forwards, timer-hurry 0.5s var(--hurry-in) ease-in-out infinite alternate;
+}
+@keyframes timer-run { from { transform: scaleX(var(--from)); } to { transform: scaleX(0); } }
+@keyframes timer-hurry { from { background: #ff6b5e; } to { background: #d0282b; } }
+.away-text { margin: 0 0 14px; font-size: 1.05rem; opacity: 0.85; text-align: center; }
+.away-card { text-align: center; }
+.away-card .act { width: 100%; }
 .wl-wind { font-size: calc(var(--u) * 0.7); font-weight: 700; }
 .wind-label.active { color: #ffe066; opacity: 1; text-shadow: 0 0 calc(var(--u) * 0.5) rgba(255, 224, 102, 0.8); }
 .wind-label.active .wl-name { color: #fff3c4; }

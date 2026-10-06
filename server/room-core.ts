@@ -18,7 +18,10 @@ export const CLAIM_PAUSE_MS = 1100     // extra pause after someone takes a tile
 export const TURN_MS = 30000           // a person's time to throw a tile
 export const CLAIM_MS = 12000          // a person's time to decide on a tile they could take
 
-export interface Seat { playerId: string; name: string; connected: boolean }
+export const AWAY_AFTER = 2            // timeouts in a row before a bot takes over the seat
+// away: timed out AWAY_AFTER times in a row, so a bot plays for them until they say they're back
+// (timeouts counts the ones in a row; anything they do resets it)
+export interface Seat { playerId: string; name: string; connected: boolean; away?: boolean; timeouts?: number }
 export interface RoomState {
   code: string
   hostId: string | null
@@ -41,13 +44,14 @@ export type ClientMsg =
   | { type: 'answer'; answer: Answer }
   | { type: 'ready' }                                    // ready for the next hand
   | { type: 'react'; emoji: string }                     // one of REACTIONS, shown to everyone
+  | { type: 'back' }                                     // back after being away: take your seat from the bot
 
 // Quick reactions people can send during a game (only these, at most one a second each).
 export const REACTIONS = ['👍', '😂', '😮', '😭', '😡', '🎉']
 export const REACT_GAP_MS = 1000
 
 // What a player is told.
-export interface SeatInfo { name: string; person: boolean; connected: boolean; host: boolean }
+export interface SeatInfo { name: string; person: boolean; connected: boolean; host: boolean; away: boolean }
 export type ServerMsg =
   | { type: 'room'; code: string; you: number | null; seats: SeatInfo[]; started: boolean; rules: Rules }
   | { type: 'state'; view: SeatView; events: TableEvent[]; now: number }   // now: the room's clock, for countdowns
@@ -69,6 +73,7 @@ export interface SeatView {
   winTileId: number | null
   readyCount: number
   deadline: number | null              // when the room plays for you, if it's waiting on you
+  turnDeadline: number | null          // when the person whose turn it is runs out of time (everyone sees it)
 }
 
 export interface Out { to: string; msg: ServerMsg }
@@ -105,7 +110,7 @@ export class RoomCore {
       if (seat < 0) return [{ to: playerId, msg: { type: 'error', message: 'This room is full.' } }]
       this.s.seats[seat] = { playerId, name, connected: true }
     } else {
-      this.s.seats[seat] = { ...this.s.seats[seat]!, name, connected: true }
+      this.s.seats[seat] = { ...this.s.seats[seat]!, name, connected: true, away: false, timeouts: 0 }   // reconnecting counts as being back
     }
     if (!this.s.hostId || !this.connectedPeople().some(x => x.playerId === this.s.hostId)) this.s.hostId = playerId
     if (this.table) {                                        // back in the game: your seat is yours again
@@ -149,11 +154,21 @@ export class RoomCore {
       this.s.rules = m.rules
       // a new game after one finished: anyone who left in the meantime gives up their seat
       if (t) this.s.seats = this.s.seats.map(x => (x?.connected ? x : null))
-      this.table = new Table(m.rules, this.s.seats.map(x => !!x?.connected))
+      this.table = new Table(m.rules, this.s.seats.map(x => this.plays(x)))
       this.newHand(now)
       return [...this.lobbyToAll(), ...this.statesToAll(now)]
     }
     if (!t) return [{ to: playerId, msg: { type: 'error', message: 'The game hasn’t started yet.' } }]
+    const person = this.s.seats[seat]!
+    if (m.type === 'back') {                                 // back at the table: the seat is theirs again
+      person.away = false
+      person.timeouts = 0
+      t.humans[seat] = true
+      this.collect()
+      this.schedule(now)
+      return [...this.lobbyToAll(), ...this.statesToAll(now)]
+    }
+    person.timeouts = 0                                      // they're here: the timeouts in a row start over
     let ok = true
     if (m.type === 'discard' || m.type === 'kong') {
       const tile = t.game.hands[seat].find(x => x.id === m.tile)
@@ -163,8 +178,11 @@ export class RoomCore {
     } else if (m.type === 'ready') {
       if (t.phase.kind !== 'over' || t.match.over) return []
       if (!this.s.ready.includes(playerId)) this.s.ready.push(playerId)
-      if (this.connectedPeople().every(x => this.s.ready.includes(x.playerId))) this.newHand(now)
-      return this.statesToAll(now)
+      const wasAway = !!person.away
+      person.away = false                                    // pressing it means they're back
+      // (someone away isn't waited for: they'd hold up everyone)
+      if (this.connectedPeople().filter(x => !x.away).every(x => this.s.ready.includes(x.playerId))) this.newHand(now)
+      return [...(wasAway ? this.lobbyToAll() : []), ...this.statesToAll(now)]
     }
     if (!ok) return [{ to: playerId, msg: { type: 'error', message: 'That move isn’t possible right now.' } }]
     this.collect()
@@ -182,18 +200,33 @@ export class RoomCore {
     this.s.wakeAt = null
     this.s.pauseAfterClaim = false
     const p = t.phase
+    let wentAway = false
     if (p.kind === 'dealing') t.begin()
     else if (p.kind === 'turn' && !t.humans[p.seat]) t.botMove()
-    else for (const seat of t.waitingFor()) t.autoPlay(seat)    // out of time
+    else {
+      // out of time: the room plays for them. Running out on their own turn AWAY_AFTER times in a row
+      // means they've left the table for now: a bot takes the seat, so nobody waits on them each turn.
+      const turnOf = p.kind === 'turn' ? p.seat : null
+      for (const seat of t.waitingFor()) {
+        t.autoPlay(seat)
+        const person = this.s.seats[seat]
+        if (seat !== turnOf || !person) continue
+        person.timeouts = (person.timeouts ?? 0) + 1
+        if (person.timeouts >= AWAY_AFTER) { person.away = true; t.humans[seat] = false; wentAway = true }
+      }
+    }
     this.collect()
     this.schedule(now)
-    return this.statesToAll(now)
+    return [...(wentAway ? this.lobbyToAll() : []), ...this.statesToAll(now)]
   }
+
+  // Whether a seat is played by its person right now (rather than a bot).
+  private plays(x: Seat | null): boolean { return !!x?.connected && !x.away }
 
   private newHand(now: number) {
     const t = this.table!
     t.newHand()
-    t.humans = this.s.seats.map(x => !!x?.connected)
+    t.humans = this.s.seats.map(x => this.plays(x))
     this.s.ready = []
     this.collect()
     this.s.wakeAt = now + INTRO_MS
@@ -244,8 +277,8 @@ export class RoomCore {
   lobbyFor(playerId: string): ServerMsg {
     const you = this.seatOf(playerId)
     const seats: SeatInfo[] = this.s.seats.map((x, i) => x
-      ? { name: x.name, person: true, connected: x.connected, host: x.playerId === this.s.hostId }
-      : { name: BOT_NAMES[i], person: false, connected: false, host: false })
+      ? { name: x.name, person: true, connected: x.connected, host: x.playerId === this.s.hostId, away: !!x.away }
+      : { name: BOT_NAMES[i], person: false, connected: false, host: false, away: false })
     return { type: 'room', code: this.s.code, you: you < 0 ? null : you, seats, started: !!this.table, rules: this.s.rules }
   }
 
@@ -281,6 +314,7 @@ export class RoomCore {
       pool: t.pool, lastDiscard: t.lastDiscard, winFrom: t.winFrom, winTileId: t.winTile?.id ?? null,
       readyCount: this.s.ready.length,
       deadline: waiting ? this.s.wakeAt : null,
+      turnDeadline: phase.kind === 'turn' && t.humans[phase.seat] ? this.s.wakeAt : null,
     }
   }
 }

@@ -110,7 +110,7 @@ describe('a room', () => {
       const w = room.s.wakeAt
       if (w === null) break
       const p = room.s.table!.phase
-      if (p.kind === 'turn' && p.seat === 0) expect(w - now.t).toBe(TURN_MS)
+      if (p.kind === 'turn' && p.seat === 0 && room.s.table!.humans[0]) expect(w - now.t).toBe(TURN_MS)
       if (p.kind === 'claims') expect(w - now.t).toBe(CLAIM_MS)
       now.t = w
       room.tick(now.t)
@@ -167,6 +167,40 @@ describe('a room', () => {
     expect(room.handle('a', { type: 'react', emoji: '<b>hi</b>' }, 9000)).toEqual([])  // not one of the reactions
   })
 
+  it('out of time on your turn: throws the tile you just drew; twice in a row and a bot takes over until you’re back', () => {
+    const now = { t: 0 }
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    const timeOut = () => {                                   // run until Alice's own turn, then let it run out
+      for (let i = 0; i < 400; i++) {
+        const t = room.s.table!, p = t.phase
+        if (p.kind === 'over') return null
+        if (p.kind === 'turn' && p.seat === 0 && t.humans[0]) {
+          const drawn = t.game.drawn
+          now.t = room.s.wakeAt!
+          room.tick(now.t)
+          return { drawn }
+        }
+        if (p.kind === 'claims') for (const [s, id] of [[0, 'a'], [1, 'b']] as const) if (p.offers[s] && !p.answers[s]) room.handle(id, { type: 'answer', answer: { kind: 'pass' } }, now.t)
+        if (p.kind === 'turn' && p.seat === 1 && t.humans[1]) { const h = t.game.hands[1]; room.handle('b', { type: 'discard', tile: h[h.length - 1].id! }, now.t); continue }
+        if (room.s.table!.phase.kind === 'claims') continue
+        now.t = room.s.wakeAt ?? now.t
+        room.tick(now.t)
+      }
+      return null
+    }
+    const first = timeOut()
+    if (!first) return                                        // (the hand ended first: nothing to check)
+    if (first.drawn) expect(room.s.table!.pool.some(t => t.id === first.drawn!.id)).toBe(true)   // the drawn tile went
+    expect(room.lobbyFor('b')).toMatchObject({ seats: [{ away: false }, {}, {}, {}] })
+    if (!timeOut()) return
+    expect(room.lobbyFor('b')).toMatchObject({ seats: [{ name: 'Alice', away: true }, {}, {}, {}] })
+    expect(room.s.table!.humans[0]).toBe(false)               // a bot plays her seat now
+    room.handle('a', { type: 'back' }, now.t)
+    expect(room.s.table!.humans[0]).toBe(true)
+    expect(room.lobbyFor('b')).toMatchObject({ seats: [{ away: false }, {}, {}, {}] })  })
+
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))
@@ -179,6 +213,7 @@ describe('a room', () => {
       room.tick(now.t)
     }
     expect(room.s.table!.phase.kind).toBe('over')
+    room.handle('b', { type: 'back' }, now.t)                 // (nobody acted, so both had been marked away)
     const hand = room.s.table!.match.hand
     room.handle('a', { type: 'ready' }, now.t)
     expect(room.s.table!.match.hand).toBe(hand)              // still waiting for Bob
