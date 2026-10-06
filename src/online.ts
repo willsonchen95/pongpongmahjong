@@ -9,11 +9,13 @@ import { makeTile, type GameState, type Tile } from './engine'
 export type { SeatInfo }
 export { REACTIONS } from '../server/room-core'
 
-// Where the room server is: set at build time for the live site (VITE_ROOM_SERVER), or, while
-// developing on this computer or its home network, the local `npm run server:dev` on port 8787.
+// Where the room server is: while developing on this computer or its home network, the local
+// `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`).
+// VITE_ROOM_SERVER, set at build time, overrides both.
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)$/
+const LIVE_ROOM_SERVER = 'wss://pongpongmahjong-rooms.willsonchen95.workers.dev'
 export const ROOM_SERVER: string = import.meta.env.VITE_ROOM_SERVER
-  || (LOCAL_HOST.test(location.hostname) ? `ws://${location.hostname}:8787` : '')
+  || (LOCAL_HOST.test(location.hostname) ? `ws://${location.hostname}:8787` : LIVE_ROOM_SERVER)
 
 // Room codes: five letters/digits, leaving out ones easily mixed up (0/O, 1/I).
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
