@@ -15,7 +15,7 @@ export const BOT_NAMES = ['East bot', 'Mei', 'Kai', 'Lin']
 export const INTRO_MS = 7000           // the deal being shown on everyone's screen
 export const BOT_MS = 900              // a bot's pause before it moves, so people can follow
 export const CLAIM_PAUSE_MS = 1100     // extra pause after someone takes a tile
-export const TURN_MS = 30000           // a person's time to throw a tile
+export const TURN_MS = 15000           // a person's time to throw a tile
 export const CLAIM_MS = 12000          // a person's time to decide on a tile they could take
 
 export const AWAY_AFTER = 2            // timeouts in a row before a bot takes over the seat

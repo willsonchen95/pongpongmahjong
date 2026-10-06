@@ -146,14 +146,31 @@ button { font: inherit; cursor: pointer; border: 0; }
 }
 .wl-name { font-size: calc(var(--u) * 0.95); font-weight: 800; color: #f1d7a8; }
 /* Online: the time left on this player's turn, shrinking away (red for the last 5 seconds) */
+.turn-timer-row { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 0.35); margin-top: calc(var(--u) * 0.3); }
 .turn-timer {
-  width: calc(var(--u) * 7);
-  height: calc(var(--u) * 0.42);
-  margin: calc(var(--u) * 0.25) auto 0;
+  width: calc(var(--u) * 7.5);
+  height: calc(var(--u) * 0.6);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 calc(var(--u) * 0.08) rgba(255, 224, 102, 0.55);
   overflow: hidden;
 }
+.turn-secs {
+  min-width: calc(var(--u) * 1.5);
+  padding: calc(var(--u) * 0.05) calc(var(--u) * 0.25);
+  border-radius: 999px;
+  background: #ffe066;
+  color: #3a2400;
+  font-size: calc(var(--u) * 0.85);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.turn-secs.hurry { background: #d0282b; color: #fff; animation: secs-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes secs-pulse { to { transform: scale(1.18); } }
+/* your own last seconds: your hand's border flashes red */
+.player-rack.hurry { animation: rack-hurry 0.5s ease-in-out infinite alternate; }
+@keyframes rack-hurry { to { box-shadow: 0 0 0 4px #ff4a3d, 0 0 22px rgba(255, 74, 61, 0.7); } }
 .turn-timer-fill {
   height: 100%;
   border-radius: inherit;

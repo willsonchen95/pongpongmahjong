@@ -178,6 +178,13 @@ export const sfx = {
     for (let i = 0; i < 9; i++) knock(a, t + i * 0.07 + Math.random() * 0.03, 3200 + Math.random() * 1600, 2, 0.18, 0.03)
     for (let i = 0; i < 3; i++) knock(a, t + 0.85 + i * 0.09, 1800, 1.5, 0.5, 0.05)
   },
+  // a clock's tick while your time runs out (tock on alternate ticks; urgent = higher and louder)
+  tick(tock = false, urgent = false) {
+    const a = audio(); if (!a) return
+    const t = a.currentTime
+    knock(a, t, tock ? 1900 : 2600, 6, urgent ? 0.5 : 0.3, 0.03)
+    tone(a, t, tock ? 880 : 1175, 0.05, urgent ? 0.07 : 0.04, 'square')
+  },
   // a small batch of tiles slid across to a player
   deal() {
     const a = audio(); if (!a) return

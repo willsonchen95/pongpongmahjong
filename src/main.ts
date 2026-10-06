@@ -1157,7 +1157,32 @@ function showCountdown(hintEl: HTMLElement) {
   hintEl.textContent = `${hintEl.dataset.base} · ${secs}s`
   hintEl.classList.toggle('hurry', secs <= 5)
 }
-setInterval(() => document.querySelectorAll<HTMLElement>('.status-hint[data-base]').forEach(showCountdown), 500)
+setInterval(() => {
+  document.querySelectorAll<HTMLElement>('.status-hint[data-base]').forEach(showCountdown)
+  // the seconds beside the timer under whoever's turn it is
+  for (const s of document.querySelectorAll<HTMLElement>('.turn-secs[data-deadline]')) {
+    const secs = Math.max(0, Math.ceil((Number(s.dataset.deadline) - Date.now()) / 1000))
+    s.textContent = String(secs)
+    s.classList.toggle('hurry', secs <= 5)
+  }
+  // your hand's border flashes for your last few seconds
+  const mine = online?.view?.deadline
+  document.querySelector('.player-rack')?.classList.toggle('hurry', !!mine && !online?.away && mine - Date.now() <= 5000)
+}, 250)
+
+// A clock ticking while your own time runs out (your turn, or deciding on a tile you could take):
+// once a second from 10 seconds left, twice a second from 5, four times a second for the last 2.
+let tickDeadline = 0, nextTickAt = 0, tickCount = 0
+setInterval(() => {
+  const deadline = online?.view?.deadline
+  if (!deadline || online?.away) return
+  const now = Date.now(), left = deadline - now
+  if (left <= 0 || left > 10000) return
+  if (deadline !== tickDeadline) { tickDeadline = deadline; nextTickAt = 0; tickCount = 0 }
+  if (now < nextTickAt) return
+  sfx.tick(tickCount++ % 2 === 1, left <= 5000)
+  nextTickAt = now + (left <= 2000 ? 250 : left <= 5000 ? 500 : 1000)
+}, 40)
 
 // ---------- Redrawing only what changed ----------
 // The screen is rebuilt on every move, but most of it is the same as before. Each part of the table
@@ -1262,14 +1287,18 @@ function turnDeadlineOf(seat: number): number | null {
 // The bar under a name that shrinks as their turn's time runs out, red for the last few seconds.
 // It's a CSS animation set going from where the time stands now, so nothing redraws it each second.
 function turnTimer(deadline: number): HTMLElement {
+  const row = el('div', 'turn-timer-row')
   const bar = el('div', 'turn-timer')
   const fill = el('div', 'turn-timer-fill')
+  const secs = el('span', 'turn-secs', String(Math.max(0, Math.ceil((deadline - Date.now()) / 1000))))
+  secs.dataset.deadline = String(deadline)          // (kept up to date by the countdown above)
   const left = Math.max(0, deadline - Date.now())
   fill.style.setProperty('--from', String(Math.min(1, left / TURN_MS)))
   fill.style.setProperty('--left', `${left}ms`)
   fill.style.setProperty('--hurry-in', `${Math.max(0, left - 5000)}ms`)
   bar.appendChild(fill)
-  return bar
+  row.append(bar, secs)
+  return row
 }
 
 // The player's rack: their hand (standing, or laid face-up once the hand is over), sets and flowers.
@@ -1925,12 +1954,16 @@ function renderTable() {
   }
 
   // pop-ups over the game, and the rules panel beside it
-  for (const x of sh.extras) x.remove()
-  sh.extras = []
-  if (online?.away) sh.extras.push(awayCard())
-  else if (offer) sh.extras.push(claimCard(offer))
-  if (game.over && !resultClosed) sh.extras.push(showFinal ? finalCard() : resultCard())
-  sh.main.append(...sh.extras)
+  // (the away and claim cards stay the same element while they're unchanged, so a redraw — someone
+  // throwing a tile — doesn't make them pop in again)
+  const extras: HTMLElement[] = []
+  const o = offer
+  if (online?.away) extras.push(part('away', 'away', awayCard))
+  else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
+  if (game.over && !resultClosed) extras.push(showFinal ? finalCard() : resultCard())
+  for (const x of sh.extras) if (!extras.includes(x)) x.remove()
+  for (const x of extras) if (x.parentElement !== sh.main) sh.main.append(x)
+  sh.extras = extras
   sh.help?.remove()
   sh.help = helpOpen ? helpPanel() : null
   if (sh.help) sh.layout.appendChild(sh.help)
@@ -1939,7 +1972,7 @@ function renderTable() {
   stage('build', t); t = performance.now()
   void app.offsetHeight                               // (lay the page out now, so the timing below is the animations alone)
   // (upright phones stand the pong/chi/kong pop-up just above your hand: see .claim-card in style.css)
-  if (offer && sh.rack) main.style.setProperty('--above-rack', `${Math.round(main.getBoundingClientRect().bottom - sh.rack.getBoundingClientRect().top)}px`)
+  if ((offer || online?.away) && sh.rack) main.style.setProperty('--above-rack', `${Math.round(main.getBoundingClientRect().bottom - sh.rack.getBoundingClientRect().top)}px`)
   stage('layout', t); t = performance.now()
   motion.play(app, motionHooks)
   stage('play', t)
