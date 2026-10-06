@@ -100,9 +100,36 @@ function flyBundle(targets: HTMLElement[], from: DOMRect) {
   const left = Math.min(...rects.map(r => r.left)), top = Math.min(...rects.map(r => r.top))
   const to = new DOMRect(left, top, Math.max(...rects.map(r => r.right)) - left, Math.max(...rects.map(r => r.bottom)) - top)
   const start = row(from, targets.length)
-  const g = ghostAt(start, '', Math.min(targets.length, 4))
+  // The bundle is drawn at its landing size — copies of the very tiles, in their places, each with its
+  // blue back on top — and starts shrunk down onto the wall. On the way the backs fade: the tiles turn
+  // face up as they land, and it's all still one piece moving for the phone to draw.
+  const g = document.createElement('div')
+  g.className = 'ghost-bundle'
+  Object.assign(g.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` })
+  const backs: HTMLElement[] = []
+  targets.forEach((t, i) => {
+    const copy = t.cloneNode(true) as HTMLElement
+    copy.removeAttribute('data-key')
+    copy.classList.remove('lifted')
+    Object.assign(copy.style, { position: 'absolute', margin: '0', visibility: '', left: `${rects[i].left - to.left}px`, top: `${rects[i].top - to.top}px`, width: `${rects[i].width}px`, height: `${rects[i].height}px` })
+    const back = document.createElement('div')
+    back.className = 'ghost-back'
+    copy.appendChild(back)
+    backs.push(back)
+    g.appendChild(copy)
+  })
+  document.body.appendChild(g)
   for (const t of targets) t.style.visibility = 'hidden'
-  const anim = g.animate(arc(start, to), { duration: FLY_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
+  const s = Math.min(start.width / to.width, start.height / to.height)
+  const dx = start.left - to.left, dy = start.top - to.top
+  const lift = Math.min(70, Math.hypot(dx, dy) * 0.18)
+  const anim = g.animate([
+    { transform: `translate(${dx}px, ${dy}px) scale(${s})` },
+    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - lift}px) scale(${(s + 1) / 2 * 1.08})`, offset: 0.45 },
+    { transform: 'none' },
+  ], { duration: FLY_MS + 60, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
+  backs.forEach((b, i) => b.animate([{ opacity: 1 }, { opacity: 1, offset: 0.45 }, { opacity: 0 }],
+    { duration: FLY_MS + 60 + i * 40, easing: 'ease-in', fill: 'both' }))
   const keys = targets.map(t => t.dataset.key!)
   for (const k of keys) inFlight.set(k, { ghost: g, anim })
   const land = () => {
