@@ -709,7 +709,11 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   pointer-events: none;
 }
 .ghost-tile svg { display: block; width: 100%; height: 100%; }
-.ghost-tile.back { background: linear-gradient(160deg, #4a5cc8, var(--navy)); box-shadow: 0 3px 0 var(--ivory), 0 10px 18px rgba(0, 0, 0, 0.35); }
+.ghost-tile.back { background: var(--seams, none), linear-gradient(160deg, #4a5cc8, var(--navy)); box-shadow: 0 3px 0 var(--ivory), 0 10px 18px rgba(0, 0, 0, 0.35); }
+@media (pointer: coarse) {                                /* flying tiles without the blurred shadow */
+  .ghost-tile { box-shadow: 0 3px 0 var(--navy); will-change: transform; }
+  .ghost-tile.back { box-shadow: 0 3px 0 var(--ivory); }
+}
 
 
 

@@ -1523,7 +1523,8 @@ function claimCard(o: Offer): HTMLElement {
 const touchScreen = matchMedia('(pointer: coarse)')
 let lifted: Tile | null = null
 function tapTile(t: Tile, e: HTMLElement) {
-  if (touchScreen.matches && lifted !== t) {
+  const already = !!lifted && (lifted === t || (t.id !== undefined && lifted.id === t.id))
+  if (touchScreen.matches && !already) {
     lifted = t
     e.parentElement?.querySelector('.lifted')?.classList.remove('lifted')
     e.classList.add('lifted')
@@ -1542,18 +1543,18 @@ function playerRack(): HTMLElement {
   const tiles = intro && intro.phase !== 'flowers'
     ? game.hands[HUMAN].slice(0, handCount(HUMAN))
     : sortHand(game.hands[HUMAN].filter(t => t !== drawn))
-  const key = [ids(tiles), drawn ? ids([drawn]) : '', lifted ? ids([lifted]) : '', canDiscard, game.winner === HUMAN].join(';')
-  return part('rack', key, () => {
-    const rack = el('div', 'player-rack' + (game.winner === HUMAN ? ' winner' : ''))
-    const add = (t: Tile, cls = '') => {
-      const e = tag(tileEl(t, cls + (t === lifted ? ' lifted' : '')), t, 'rack-0')
-      if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
-      rack.appendChild(e)
-    }
-    for (const t of tiles) add(t)
-    if (drawn) add(drawn, 'drawn')
-    return rack
+  // the rack stays; each tile is its own part, so new tiles are added without rebuilding the rest
+  const rack = part('rack', 'rack', () => el('div', 'player-rack'))
+  rack.classList.toggle('winner', game.winner === HUMAN)
+  // (online each update brings fresh copies of the tiles, so "the lifted tile" is matched by its id)
+  const isLifted = (t: Tile) => !!lifted && (t === lifted || (t.id !== undefined && t.id === lifted.id))
+  const tile = (t: Tile, cls = '') => part(`hand${ids([t])}`, `${cls}:${isLifted(t)}:${canDiscard}`, () => {
+    const e = tag(tileEl(t, cls + (isLifted(t) ? ' lifted' : '')), t, 'rack-0')
+    if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
+    return e
   })
+  placeAll(rack, [...tiles.map(t => tile(t)), ...(drawn ? [tile(drawn, 'drawn')] : [])])
+  return rack
 }
 
 // ---------- Help panel ----------

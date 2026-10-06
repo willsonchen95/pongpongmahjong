@@ -58,6 +58,8 @@ export function play(root: ParentNode, hooks: Hooks) {
     if (was) for (let n = Number(e.dataset.height); n < was.height; n++) taken.push(was.rect)
   }
   let delay = 0
+  const light = lite()
+  const dealt: HTMLElement[] = []          // (touch screens) new tiles in your rack, flown in as one bundle
 
   for (const e of root.querySelectorAll<HTMLElement>('[data-key]')) {
     const key = e.dataset.key!
@@ -69,6 +71,7 @@ export function play(root: ParentNode, hooks: Hooks) {
     }
     if (was) { fly(key, e, was.rect, was.face); continue }
     if (e.dataset.place === 'rack-0' && taken.length) {        // drawn or dealt to you: off the wall, turning over
+      if (light) { dealt.push(e); continue }
       fly(key, e, taken.shift()!, '', faceOf(e), delay)
       delay += STAGGER_MS
       continue
@@ -77,10 +80,42 @@ export function play(root: ParentNode, hooks: Hooks) {
     if (from) fly(key, e, from, faceOf(e))
     else if (!inTable(e)) drop(e)
   }
+  if (dealt.length) flyBundle(dealt, taken.splice(0, dealt.length)[0])
 
-  // the rest went face down to someone else's rack
+  // the rest went face down to someone else's rack (on touch screens, as one bundle)
   const sink = taken.length ? hooks.wallSink() : null
-  if (sink) for (const from of taken) { flyAway(from, sink, delay); delay += STAGGER_MS }
+  if (sink && light) flyAway(taken[0], sink, 0, taken.length)
+  else if (sink) for (const from of taken) { flyAway(from, sink, delay); delay += STAGGER_MS }
+}
+
+// Touch screens (phones, tablets) get lighter animations: tiles taken off the wall together — four at
+// a time in the deal — fly as one face-down bundle instead of one tile each, turning over as they land.
+const lite = () => matchMedia('(pointer: coarse)').matches
+
+// A row of `n` face-down tiles, starting at the stack `from`.
+const row = (from: DOMRect, n: number) => new DOMRect(from.left, from.top, from.width * Math.min(n, 4), from.height)
+
+function flyBundle(targets: HTMLElement[], from: DOMRect) {
+  const rects = targets.map(t => t.getBoundingClientRect())
+  const left = Math.min(...rects.map(r => r.left)), top = Math.min(...rects.map(r => r.top))
+  const to = new DOMRect(left, top, Math.max(...rects.map(r => r.right)) - left, Math.max(...rects.map(r => r.bottom)) - top)
+  const start = row(from, targets.length)
+  const g = ghostAt(start, '', Math.min(targets.length, 4))
+  for (const t of targets) t.style.visibility = 'hidden'
+  const anim = g.animate(arc(start, to), { duration: FLY_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
+  const keys = targets.map(t => t.dataset.key!)
+  for (const k of keys) inFlight.set(k, { ghost: g, anim })
+  const land = () => {
+    g.remove()
+    for (const k of keys) {
+      if (inFlight.get(k)?.anim !== anim) continue
+      inFlight.delete(k)
+      const live = document.querySelector<HTMLElement>(`[data-key="${k}"]`)
+      if (live) live.style.visibility = ''
+    }
+  }
+  anim.onfinish = land
+  anim.oncancel = land                     // one of them re-routed mid-flight: the rest still appear
 }
 
 // FLIP within a flat row: start where it was, glide to where it is.
@@ -98,11 +133,13 @@ function drop(e: HTMLElement) {
     { duration: 320, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' })
 }
 
-function ghostAt(from: DOMRect, face: string): HTMLElement {
+function ghostAt(from: DOMRect, face: string, n = 1): HTMLElement {
   const g = document.createElement('div')
   g.className = 'ghost-tile' + (face.trim() ? '' : ' back')
   g.innerHTML = face
   Object.assign(g.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` })
+  // a bundle: thin seams between its tiles
+  if (n > 1) g.style.setProperty('--seams', `repeating-linear-gradient(to right, transparent 0 calc(${100 / n}% - 1.5px), rgba(0, 0, 0, 0.45) calc(${100 / n}% - 1.5px) ${100 / n}%)`)
   document.body.appendChild(g)
   return g
 }
@@ -151,9 +188,10 @@ function fly(key: string, target: HTMLElement, from: DOMRect, face: string, reve
   }
 }
 
-// A face-down tile off the wall to another player's rack, where it melts into their hand.
-function flyAway(from: DOMRect, to: DOMRect, delay: number) {
-  const g = ghostAt(from, '')
+// A face-down tile (or a bundle of `n`) off the wall to another player's rack, where it melts into their hand.
+function flyAway(from: DOMRect, to: DOMRect, delay: number, n = 1) {
+  if (n > 1) { from = row(from, n); to = new DOMRect(to.left - (to.width * (Math.min(n, 4) - 1)) / 2, to.top, to.width * Math.min(n, 4), to.height) }
+  const g = ghostAt(from, '', Math.min(n, 4))
   g.animate(arc(from, to, { opacity: 0.2 }), { duration: FLY_MS, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
     .onfinish = () => g.remove()
 }
