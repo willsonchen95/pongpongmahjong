@@ -8,11 +8,16 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "server:check": "tsc -p server",
+    "server:dev": "wrangler dev --config server/wrangler.jsonc",
+    "server:deploy": "wrangler deploy --config server/wrangler.jsonc"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
   }
 }

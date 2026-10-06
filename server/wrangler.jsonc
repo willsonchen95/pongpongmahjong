@@ -1,0 +1,12 @@
+// The room server (a Cloudflare Worker). Run it locally with `npm run server:dev`;
+// deploy with `npm run server:deploy` (needs a one-time `npx wrangler login`).
+{
+  "name": "pongpongmahjong-rooms",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  // SQLite-backed Durable Objects: the kind the free plan allows
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+}

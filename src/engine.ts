@@ -6,6 +6,7 @@ export interface Tile {
   category: Category
   value: number
   glyph: string
+  id?: number                          // which of the 144 physical tiles (set when the wall is built)
 }
 
 const BASE: Record<Category, number> = {
@@ -35,6 +36,7 @@ export function buildWall(): Tile[] {
   for (let d = 0; d < 3; d++) push('dragon', d, 4)
   for (let f = 0; f < 4; f++) push('flower', f, 1)
   for (let s = 0; s < 4; s++) push('season', s, 1)
+  wall.forEach((t, i) => { t.id = i })   // so a tile can be named in a message ("throw tile 57") and followed on screen
   return wall
 }
 

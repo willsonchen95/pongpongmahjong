@@ -101,7 +101,7 @@ export class Table {
   winFrom: number | null = null        // whose tile won the hand; null = self-drawn
   winTile: Tile | null = null          // the tile that completed the winning hand
   phase: Phase = { kind: 'dealing' }
-  readonly humans: boolean[]           // which seats are people (the rest are bots)
+  humans: boolean[]                    // which seats are people (the rest are bots; online, a bot sits in for anyone who drops out)
   private events: TableEvent[] = []
 
   constructor(rules: Rules, humans: boolean[]) {
@@ -283,6 +283,26 @@ export class Table {
     if (p.robbing) this.settleRob(p.from, p.tile, p.answers)
     else this.settleDiscard(p.from, p.answers)
     return true
+  }
+
+  // When a person runs out of time: throw the tile a bot would (no kongs), or pass on a tile they
+  // were offered. Does nothing if the table isn't waiting for them.
+  autoPlay(seat: number) {
+    const p = this.phase
+    if (p.kind === 'turn' && p.seat === seat) {
+      this.game.drawn = null
+      this.throwTile(seat, this.game.hands[seat].splice(botDiscard(this.game, seat, this.match.minFaan), 1)[0])
+    } else if (p.kind === 'claims' && p.offers[seat] && !p.answers[seat]) {
+      this.answer(seat, { kind: 'pass' })
+    }
+  }
+
+  // Which seats the table is waiting on right now (people only; bots never keep it waiting).
+  waitingFor(): number[] {
+    const p = this.phase
+    if (p.kind === 'turn' && this.humans[p.seat]) return [p.seat]
+    if (p.kind === 'claims') return [0, 1, 2, 3].filter(s => p.offers[s] && !p.answers[s])
+    return []
   }
 
   // ---------- Inside a hand ----------
