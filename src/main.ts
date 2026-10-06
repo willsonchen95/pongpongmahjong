@@ -12,6 +12,8 @@ import * as motion from './motion'
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
 const HUMAN = 0
+declare const __APP_VERSION__: string        // filled in at build time (vite.config.ts)
+declare const __BUILD_DATE__: string
 const NAMES = ['You', 'Mei', 'Kai', 'Lin']
 const WIND_CHARS = ['東', '南', '西', '北']
 const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
@@ -970,7 +972,12 @@ function renderMenu() {
     menuCard(MENU_ICONS.book, 'How to play', 'The rules, the sets and how scoring works — with pictures', renderRulesPage),
     menuCard(MENU_ICONS.online, 'Play online', 'Play with friends and family', null, 'soon', 'Coming soon'),
   )
-  page.append(sound, menuHero(), cards)
+  // which version this is, and when it was built — at the very bottom of the menu
+  // (a dev server started before vite.config.ts existed doesn't fill them in — say so rather than break)
+  const version = typeof __APP_VERSION__ === 'string' ? `v${__APP_VERSION__}` : 'dev'
+  const built = typeof __BUILD_DATE__ === 'string'
+    ? ` · ${new Date(__BUILD_DATE__).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
+  page.append(menuHero(), sound, cards, el('p', 'menu-version', version + built))
   app.appendChild(page)
 }
 
