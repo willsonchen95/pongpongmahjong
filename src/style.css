@@ -1150,16 +1150,27 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .status-title { font-size: 1.05rem; }
   .status-hint { font-size: 0.85rem; }
 
-  /* the table as wide as the screen allows, tilted a little less so it reads at this size */
-  .scene { --T: min(86cqw, calc((100vh - 330px) / 0.8), 980px); margin-top: calc(var(--T) * -0.07); }
-  .table { transform: rotateX(32deg); }
+  /* the whole screen used: the top bar at the top, your hand at the bottom where your thumbs are,
+     and the table filling the middle — seen more from above, so it suits a tall screen and its
+     near corners stay on screen */
+  .main-col { min-height: calc(100dvh - 20px); }
+  .scene {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    --T: min(86cqw, calc((100dvh - 400px) / 0.9), 980px);
+    margin: 0;
+  }
+  .table { transform: rotateX(24deg); }
 
   /* your hand in two rows of seven, so the tiles are big enough to read and tap; the drawn tile
      ends the second row */
   .player-rack {
-    --w: calc((100cqw - 34px) / 7.4);
+    --w: min(50px, calc((100cqw - 34px) / 7.4));
     box-sizing: border-box;
     width: 100%;
+    max-width: calc(var(--w) * 7.25 + 36px);             /* seven to a row, so the two rows match */
     min-width: 0;
     flex-wrap: wrap;
     align-content: flex-end;
@@ -1370,6 +1381,93 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .mc-title { font-size: 1.15rem; }
   .mc-sub { font-size: 0.85rem; }
   .setup-q { margin-top: 14px; }
+}
+
+/* ---------- Phones, upright or sideways: pop-ups and other screens ---------- */
+/* Everything that floats over the game, and the screens around it, in phone sizes: smaller cards,
+   tighter spacing and text a step down, so nothing reads as a zoomed-in close-up. */
+@media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  /* "Your hand" details card */
+  .hm-card { width: min(320px, calc(100vw - 24px)); max-height: 70dvh; padding: 10px 12px; border-width: 2px; border-radius: 12px; }
+  .hm-card-title { font-size: 1rem; }
+  .hm-card h4 { margin: 8px 0 4px; font-size: 0.7rem; }
+  .hm-empty { font-size: 0.78rem; }
+  .hm-row { gap: 1px 8px; padding: 5px 8px; margin-bottom: 4px; border-left-width: 3px; }
+  .hm-row-name, .hm-row-faan { font-size: 0.85rem; }
+  .hm-row-name .tile.mini { font-size: 0.8rem; }
+  .hm-row-why { font-size: 0.75rem; }
+  .hm-row-tiles .tile.mini { font-size: 0.9rem; }
+  .hm-tiles-label { font-size: 0.72rem; }
+  .hm-card-foot { margin-top: 6px; font-size: 0.7rem; }
+  .hm-plans { margin-top: 8px; padding: 6px 8px; border-width: 1px; }
+  .hm-plans-intro { font-size: 0.78rem; }
+  .hm-plan { margin-top: 6px; padding: 6px; }
+  .hm-plan-num, .hm-plan-total { font-size: 0.85rem; }
+  .hm-plan-effort { font-size: 0.72rem; }
+
+  /* beginner tips */
+  .coach-card { width: min(320px, calc(100vw - 24px)); padding: 12px 14px 10px; border-width: 3px; }
+  .coach-title { font-size: 1.1rem; }
+  .coach-body { margin-top: 4px; font-size: 0.86rem; line-height: 1.35; }
+  .coach-body .tile.ex { width: 24px; height: 32px; }
+  .coach-foot { margin-top: 8px; }
+  .coach-count, .coach-off { font-size: 0.8rem; }
+  .coach-next { padding: 6px 16px; font-size: 1rem; }
+
+  /* pause and "are you sure?" boxes */
+  .dialog-card { width: min(340px, calc(100vw - 32px)); padding: 16px 18px 14px; border-width: 3px; }
+  .dialog-title { font-size: 1.35rem; }
+  .dialog-text { margin: 6px 0 12px; font-size: 0.9rem; }
+  .dialog-actions { gap: 8px; }
+  .dialog-actions .act { padding: 8px 14px; font-size: 1rem; }
+
+  /* pop-up banners over the table ("Your turn", "Kai: Pong!") */
+  .banner { padding: 6px 18px; border-width: 2px; font-size: 1.15rem; }
+  .banner.call, .banner.flower { padding: 6px 16px; font-size: 1.05rem; }
+  .banner .tile.mini { font-size: 0.9rem; }
+  .banner .tile.mini:first-of-type { margin-left: 8px; }
+
+  /* the rules panel in a game */
+  .help { padding: 12px 14px 16px; font-size: 0.85rem; line-height: 1.45; }
+  .help h2 { font-size: 1.15rem; }
+  .help h3 { font-size: 0.95rem; }
+  .help .tile.mini { font-size: 0.95rem; }
+  .tile.ex { width: 26px; height: 35px; border-radius: 4px; }
+  .tile.ex.sm { width: 18px; height: 24px; border-radius: 3px; }
+  .faan-badge { font-size: 0.75rem; }
+  .close-btn { width: 34px; height: 34px; font-size: 1rem; }
+
+  /* the How to play page */
+  .rules-page { margin: 12px auto; }
+  .rules-head { gap: 12px; margin-bottom: 10px; }
+  .rules-head h1 { font-size: 1.6rem; }
+  .help.rules-body { padding: 14px 16px 18px; font-size: 0.9rem; }
+  .rules-body .tile.ex { width: 28px; height: 38px; }
+  .rules-body .tile.ex.sm { width: 20px; height: 27px; }
+
+  /* the New game screen */
+  .setup { margin: 12px auto; padding: 16px 18px 18px; border-radius: 16px; }
+  .setup-title { font-size: 1.6rem; }
+  .setup-intro { font-size: 0.9rem; }
+  .setup-q { margin: 14px 0 4px; font-size: 1.05rem; }
+  .setup-help { font-size: 0.82rem; }
+  .choice-row { gap: 8px; }
+  .choice { flex-basis: 120px; padding: 8px 10px; border-width: 2px; border-radius: 10px; }
+  .choice-label { font-size: 1.05rem; }
+  .choice-sub { font-size: 0.78rem; }
+  .setup-actions { margin-top: 14px; gap: 10px; }
+  .act.big { padding: 10px 20px; font-size: 1.15rem; }
+  .act { padding: 8px 16px; font-size: 1rem; }
+
+  /* final standings */
+  .standings { margin: 10px auto; gap: 6px; }
+  .standing { grid-template-columns: 40px 1fr auto auto; padding: 6px 12px; font-size: 1rem; }
+  .standing .gain { font-size: 0.82rem; }
+
+  /* menu cards */
+  .menu-card { padding-top: 8px; padding-bottom: 8px; }
+  .mc-title { font-size: 1.15rem; }
+  .mc-sub { font-size: 0.85rem; }
 }
 
 /* On touch screens a tap lifts a tile (tap it again to throw it), so one stray tap doesn't cost a tile. */
