@@ -1215,41 +1215,10 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .act.big { padding: 12px 20px; font-size: 1.3rem; }
 }
 
-/* ---------- Phones: played sideways ---------- */
-/* Held upright, a phone is asked to turn sideways (on Android the button goes fullscreen and locks
-   it there). Sideways, the screen is laid out like the computer version: the table on the left, a
-   slim column on the right for the status, buttons and "Your hand", and your hand along the bottom. */
-.rotate-note { display: none; }
-@media (orientation: portrait) and (max-width: 600px) and (pointer: coarse) {
-  .rotate-note {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 14px;
-    padding: 24px;
-    text-align: center;
-    background:
-      radial-gradient(circle, transparent 0 14px, rgba(255, 190, 120, 0.07) 15px 17px, transparent 18px) 0 0 / 44px 44px,
-      radial-gradient(ellipse at 50% 30%, #a3221f 0%, #6e1210 75%);
-    font-size: 1.3rem;
-    font-weight: 700;
-  }
-  .rn-phone {
-    width: 46px;
-    height: 80px;
-    border: 4px solid #ffd75e;
-    border-radius: 10px;
-    animation: rn-turn 2.4s ease-in-out infinite;
-  }
-  @keyframes rn-turn { 0%, 25% { rotate: 0deg; } 55%, 100% { rotate: -90deg; } }
-  .rn-sub { font-size: 1rem; font-weight: 500; opacity: 0.85; }
-  .rotate-note .act { margin-top: 6px; }
-}
-
-/* (a sideways phone is laid out 960 wide — see index.html — so 440–540 tall, depending on its shape) */
+/* ---------- Phones held sideways ---------- */
+/* Laid out like the computer version: the table on the left, a slim column on the right for the
+   status, buttons and "Your hand", and your hand along the bottom. (A sideways phone is laid out
+   about 1120 wide — see index.html — which keeps it under 600 tall.) */
 @media (orientation: landscape) and (max-height: 600px) {
   body { touch-action: manipulation; place-items: start center; }   /* no double-tap zoom while tapping tiles */
   #app { padding: 6px 8px 0; }
@@ -1272,6 +1241,9 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
     /* as big as the height above your hand allows, and narrow enough to leave the side column */
     --T: min(calc((100dvh - 128px) / 0.86), calc((100cqw - 250px) / 1.3), 980px);
     margin: 0;
+    /* the tilt draws the table lower than its box: lift it so its front edge clears your hand */
+    position: relative;
+    top: calc(var(--T) * -0.1);
   }
 
   /* side column: status, then the buttons, then the round */
