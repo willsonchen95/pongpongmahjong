@@ -3,6 +3,7 @@ import {
   type Tile, type GameState, type ClaimKind, type FaanItem, type HaveItem, type CloseTo, SEATS, deal, drawTile, sortHand, makeTile, isWinningHand,
   botDiscard, botWantsKong, canPong, canKong, canWinOn, chowOptions, claimDiscard, kongOptions, declareKong, botClaim, winningTiles,
   parse, sameTile, seatWind, scoreHand, settle, payout, handProgress, planToMinimum, type Plan, MAX_FAAN, claimEffects,
+  progressInput, isAddedKong, isConcealedKong, type ScoreInput,
 } from './engine'
 import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
@@ -86,7 +87,8 @@ let helpOpen = (() => {
 
 // A discard you may claim. Only options that would actually succeed are offered —
 // anything a higher-priority bot claim would beat is already left out.
-interface Offer { from: number; tile: Tile; win: boolean; pong: boolean; kong: boolean; chows: number[][] }
+// `robbing`: not a discard but the tile `from` is adding to a pong — you may only win with it.
+interface Offer { from: number; tile: Tile; win: boolean; pong: boolean; kong: boolean; chows: number[][]; robbing?: boolean }
 let offer: Offer | null = null
 
 type Draw = 'normal' | 'replacement' | 'none'     // replacement = from the back of the wall, after a kong
@@ -98,13 +100,14 @@ const CLAIM_PAUSE_MS = 1100       // extra pause after a bot claims a discard
 const CALL_WORDS: Record<ClaimKind, string> = { pong: 'Pong!', kong: 'Kong!', chow: 'Chi!' }
 
 // The winning tile is always the last one added to the hand (the draw, or the claimed discard).
-function win(seat: number, from: number | null = null) {
+function win(seat: number, from: number | null = null, robbing = false) {
   const hand = game.hands[seat]
   winTile = hand[hand.length - 1]
+  const input = scoreInput(seat, hand, from === null, robbing)     // before the hand is marked over
   game.over = true; game.winner = seat; winFrom = from; game.drawn = null; mustDiscard = false
   celebrate = seat === HUMAN
   sfx.win()
-  endHand(seat, from)
+  endHand(seat, from, input)
 }
 function wallExhausted() {
   game.over = true; game.drawn = null; mustDiscard = false
@@ -113,16 +116,13 @@ function wallExhausted() {
 
 // Score the hand, pay out, and move the match on: the dealer keeps the deal after winning or a
 // draw, otherwise it passes to the next player; after four passes the round wind moves on.
-function endHand(winner: number | null, from: number | null) {
+function endHand(winner: number | null, from: number | null, input?: ScoreInput) {
   const dealerStays = winner === null || winner === game.dealer
   let result: HandResult
-  if (winner === null) {
+  if (winner === null || !input) {
     result = { winner, from, faan: 0, limit: false, items: [], deltas: [0, 0, 0, 0], dealerStays }
   } else {
-    const s = scoreHand({
-      concealed: game.hands[winner], melds: game.melds[winner], bonus: game.bonus[winner],
-      selfDrawn: from === null, seatWind: seatWind(game, winner), roundWind: game.roundWind,
-    })
+    const s = scoreHand(input)
     result = { winner, from, ...s, deltas: settle(winner, from, s.faan), dealerStays }
   }
   result.deltas.forEach((d, p) => { match.scores[p] += d })
@@ -135,21 +135,46 @@ function endHand(winner: number | null, from: number | null) {
   match.over = match.roundWind >= match.rounds
 }
 
-// The faan a player would score with these concealed tiles (assumed to make a complete hand).
-function faanOf(seat: number, concealed: Tile[], selfDrawn: boolean): number {
-  return scoreHand({
-    concealed, melds: game.melds[seat], bonus: game.bonus[seat],
-    selfDrawn, seatWind: seatWind(game, seat), roundWind: game.roundWind,
-  }).faan
+// How a player would be scored winning right now with these concealed tiles, including the special
+// ways to win: on a kong's replacement tile, by robbing a kong, or with the last tile.
+function scoreInput(seat: number, concealed: Tile[], selfDrawn: boolean, robbing = false): ScoreInput {
+  return {
+    ...progressInput(game, seat, concealed), selfDrawn,
+    kongReplacement: selfDrawn && game.lastDrawFromBack, robbedKong: robbing, lastTile: game.wall.length === 0,
+  }
 }
-// May this player declare a win — with the tile just drawn, or with someone's discard?
-// The hand must be complete AND reach the agreed minimum faan.
+// The faan a player would score with these concealed tiles (assumed to make a complete hand) — right
+// now, or for hints about a later tile (`now` false: none of the special ways to win).
+function faanOf(seat: number, concealed: Tile[], selfDrawn: boolean, now = true, robbing = false): number {
+  const input = now ? scoreInput(seat, concealed, selfDrawn, robbing) : { ...progressInput(game, seat, concealed), selfDrawn }
+  return scoreHand(input).faan
+}
+// May this player declare a win — with the tile just drawn, or with someone's discard (or the tile
+// they're adding to a pong)? The hand must be complete AND reach the agreed minimum faan.
 function canDeclareSelfDrawn(seat: number): boolean {
   const hand = game.hands[seat]
   return isWinningHand(hand, game.melds[seat].length) && faanOf(seat, hand, true) >= match.minFaan
 }
-function canDeclareOn(seat: number, tile: Tile): boolean {
-  return canWinOn(game, seat, tile) && faanOf(seat, [...game.hands[seat], tile], false) >= match.minFaan
+function canDeclareOn(seat: number, tile: Tile, robbing = false): boolean {
+  return canWinOn(game, seat, tile) && faanOf(seat, [...game.hands[seat], tile], false, true, robbing) >= match.minFaan
+}
+
+// Adding a fourth tile to an exposed pong can be robbed: anyone that tile completes may take it and
+// win. Bots in turn order before you win straight away; otherwise you're asked first. Returns true
+// if the kong is stopped — robbed, or waiting for your answer.
+function robKong(seat: number, tile: Tile, humanPassed = false): boolean {
+  const order = [1, 2, 3].map(k => (seat + k) % 4)
+  const robber = order.find(s => s !== HUMAN && canDeclareOn(s, tile, true))
+  const humanCan = seat !== HUMAN && !humanPassed && canDeclareOn(HUMAN, tile, true)
+  if (humanCan && (robber === undefined || order.indexOf(HUMAN) < order.indexOf(robber))) {
+    offer = { from: seat, tile, win: true, pong: false, kong: false, chows: [], robbing: true }
+    return true
+  }
+  if (robber === undefined) return false
+  const hand = game.hands[seat]
+  game.hands[robber].push(hand.splice(hand.findIndex(t => sameTile(t, tile)), 1)[0])
+  win(robber, seat, true)
+  return true
 }
 
 // Draw for a player, announcing any flowers/seasons that turn up (they're set aside and replaced).
@@ -207,7 +232,7 @@ async function play(seat: number, draw: Draw) {
     await gameIdle()
     if (stale()) return
     botTurn(seat)
-    if (game.over) break
+    if (game.over || offer) break                 // won, or you may rob its kong
     const r = resolveDiscard(seat)
     if (r === null) break                         // you're deciding on a claim, or someone won
     if (r[1] !== 'normal') {                      // a bot claimed the discard — let it register
@@ -227,6 +252,7 @@ function botTurn(seat: number) {
   if (canDeclareSelfDrawn(seat)) return win(seat)
   let kong: Tile | undefined
   while ((kong = kongOptions(game, seat).find(t => botWantsKong(game, seat, t, match.minFaan)))) {
+    if (isAddedKong(game, seat, kong) && robKong(seat, kong)) return
     declareKong(game, seat, kong)
     announceCall(seat, 'kong', kongMeld(seat, kong))
     if (drawFor(seat, true) === null) return wallExhausted()
@@ -284,8 +310,15 @@ function resolveDiscard(d: number, humanPassed = false): [number, Draw] | null {
 
 function humanClaim(kind: ClaimKind | 'win', run?: number[]) {
   if (!offer) return
-  const { from } = offer
+  const { from, tile, robbing } = offer
   offer = null
+  if (robbing) {                                      // take the tile from their hand, not the discards
+    const hand = game.hands[from]
+    game.hands[HUMAN].push(hand.splice(hand.findIndex(t => sameTile(t, tile)), 1)[0])
+    win(HUMAN, from, true)
+    refresh()
+    return
+  }
   lastDiscard = null
   pool.pop()                                          // the claimed tile leaves the middle
   if (kind === 'win') {
@@ -301,8 +334,15 @@ function humanClaim(kind: ClaimKind | 'win', run?: number[]) {
 
 function humanPass() {
   if (!offer) return
-  const { from } = offer
+  const { from, tile, robbing } = offer
   offer = null
+  if (robbing) {                                      // let the kong stand (unless a bot robs it), and play on
+    if (robKong(from, tile, true)) { refresh(); return }
+    declareKong(game, from, tile)
+    announceCall(from, 'kong', kongMeld(from, tile))
+    void play(from, 'replacement')
+    return
+  }
   const r = resolveDiscard(from, true)
   if (r) void play(...r)
   else refresh()
@@ -310,6 +350,7 @@ function humanPass() {
 
 function humanKong(tile: Tile) {
   if (game.over || !mustDiscard) return
+  if (isAddedKong(game, HUMAN, tile) && robKong(HUMAN, tile)) { refresh(); return }
   declareKong(game, HUMAN, tile)
   announceCall(HUMAN, 'kong', kongMeld(HUMAN, tile))
   mustDiscard = false
@@ -966,11 +1007,15 @@ function renderSetup() {
   app.appendChild(card)
 }
 
+// The hand just won was won by robbing a kong (the tile came from a pong being made a kong).
+const wonByRobbing = () => !!match.result?.items.some(i => i.name === 'Robbing a kong')
+
 // One sentence describing how the hand ended.
 function resultLine(): string {
   if (game.winner === null) return 'The wall ran out — nobody won this hand.'
   const who = game.winner === HUMAN ? 'You win' : `${NAMES[game.winner]} wins`
-  const how = winFrom === null ? 'by drawing the winning tile' : `with ${possessive(winFrom)} thrown-away tile`
+  const how = winFrom === null ? 'by drawing the winning tile'
+    : wonByRobbing() ? `by robbing ${possessive(winFrom)} kong` : `with ${possessive(winFrom)} thrown-away tile`
   return `${who} ${how}!`
 }
 
@@ -984,13 +1029,14 @@ function statusEl(): HTMLElement {
     mood = 'win'; badge = '🏆'; title.textContent = 'You win!'; hint = 'Mahjong!'
   } else if (game.winner !== null) {
     mood = 'done'; badge = windChar(game.winner); title.textContent = `${NAMES[game.winner]} wins`
-    hint = winFrom === null ? 'Drew the winning tile' : `On ${possessive(winFrom)} thrown-away tile`
+    hint = winFrom === null ? 'Drew the winning tile'
+      : wonByRobbing() ? `Robbed ${possessive(winFrom)} kong` : `On ${possessive(winFrom)} thrown-away tile`
   } else if (game.over) {
     mood = 'done'; badge = '–'; title.textContent = 'Draw'; hint = 'The wall ran out'
   } else if (offer) {
     mood = 'mine'; badge = windChar(offer.from)
-    title.append(`${NAMES[offer.from]} threw away`, mini(offer.tile))
-    hint = 'Take it, or pass'
+    title.append(`${NAMES[offer.from]} ${offer.robbing ? 'adds to a pong' : 'threw away'}`, mini(offer.tile))
+    hint = offer.robbing ? 'Rob the kong, or pass' : 'Take it, or pass'
   } else if (mustDiscard) {
     mood = 'mine'; badge = windChar(HUMAN); title.textContent = 'Your turn'; hint = 'Tap a tile to throw it away'
   } else if (intro) {
@@ -1073,7 +1119,8 @@ function sideLayer(seat: number): HTMLElement {
   }
   for (const meld of game.melds[seat]) {
     const g = el('div', 'group')
-    for (const t of meld) g.appendChild(lyingTile(t))
+    const hidden = isConcealedKong(game, seat, meld)   // declared from the hand: its end tiles lie face down
+    meld.forEach((t, i) => g.appendChild(hidden && (i === 0 || i === 3) ? box('up', 1.15, 1.54, 0.8, 'facedown') : lyingTile(t)))
     rack.appendChild(g)
   }
   if (game.bonus[seat].length && flowersVisible(seat)) {
@@ -1103,6 +1150,8 @@ const HAVE_WHY: [string, string][] = [
   ['Concealed hand', 'You haven’t taken anyone’s tile. Avoid Pong / Chi to keep it.'],
   ['No flowers', 'You have no flower or season tiles.'],
   ['Own flower', 'A flower or season showing your seat number.'],
+  ['Flower set', 'All four flowers, or all four seasons.'],
+  ['All eight flowers', 'Every flower and season — a limit hand!'],
   ['Dragon pong', 'Three of the same dragon.'],
   ['Seat wind pong', 'Three of your seat’s wind.'],
   ['Round wind pong', 'Three of this round’s wind.'],
@@ -1192,7 +1241,7 @@ function faanCard(have: HaveItem[], close: CloseTo[], total: number, plans: Plan
 // you're close to, and — when one tile from winning — which tiles win and what each would score.
 function handMeter(): HTMLElement {
   const hand = game.hands[HUMAN], melds = game.melds[HUMAN]
-  const input = { concealed: hand, melds, bonus: game.bonus[HUMAN], seatWind: seatWind(game, HUMAN), roundWind: game.roundWind }
+  const input = progressInput(game, HUMAN)
   const { have, close } = handProgress(input)
   const total = have.reduce((n, i) => n + i.faan, 0)
   const enough = total >= match.minFaan
@@ -1241,7 +1290,7 @@ function handMeter(): HTMLElement {
       const ready = el('div', 'hm-ready')
       ready.appendChild(el('span', 'hm-ready-label', 'Ready! Win with'))
       for (const t of wins) {
-        const f = faanOf(HUMAN, [...hand, t], false)
+        const f = faanOf(HUMAN, [...hand, t], false, false)
         const w = el('span', 'hm-win' + (f >= match.minFaan ? '' : ' short'))
         w.append(mini(t), el('span', '', `${f} faan`))
         w.title = f >= match.minFaan ? `Winning on ${tileName(t.category, t.value)} scores ${f} faan (more if you draw it yourself)`
@@ -1283,9 +1332,7 @@ function claimButton(label: string, hint: string, onClick: () => void, cls: stri
 // What taking the tile would do to your hand's patterns: "✗ Concealed hand −1", "✗ Spoils All pongs",
 // "✓ Dragon pong +1". Null when it changes nothing.
 function claimEffectsEl(kind: ClaimKind, tile: Tile, run?: number[]): HTMLElement | null {
-  const input = { concealed: game.hands[HUMAN], melds: game.melds[HUMAN], bonus: game.bonus[HUMAN],
-    seatWind: seatWind(game, HUMAN), roundWind: game.roundWind }
-  const { lost, ruined, gained } = claimEffects(input, kind, tile, run)
+  const { lost, ruined, gained } = claimEffects(progressInput(game, HUMAN), kind, tile, run)
   if (!lost.length && !ruined.length && !gained.length) return null
   const box = el('span', 'claim-effects')
   for (const i of lost) box.appendChild(el('span', 'ce-bad', `✗ Lose ${i.name} −${i.faan}`))
@@ -1298,9 +1345,11 @@ function claimEffectsEl(kind: ClaimKind, tile: Tile, run?: number[]): HTMLElemen
 function claimCard(o: Offer): HTMLElement {
   const card = el('div', 'claim-card')
   const head = el('div', 'claim-head')
-  head.append(el('span', '', `${NAMES[o.from]} threw away`), tileEl(o.tile, 'claim-tile'))
+  head.append(el('span', '', `${NAMES[o.from]} ${o.robbing ? 'is adding to a pong to make a kong:' : 'threw away'}`), tileEl(o.tile, 'claim-tile'))
   const opts = el('div', 'claim-options')
-  if (o.win) opts.appendChild(claimButton('Mahjong!', 'This tile completes your hand — you win!', () => humanClaim('win'), 'win'))
+  if (o.win) opts.appendChild(claimButton('Mahjong!', o.robbing
+    ? 'Rob the kong — this tile completes your hand, you win!'
+    : 'This tile completes your hand — you win!', () => humanClaim('win'), 'win'))
   // taking a tile exposes a set, which can cost patterns you have or are building — say which
   if (o.kong) opts.appendChild(claimButton('Kong', 'Take it: four of a kind', () => humanClaim('kong'), '', [o.tile],
     claimEffectsEl('kong', o.tile)))
@@ -1311,7 +1360,7 @@ function claimCard(o: Offer): HTMLElement {
     opts.appendChild(claimButton('Chi', 'Take it: three in a row', () => humanClaim('chow', run), '', tiles,
       claimEffectsEl('chow', o.tile, run)))
   }
-  opts.appendChild(claimButton('Pass', "Don't take it", humanPass, 'pass'))
+  opts.appendChild(claimButton('Pass', o.robbing ? 'Let them make the kong' : "Don't take it", humanPass, 'pass'))
   card.append(head, opts)
   return card
 }
@@ -1346,7 +1395,7 @@ function para(...parts: (string | Node)[]): HTMLElement { const p = el('p'); p.a
 // Tiles that would let you declare a win with these concealed tiles — complete AND reaching the
 // minimum (counting a self-draw, since you might draw it yourself).
 const winsFor = (concealed: Tile[]) =>
-  winningTiles(concealed, game.melds[HUMAN].length).filter(t => faanOf(HUMAN, [...concealed, t], true) >= match.minFaan)
+  winningTiles(concealed, game.melds[HUMAN].length).filter(t => faanOf(HUMAN, [...concealed, t], true, false) >= match.minFaan)
 
 // "Right now": what you should do at this moment, plus hints toward a win.
 function nowSection(): HTMLElement {
@@ -1359,7 +1408,9 @@ function nowSection(): HTMLElement {
     s.append(para(`${game.dealer === HUMAN ? 'You are' : `${NAMES[game.dealer]} is`} the dealer this hand. The dice decide where the wall is opened, then everyone gets 13 tiles — four at a time.`),
       para('Flowers and seasons are put aside and replaced automatically.'))
   } else if (offer) {
-    s.append(para(`${NAMES[offer.from]} threw away a tile you can use. Choose a big button in the box, or press Pass.`))
+    s.append(para(offer.robbing
+      ? `${NAMES[offer.from]} is adding a tile to their pong — and that tile would finish your hand! Press Mahjong! to rob the kong, or Pass.`
+      : `${NAMES[offer.from]} threw away a tile you can use. Choose a big button in the box, or press Pass.`))
   } else if (mustDiscard) {
     s.append(para('Your turn. You have one tile too many — tap a tile in your hand to throw it away.'))
     if (isWinningHand(hand, melds)) {               // complete, but below the agreed minimum
@@ -1390,9 +1441,7 @@ function nowSection(): HTMLElement {
 
 // "To reach 3 faan: Mixed one suit — throw away 2萬 3筒." when your hand is short of the minimum.
 function bestPlanPara(): HTMLElement | null {
-  const input = { concealed: game.hands[HUMAN], melds: game.melds[HUMAN], bonus: game.bonus[HUMAN],
-    seatWind: seatWind(game, HUMAN), roundWind: game.roundWind }
-  const { base, plans } = planToMinimum(input, match.minFaan)
+  const { base, plans } = planToMinimum(progressInput(game, HUMAN), match.minFaan)
   if (base >= match.minFaan) return null
   const p = para(el('strong', '', `To reach ${match.minFaan} faan: `))
   if (!plans.length) { p.append('try keeping just one suit, plus winds and dragons (+3).'); return p }
@@ -1456,9 +1505,13 @@ function rulesSections(inGame: boolean): HTMLElement[] {
 // example tiles (groups separated by spaces, in parse() notation), then what the faan are worth.
 const PATTERNS: { name: string; faan: string; what: string; tiles?: string; bonus?: Tile[] }[] = [
   { name: 'Self-drawn', faan: '+1', what: 'You draw the winning tile from the wall yourself.' },
-  { name: 'Concealed hand', faan: '+1', what: 'You win without taking anyone’s tile for a set — no Pong, Chi or Kong.' },
+  { name: 'Concealed hand', faan: '+1', what: 'You win without taking anyone’s tile for a set — no Pong, Chi or Kong from a thrown-away tile. A kong of four from your own hand is fine.' },
   { name: 'No flowers', faan: '+1', what: 'You have no flower or season tiles.' },
   { name: 'Own flower', faan: '+1 each', what: 'A flower or season showing your seat number: East 1, South 2, West 3, North 4.', bonus: [makeTile('flower', 0), makeTile('season', 0)] },
+  { name: 'Flower set', faan: '+2', what: 'All four flowers, or all four seasons (instead of the own-flower faan for that set).', bonus: [0, 1, 2, 3].map(v => makeTile('flower', v)) },
+  { name: 'Last tile', faan: '+1', what: 'You win with the very last tile of the wall — or the tile thrown away after it.' },
+  { name: 'Win on a kong', faan: '+2', what: 'After a kong you draw a replacement tile — and it completes your hand.' },
+  { name: 'Robbing a kong', faan: '+2', what: 'Someone adds a fourth tile to their pong, and that tile completes your hand: take it and win. They pay.' },
   { name: 'All chi', faan: '+1', what: 'Every set is a run of three.', tiles: '123m 456p 789s 234s 55m' },
   { name: 'Dragon pong', faan: '+1 each', what: 'Three of the same dragon.', tiles: '555z' },
   { name: 'Wind pong', faan: '+1', what: 'Three of your seat’s wind, or of the round’s wind (+2 if it’s both).', tiles: '111z' },
@@ -1470,6 +1523,8 @@ const PATTERNS: { name: string; faan: string; what: string; tiles?: string; bonu
   { name: 'Small four winds', faan: '+8', what: 'Pongs of three winds and a pair of the fourth.', tiles: '111z 222z 333z 44z' },
   { name: 'Big four winds', faan: `${MAX_FAAN} (limit)`, what: 'Pongs of all four winds.', tiles: '111z 222z 333z 444z 66z' },
   { name: 'All honours', faan: `${MAX_FAAN} (limit)`, what: 'Only winds and dragons.', tiles: '222z 333z 555z 777z 11z' },
+  { name: 'Thirteen orphans', faan: `${MAX_FAAN} (limit)`, what: 'One of every 1, 9, wind and dragon — plus a second of any one. No sets needed!', tiles: '19m 19p 19s 1234z 5677z' },
+  { name: 'All eight flowers', faan: `${MAX_FAAN} (limit)`, what: 'Win holding every flower and season.' },
 ]
 
 function scoringSection(inGame: boolean): HTMLElement {
@@ -1610,6 +1665,7 @@ function resultCard(): HTMLElement {
     else card.append(el('div', 'result-title', 'Mahjong!'), el('div', 'result-sub', `${NAMES[w]} wins this hand`))
     card.appendChild(el('div', 'result-how', r.from === null
       ? (w === HUMAN ? 'You drew the winning tile yourself' : `${NAMES[w]} drew the winning tile`)
+      : wonByRobbing() ? `Robbed ${possessive(r.from)} kong — the tile they added completed the hand`
       : `Won with ${possessive(r.from)} thrown-away tile`))
 
     // the winning hand: exposed sets first, then the rest sorted; the winning tile is raised

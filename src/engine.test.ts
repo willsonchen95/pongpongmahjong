@@ -3,14 +3,15 @@ import {
   isWinningHand, parse, makeTile, shanten, botDiscard, canPong, deal, drawTile, isBonus, type GameState,
   canWinOn, chowOptions, claimDiscard, kongOptions, declareKong, botClaim, winningTiles,
   scoreHand, settle, payout, seatWind, handProgress, planToMinimum, type ScoreInput, type ProgressInput,
-  claimEffects, type ClaimKind, type Tile,
+  claimEffects, type ClaimKind, type Tile, isAddedKong, isConcealedKong,
 } from './engine'
 
 const win = (spec: string) => isWinningHand(parse(spec))
 
 const stateWithWall = (wall: GameState['wall']): GameState => ({
-  dealer: 0, roundWind: 0, wall, hands: [[], [], [], []], melds: [[], [], [], []], discards: [[], [], [], []],
-  bonus: [[], [], [], []], wallFront: 0, current: 0, drawn: null, over: false, winner: null,
+  dealer: 0, roundWind: 0, wall, hands: [[], [], [], []], melds: [[], [], [], []], concealedKongs: [[], [], [], []],
+  discards: [[], [], [], []], bonus: [[], [], [], []], wallFront: 0, current: 0, drawn: null, lastDrawFromBack: false,
+  over: false, winner: null,
 })
 
 
@@ -55,7 +56,8 @@ describe('shanten', () => {
   it('counts the steps still needed', () => {
     expect(shanten(parse('123m 456m 789m 13s 1p'))).toBe(1)         // needs both 2s and another 1p
     expect(shanten(parse('123m 456m 79m 13s 15p'))).toBe(2)
-    expect(shanten(parse('159m 159p 159s 1234z 5z'))).toBe(8)       // nothing connects (14 tiles)
+    expect(shanten(parse('258m 258p 258s 1234z 5z'))).toBe(8)       // nothing connects (14 tiles)
+    expect(shanten(parse('159m 159p 159s 1234z 5z'))).toBe(2)       // …but this is close to thirteen orphans
   })
 })
 
@@ -75,13 +77,11 @@ describe('botDiscard', () => {
     expect(bot('123456789m 117m 45p', 5).pick().category).toBe('pin')
   })
   it('plays safe against an opponent who looks close to winning', () => {
-    const { g, pick } = bot('159m 159p 159s 1234z 5z')
+    // a hopeless hand: every tile is as useful as the next, so safety decides
+    const { g, pick } = bot('258m 258p 258s 1234z 5z')
     g.melds[2] = [parse('222s'), parse('333p'), parse('777m')]
     g.discards[2] = parse('5m')
-    expect(pick()).toEqual(parse('5m')[0])
-    g.melds[2] = []                                  // nobody threatening: keep the middle tile
-    g.discards[2] = []
-    expect(pick().category).not.toBe('man')
+    expect(pick()).toEqual(parse('5m')[0])          // the threatening player threw a 5m themselves
   })
 })
 
@@ -251,6 +251,65 @@ describe('scoreHand', () => {
     const r = score('111z 222z 333z 444z 55z', { selfDrawn: true })
     expect(r.faan).toBe(10)
     expect(r.limit).toBe(true)
+  })
+  it('a kong declared from the hand keeps the hand concealed', () => {
+    const kong = parse('7777p')
+    expect(names(score('123m 456m 789s 55s', { melds: [kong], concealedKongs: 1 }))).toContain('Concealed hand')
+    expect(names(score('123m 456m 789s 55s', { melds: [kong] }))).not.toContain('Concealed hand')
+  })
+  it('thirteen orphans is a limit hand', () => {
+    const r = score('19m 19p 19s 1234z 5677z')
+    expect(names(r)).toContain('Thirteen orphans')
+    expect(r.faan).toBe(10)
+  })
+  it('flower sets, and all eight flowers', () => {
+    const flowers = [0, 1, 2, 3].map(v => makeTile('flower', v))
+    const seasons = [0, 1, 2, 3].map(v => makeTile('season', v))
+    const plain = '123m 456p 789s 444m 55s'
+    expect(score(plain, { bonus: flowers }).items).toContainEqual({ name: 'Flower set', faan: 2 })
+    // a full set of flowers replaces its own flower; the own season (South = 1) still counts
+    expect(names(score(plain, { bonus: [...flowers, makeTile('season', 1)] }))).toEqual(['Concealed hand', 'Flower set', 'Own flower'])
+    expect(score(plain, { bonus: [...flowers, ...seasons] }).faan).toBe(10)
+  })
+  it('special ways to win: on a kong, robbing a kong, the last tile', () => {
+    const plain = '123m 456p 789s 444m 55s'
+    expect(score(plain, { selfDrawn: true, kongReplacement: true }).items).toContainEqual({ name: 'Win on a kong', faan: 2 })
+    expect(score(plain, { robbedKong: true }).items).toContainEqual({ name: 'Robbing a kong', faan: 2 })
+    expect(score(plain, { lastTile: true }).items).toContainEqual({ name: 'Last tile', faan: 1 })
+  })
+})
+
+describe('thirteen orphans', () => {
+  it('is a winning hand only when complete and concealed', () => {
+    expect(win('19m 19p 19s 1234z 5677z')).toBe(true)
+    expect(win('19m 19p 19s 1234z 5678z'.replace('8', '6'))).toBe(true)
+    expect(win('19m 19p 19s 1234z 567z 2m')).toBe(false)              // a 2 isn't an orphan
+    expect(winningTiles(parse('19m 19p 19s 1234z 567z')).length).toBe(13)   // waiting on all thirteen
+  })
+  it('bots see how close a hand is to it', () => {
+    expect(shanten(parse('19m 19p 19s 1234z 567z'))).toBe(0)
+    expect(shanten(parse('19m 19p 19s 1234z 56z 5m'))).toBe(1)
+  })
+})
+
+describe('kong bookkeeping', () => {
+  it('remembers kongs declared from the hand, not added ones', () => {
+    const g = stateWithWall([])
+    g.hands[0] = parse('7777m 5z 1p')
+    g.melds[0] = [parse('555z')]
+    expect(isAddedKong(g, 0, parse('5z')[0])).toBe(true)
+    expect(isAddedKong(g, 0, parse('7m')[0])).toBe(false)
+    declareKong(g, 0, parse('5z')[0])
+    declareKong(g, 0, parse('7m')[0])
+    expect(g.concealedKongs[0]).toEqual(parse('7m'))
+    expect(g.melds[0].map(m => isConcealedKong(g, 0, m))).toEqual([false, true])
+  })
+  it('drawTile notes whether the draw was a kong replacement', () => {
+    const g = stateWithWall(parse('1m 2m 3m'))
+    drawTile(g, 0, true)
+    expect(g.lastDrawFromBack).toBe(true)
+    drawTile(g, 0)
+    expect(g.lastDrawFromBack).toBe(false)
   })
 })
 

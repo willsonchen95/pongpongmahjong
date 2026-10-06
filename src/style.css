@@ -188,6 +188,10 @@ button { font: inherit; cursor: pointer; border: 0; }
 .box.up .face.front, .box.up .face.right { background: linear-gradient(to var(--dir, bottom), var(--navy) 0 40%, #d8d4c8 40% 46%, var(--ivory) 46%); }
 .box.up .face.back, .box.up .face.left { background: linear-gradient(to var(--dir, bottom), var(--ivory) 0 54%, #d8d4c8 54% 60%, var(--navy) 60%); }
 .box.up .face.right, .box.up .face.left { --dir: right; }
+/* the end tiles of a kong declared from the hand lie face down */
+.box.up.facedown .face.top { background: linear-gradient(160deg, #3a4cb3, var(--navy)); }
+.box.up.facedown .face.front, .box.up.facedown .face.right { background: linear-gradient(to var(--dir, bottom), var(--ivory) 0 54%, #d8d4c8 54% 60%, var(--navy) 60%); }
+.box.up.facedown .face.back, .box.up.facedown .face.left { background: linear-gradient(to var(--dir, bottom), var(--navy) 0 40%, #d8d4c8 40% 46%, var(--ivory) 46%); }
 .box.up.bonus .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.08) #e0b53a; }
 .box.up.latest .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.1) #ffcf33; }
 .box.up.latest { box-shadow: 0 0 calc(var(--u) * 0.6) calc(var(--u) * 0.15) rgba(255, 207, 51, 0.7); }

@@ -59,11 +59,13 @@ export interface GameState {
   wall: Tile[]
   hands: Tile[][]
   melds: Tile[][][]
+  concealedKongs: Tile[][]       // per seat, one tile of each kong declared from the hand (it keeps the hand concealed)
   discards: Tile[][]
   bonus: Tile[][]                // flowers/seasons set aside face-up
   wallFront: number              // tiles taken from the back of the wall (array front) so far — for drawing the wall
   current: number
   drawn: Tile | null             // the tile just drawn (for highlighting), null after a claim
+  lastDrawFromBack: boolean      // the latest draw was a kong's replacement tile
   over: boolean
   winner: number | null
 }
@@ -89,8 +91,9 @@ export function deal(dealer = 0, roundWind = 0): GameState {
     }
   }
   return {
-    dealer, roundWind, wall, hands, melds: [[], [], [], []], discards: [[], [], [], []], bonus, wallFront,
-    current: dealer, drawn: null, over: false, winner: null,
+    dealer, roundWind, wall, hands, melds: [[], [], [], []], concealedKongs: [[], [], [], []],
+    discards: [[], [], [], []], bonus, wallFront,
+    current: dealer, drawn: null, lastDrawFromBack: false, over: false, winner: null,
   }
 }
 
@@ -104,6 +107,7 @@ function shiftWall(game: GameState): Tile | undefined {
 // Draw for a seat (from the back of the wall for a kong replacement). Bonus tiles go face-up and are
 // replaced from the back of the wall. Returns the tile added to the hand, or null if the wall ran out.
 export function drawTile(game: GameState, seat: number, fromBack = false): Tile | null {
+  game.lastDrawFromBack = fromBack                 // a flower's replacement doesn't count as a kong's
   let t = fromBack ? shiftWall(game) : game.wall.pop()
   while (t && isBonus(t)) {
     game.bonus[seat].push(t)
@@ -170,10 +174,19 @@ function canFormSets(counts: Counts): boolean {
   return false
 }
 
+// Thirteen orphans: one of every 1, 9, wind and dragon, plus a second of any of them.
+const ORPHAN_KEYS = ALL_KEYS.filter(k => { const { category, value } = parseKey(k); return !isSuit(category) || value === 1 || value === 9 })
+export function isThirteenOrphans(concealed: Tile[]): boolean {
+  if (concealed.length !== 14) return false
+  const counts = toCounts(concealed)
+  return counts.size === 13 && ORPHAN_KEYS.every(k => counts.has(k))
+}
+
 export function isWinningHand(concealed: Tile[], meldCount = 0): boolean {
   const need = 4 - meldCount                          // sets still needed from the concealed tiles
   if (concealed.length !== need * 3 + 2) return false // must be exactly N sets + one pair
   if (concealed.some(isBonus)) return false
+  if (meldCount === 0 && isThirteenOrphans(concealed)) return true
   const counts = toCounts(concealed)
   for (const k of ALL_KEYS) {
     if ((counts.get(k) ?? 0) >= 2) {
@@ -273,12 +286,25 @@ export function kongOptions(game: GameState, seat: number): Tile[] {
   return out
 }
 
+// An added kong (the fourth tile onto an exposed pong) — the one kind of kong another player can rob.
+export function isAddedKong(game: GameState, seat: number, tile: Tile): boolean {
+  return game.melds[seat].some(m => isPungOf(m, tile))
+}
+
 // Declare a kong from kongOptions. The caller then draws a replacement tile.
 export function declareKong(game: GameState, seat: number, tile: Tile): void {
   const hand = game.hands[seat]
   const pung = game.melds[seat].find(m => isPungOf(m, tile))
   if (pung) pung.push(take(hand, tile))
-  else game.melds[seat].push([take(hand, tile), take(hand, tile), take(hand, tile), take(hand, tile)])
+  else {
+    game.melds[seat].push([take(hand, tile), take(hand, tile), take(hand, tile), take(hand, tile)])
+    game.concealedKongs[seat].push(tile)
+  }
+}
+
+// Is this exposed set a kong declared from the hand (shown with its end tiles face down)?
+export function isConcealedKong(game: GameState, seat: number, meld: Tile[]): boolean {
+  return meld.length === 4 && game.concealedKongs[seat].some(t => sameTile(t, meld[0]))
 }
 
 // ---------- Scoring (Hong Kong faan, simplified) ----------
@@ -296,6 +322,10 @@ export interface ScoreInput {
   selfDrawn: boolean
   seatWind: number                   // 0 = East … 3 = North
   roundWind: number
+  concealedKongs?: number            // how many of `melds` are kongs declared from the hand
+  kongReplacement?: boolean          // self-drawn on the replacement tile after a kong
+  robbedKong?: boolean               // won on the tile another player added to their pong
+  lastTile?: boolean                 // won with the wall's last tile, or the discard after it
 }
 
 export const MAX_FAAN = 10           // the limit: no hand scores more
@@ -370,17 +400,37 @@ function setPatterns(d: Decomposition, input: ScoreInput): FaanItem[] {
   return items
 }
 
+// A hand counts as concealed if every set showing is a kong declared from the hand.
+const isConcealed = (input: { melds: Tile[][]; concealedKongs?: number }) => input.melds.length === (input.concealedKongs ?? 0)
+
+// Faan from flowers and seasons: none at all, your own seat's, or complete sets of four.
+function bonusItems(bonus: Tile[], seat: number): FaanItem[] {
+  if (bonus.length === 0) return [{ name: 'No flowers', faan: 1 }]
+  if (bonus.length === 8) return [{ name: 'All eight flowers', faan: MAX_FAAN }]
+  const items: FaanItem[] = []
+  const full = (['flower', 'season'] as Category[]).filter(c => bonus.filter(t => t.category === c).length === 4)
+  if (full.length) items.push({ name: 'Flower set', faan: 2 })                // a full set replaces its own-flower faan
+  const own = bonus.filter(t => t.value === seat && !full.includes(t.category)).length
+  if (own > 0) items.push({ name: own > 1 ? `Own flowers ×${own}` : 'Own flower', faan: own })
+  return items
+}
+
 // Score a winning hand: the faan patterns it earns (best split) and the total, capped at the limit.
 export function scoreHand(input: ScoreInput): { faan: number; items: FaanItem[]; limit: boolean } {
   const common: FaanItem[] = []
   if (input.selfDrawn) common.push({ name: 'Self-drawn', faan: 1 })
-  if (input.melds.length === 0) common.push({ name: 'Concealed hand', faan: 1 })
-  const own = input.bonus.filter(t => t.value === input.seatWind).length
-  if (input.bonus.length === 0) common.push({ name: 'No flowers', faan: 1 })
-  else if (own > 0) common.push({ name: own > 1 ? `Own flowers ×${own}` : 'Own flower', faan: own })
+  if (isConcealed(input)) common.push({ name: 'Concealed hand', faan: 1 })
+  common.push(...bonusItems(input.bonus, input.seatWind))
+  if (input.kongReplacement) common.push({ name: 'Win on a kong', faan: 2 })
+  if (input.robbedKong) common.push({ name: 'Robbing a kong', faan: 2 })
+  if (input.lastTile) common.push({ name: 'Last tile', faan: 1 })
 
   let best: FaanItem[] = []
   let bestTotal = -1
+  if (input.melds.length === 0 && isThirteenOrphans(input.concealed)) {
+    best = [{ name: 'Thirteen orphans', faan: MAX_FAAN }]
+    bestTotal = MAX_FAAN
+  }
   for (const d of decompose(input.concealed)) {
     const items = setPatterns(d, input)
     const total = items.reduce((n, i) => n + i.faan, 0)
@@ -413,7 +463,10 @@ export function settle(winner: number, discarder: number | null, faan: number): 
 // For a hand still being built: the faan already secured by what you hold, and big patterns you
 // are close to. "Secured" assumes the hand is later completed without spoiling them.
 
-export interface ProgressInput { concealed: Tile[]; melds: Tile[][]; bonus: Tile[]; seatWind: number; roundWind: number }
+export interface ProgressInput {
+  concealed: Tile[]; melds: Tile[][]; bonus: Tile[]; seatWind: number; roundWind: number
+  concealedKongs?: number            // how many of `melds` are kongs declared from the hand
+}
 // A pattern within reach: `off` tiles stand in the way. `tiles` are the ones to collect (action
 // 'need') or to get rid of (action 'discard'); `how` says it in plain words.
 export interface CloseTo { name: string; faan: number; off: number; how: string; action: 'need' | 'discard'; tiles: Tile[] }
@@ -433,10 +486,8 @@ export function handProgress(input: ProgressInput): { have: HaveItem[]; close: C
     meldSets.some(s => s.type === 'pong' && s.tile.category === cat && s.tile.value === v) || (counts.get(`${cat}-${v}`) ?? 0) >= 3
   const hasPair = (cat: Category, v: number) => (counts.get(`${cat}-${v}`) ?? 0) === 2
 
-  if (input.melds.length === 0) have.push({ name: 'Concealed hand', faan: 1 })
-  const own = input.bonus.filter(t => t.value === input.seatWind).length
-  if (input.bonus.length === 0) have.push({ name: 'No flowers', faan: 1 })
-  else if (own > 0) have.push({ name: own > 1 ? `Own flowers ×${own}` : 'Own flower', faan: own })
+  if (isConcealed(input)) have.push({ name: 'Concealed hand', faan: 1 })
+  have.push(...bonusItems(input.bonus, input.seatWind))
 
   const dragonPongs = [0, 1, 2].filter(v => hasPong('dragon', v))
   const dragonPairs = [0, 1, 2].filter(v => hasPair('dragon', v))
@@ -653,8 +704,13 @@ function kindCounts(tiles: Tile[]): number[] {
 export function shanten(concealed: Tile[], meldCount = 0): number {
   return shantenOf(kindCounts(concealed), meldCount)
 }
+const ORPHAN_KINDS = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]
 function shantenOf(c: number[], meldCount: number): number {
   let best = 8 - 2 * meldCount
+  if (meldCount === 0) {                              // thirteen orphans: 13 different, plus a pair of one
+    const held = ORPHAN_KINDS.filter(k => c[k] > 0)
+    best = Math.min(best, 13 - held.length - (held.some(k => c[k] > 1) ? 1 : 0))
+  }
   const scan = (i: number, sets: number, partials: number, eyes: number) => {
     while (i < KINDS && c[i] === 0) i++
     if (i === KINDS) {
@@ -689,9 +745,10 @@ function shantenOf(c: number[], meldCount: number): number {
   return best
 }
 
-// A tile can only help a hand if it matches, or sits within two of, a tile already held.
+// A tile can only help a hand if it matches, or sits within two of, a tile already held
+// (or is a 1, 9 or honour, which can help thirteen orphans).
 function near(c: number[], k: number): boolean {
-  if (c[k]) return true
+  if (c[k] || ORPHAN_KINDS.includes(k)) return true
   if (k >= 27) return false
   const pos = k % 9
   return [-2, -1, 1, 2].some(d => pos + d >= 0 && pos + d <= 8 && c[k + d] > 0)
@@ -704,8 +761,11 @@ function unseenCounts(game: GameState, seat: number): number[] {
   return c.map(n => Math.max(0, n))
 }
 
-const progressInput = (game: GameState, seat: number, concealed: Tile[], melds: Tile[][]): ProgressInput =>
-  ({ concealed, melds, bonus: game.bonus[seat], seatWind: seatWind(game, seat), roundWind: game.roundWind })
+// A seat's hand as the progress/scoring helpers want it (by default, as it stands).
+export const progressInput = (game: GameState, seat: number, concealed = game.hands[seat], melds = game.melds[seat]): ProgressInput => ({
+  concealed, melds, bonus: game.bonus[seat], seatWind: seatWind(game, seat), roundWind: game.roundWind,
+  concealedKongs: game.concealedKongs[seat].length,
+})
 
 // Roughly how many tiles must change before the hand could reach the minimum (0 = it already does;
 // relying on a self-drawn win counts as one more).
@@ -818,8 +878,11 @@ export function botClaim(game: GameState, seat: number, from: number, tile: Tile
 // Whether a bot declares a kong it could make on its own turn: yes, unless exposing it leaves the
 // hand further from the minimum faan.
 export function botWantsKong(game: GameState, seat: number, tile: Tile, minFaan = 1): boolean {
-  const g: GameState = { ...game, hands: game.hands.map(h => [...h]), melds: game.melds.map(ms => ms.map(m => [...m])) }
+  const g: GameState = {
+    ...game, hands: game.hands.map(h => [...h]), melds: game.melds.map(ms => ms.map(m => [...m])),
+    concealedKongs: game.concealedKongs.map(k => [...k]),
+  }
   declareKong(g, seat, tile)
-  const gap = (s: GameState) => faanGap(progressInput(s, seat, s.hands[seat], s.melds[seat]), minFaan)
+  const gap = (s: GameState) => faanGap(progressInput(s, seat), minFaan)
   return gap(g) <= gap(game)
 }
