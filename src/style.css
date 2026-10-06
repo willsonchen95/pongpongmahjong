@@ -1,0 +1,1049 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+  --navy: #26338a;
+  --navy-dark: #161d55;
+  --ivory: #f2f0e8;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  /* red lacquer with a faint repeating coin motif */
+  background:
+    radial-gradient(circle, transparent 0 14px, rgba(255, 190, 120, 0.07) 15px 17px, transparent 18px) 0 0 / 44px 44px,
+    radial-gradient(ellipse at 50% 30%, #a3221f 0%, #6e1210 75%);
+  color: #f3eee6;
+  overflow-x: hidden;
+}
+
+#app { width: 100%; box-sizing: border-box; padding: 12px 16px 0; display: flex; flex-direction: column; align-items: center; }
+
+/* The game column and, beside it, the help panel. The column is a size container so the table
+   and your rack scale to whatever width is left next to the panel. */
+.layout { width: 100%; display: flex; gap: 28px; align-items: flex-start; }
+.main-col {
+  flex: 1 1 0;
+  min-width: 0;
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+button { font: inherit; cursor: pointer; border: 0; }
+
+/* ---------- Tiles ---------- */
+/* The face artwork is an SVG (see tiles.ts); the element is the ivory body around it. */
+.tile {
+  display: block;
+  background: linear-gradient(160deg, #ffffff, #f1efe6);
+  user-select: none;
+  flex: none;
+  overflow: hidden;
+}
+.tile svg { display: block; width: 100%; height: 100%; }
+.tile.back { background: linear-gradient(#3445a8, var(--navy-dark)); }
+
+.tile.mini {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.8em;
+  margin: 0 0.15em;
+  vertical-align: middle;
+  border-radius: 0.2em;
+  box-shadow: 0 0.14em 0 var(--navy);
+}
+
+/* ---------- Table ---------- */
+/* Everything on the table is sized in --u (1/30 of the table), so it scales as one piece.
+   The table is tilted back under a fairly close camera; the negative margins reclaim the
+   space the tilt frees up. The near corners may run slightly off a narrow screen. */
+.scene {
+  /* 74cqw: the tilt makes the near edge ~1.25× wider than the table, and it must still fit the column */
+  --T: min(74cqw, calc((100vh - 300px) / 0.92), 980px);
+  --u: calc(var(--T) / 30);
+  perspective: calc(var(--T) * 1.6);
+  margin-top: calc(var(--T) * -0.12);
+  margin-bottom: calc(var(--T) * 0.01);
+}
+.table {
+  position: relative;
+  width: var(--T);
+  height: var(--T);
+  border-radius: calc(var(--u) * 0.5);
+  background:
+    /* a faint medallion printed on the cloth */
+    radial-gradient(circle at 50% 50%,
+      transparent 0 calc(var(--u) * 5.6), rgba(255, 255, 255, 0.05) calc(var(--u) * 5.6) calc(var(--u) * 5.8),
+      transparent calc(var(--u) * 5.8) calc(var(--u) * 7.8), rgba(255, 255, 255, 0.04) calc(var(--u) * 7.8) calc(var(--u) * 8.4),
+      transparent calc(var(--u) * 8.4) calc(var(--u) * 10.6), rgba(255, 255, 255, 0.05) calc(var(--u) * 10.6) calc(var(--u) * 10.8),
+      transparent calc(var(--u) * 10.8)),
+    radial-gradient(circle at 50% 55%, #2a8a43 0%, #1f7135 65%, #195d2c 100%);
+  box-shadow:
+    inset 0 0 calc(var(--u) * 1.2) rgba(0, 0, 0, 0.35),
+    0 0 0 calc(var(--u) * 0.25) #3f2410,                 /* the wooden frame */
+    0 0 0 calc(var(--u) * 0.85) #6b3d1a,
+    0 0 0 calc(var(--u) * 1.05) #3a1f0b,
+    0 calc(var(--u) * 2) calc(var(--u) * 2.5) rgba(0, 0, 0, 0.6);
+  transform: rotateX(40deg);
+  transform-style: preserve-3d;
+}
+/* The front edge of the frame, folded down so the table has some depth. Inset to stay inside the
+   frame's rounded corners, which would otherwise poke out past it. */
+.table::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--u) * 0.4);
+  right: calc(var(--u) * 0.4);
+  top: calc(100% + var(--u) * 1.05);
+  height: calc(var(--u) * 1.1);
+  border-radius: 0 0 calc(var(--u) * 0.8) calc(var(--u) * 0.8);
+  background: linear-gradient(#5a3315, #2c1707);
+  transform-origin: top;
+  transform: rotateX(90deg);
+}
+
+/* One side of the table, built as the bottom edge and rotated into place (see sideLayer). */
+.layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column-reverse;                        /* first child sits at the table edge */
+  align-items: center;
+  gap: calc(var(--u) * 1.5);                             /* keeps the wall well clear of the rack */
+  padding-bottom: calc(var(--u) * 0.9);                  /* room for the far side's standing tiles */
+  pointer-events: none;
+  transform-style: preserve-3d;
+}
+
+.rack-row {
+  height: calc(var(--u) * 1.6);
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--u) * 0.4);
+  border-radius: calc(var(--u) * 0.2);
+  transform-style: preserve-3d;
+}
+.rack-row.winner { outline: calc(var(--u) * 0.1) solid #ffd75e; outline-offset: calc(var(--u) * 0.15); }
+.group { display: flex; gap: calc(var(--u) * 0.04); transform-style: preserve-3d; }
+
+/* The player's name and score, with their seat wind underneath, printed on the cloth inside their wall. */
+.wind-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--u) * 7);                            /* far enough in that the near wall doesn't hide it */
+  text-align: center;
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+  color: #d98a2b;
+  opacity: 0.85;
+}
+.wl-name { font-size: calc(var(--u) * 0.95); font-weight: 800; color: #f1d7a8; }
+.wl-wind { font-size: calc(var(--u) * 0.7); font-weight: 700; }
+.wind-label.active { color: #ffe066; opacity: 1; text-shadow: 0 0 calc(var(--u) * 0.5) rgba(255, 224, 102, 0.8); }
+.wind-label.active .wl-name { color: #fff3c4; }
+.wind-label.winner { color: #ffd75e; opacity: 1; text-shadow: 0 0 calc(var(--u) * 0.6) #ffd75e; }
+
+/* ---------- 3D tiles ---------- */
+/* A box is the tile's footprint on the felt (w × d); its five faces fold up from it to height h.
+   Sizes come from --bw/--bd/--bh (in table units) set in main.ts. Each side face is painted with
+   the tile's layers — ivory face layer and navy back — in the right order for how the tile lies.
+   Side gradients run edge→edge as laid out flat: front/right start at the felt, back/left at the top. */
+.box {
+  --H: calc(var(--u) * var(--bh));
+  position: relative;
+  flex: none;
+  width: calc(var(--u) * var(--bw));
+  height: calc(var(--u) * var(--bd));
+  transform-style: preserve-3d;
+  border-radius: calc(var(--u) * 0.1);
+  box-shadow: 0 0 calc(var(--u) * 0.4) calc(var(--u) * 0.05) rgba(0, 0, 0, 0.45);   /* contact shadow on the felt */
+}
+.face { position: absolute; }
+.face.top {
+  inset: 0;
+  transform: translateZ(var(--H));
+  border-radius: calc(var(--u) * 0.12);
+  overflow: hidden;
+}
+.face.top svg { display: block; width: 100%; height: 100%; }
+.face.front { left: 0; top: 100%; width: 100%; height: var(--H); transform-origin: top; transform: rotateX(90deg); }
+.face.back { left: 0; bottom: 100%; width: 100%; height: var(--H); transform-origin: bottom; transform: rotateX(-90deg); }
+.face.left { top: 0; right: 100%; height: 100%; width: var(--H); transform-origin: right; transform: rotateY(90deg); }
+.face.right { top: 0; left: 100%; height: 100%; width: var(--H); transform-origin: left; transform: rotateY(-90deg); }
+/* simple fixed lighting: some sides a touch darker than others */
+.face.front { box-shadow: inset 0 0 0 100vmax rgba(0, 0, 0, 0.04); }
+.face.left { box-shadow: inset 0 0 0 100vmax rgba(0, 0, 0, 0.12); }
+.face.right { box-shadow: inset 0 0 0 100vmax rgba(0, 0, 0, 0.08); }
+.face.back { box-shadow: inset 0 0 0 100vmax rgba(0, 0, 0, 0.18); }
+
+/* Lying face-up: ivory face on top, navy back underneath. */
+.box.up .face.top { background: linear-gradient(160deg, #ffffff, #f1efe6); }
+.box.up .face.front, .box.up .face.right { background: linear-gradient(to var(--dir, bottom), var(--navy) 0 40%, #d8d4c8 40% 46%, var(--ivory) 46%); }
+.box.up .face.back, .box.up .face.left { background: linear-gradient(to var(--dir, bottom), var(--ivory) 0 54%, #d8d4c8 54% 60%, var(--navy) 60%); }
+.box.up .face.right, .box.up .face.left { --dir: right; }
+.box.up.bonus .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.08) #e0b53a; }
+.box.up.latest .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.1) #ffcf33; }
+.box.up.latest { box-shadow: 0 0 calc(var(--u) * 0.6) calc(var(--u) * 0.15) rgba(255, 207, 51, 0.7); }
+
+/* Wall stacks, face-down: navy back on top; sides show back/face/back/face layers. */
+.box.down2 .face.top, .box.down1 .face.top { background: linear-gradient(160deg, #3a4cb3, var(--navy)); }
+.box.down2 .face.front, .box.down2 .face.right {
+  background: linear-gradient(to var(--dir, bottom), var(--ivory) 0 22%, var(--navy-dark) 22% 50%, var(--ivory) 50% 72%, var(--navy-dark) 72%);
+}
+.box.down2 .face.back, .box.down2 .face.left {
+  background: linear-gradient(to var(--dir, bottom), var(--navy-dark) 0 28%, var(--ivory) 28% 50%, var(--navy-dark) 50% 78%, var(--ivory) 78%);
+}
+.box.down1 .face.front, .box.down1 .face.right { background: linear-gradient(to var(--dir, bottom), var(--ivory) 0 44%, var(--navy-dark) 44%); }
+.box.down1 .face.back, .box.down1 .face.left { background: linear-gradient(to var(--dir, bottom), var(--navy-dark) 0 56%, var(--ivory) 56%); }
+.box.down2 .face.right, .box.down2 .face.left, .box.down1 .face.right, .box.down1 .face.left { --dir: right; }
+.stack-gap { flex: none; width: var(--u); height: calc(var(--u) * 1.34); }
+
+/* A row of concealed tiles standing on edge: navy backs face the table centre (the box's back),
+   the ivory faces look at their owner (the front). Thin lines mark the separate tiles. */
+.box.stand { --seam: repeating-linear-gradient(to right, transparent 0 calc(var(--u) * 1.15 - 1.5px), rgba(0, 0, 0, 0.45) calc(var(--u) * 1.15 - 1.5px) calc(var(--u) * 1.15)); }
+.box.stand .face.back { background: var(--seam), linear-gradient(#3a4cb3, var(--navy-dark)); }
+.box.stand .face.front { background: var(--seam), var(--ivory); }
+.box.stand .face.top { background: var(--seam), linear-gradient(to bottom, var(--navy) 0 50%, var(--ivory) 50%); border-radius: 0; }
+.box.stand .face.left, .box.stand .face.right { background: linear-gradient(to bottom, var(--navy) 0 50%, var(--ivory) 50%); }
+
+/* The wall: 18 stacks per side. */
+.wall { display: flex; gap: calc(var(--u) * 0.04); padding-bottom: calc(var(--u) * 0.4); transform-style: preserve-3d; }
+
+/* The discard pool in the middle, inside the name labels: rows of 11, all facing you. */
+.pool {
+  transform-style: preserve-3d;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--u) * 12.22);
+  height: calc(var(--u) * 12.22);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;                                 /* grows outward from the middle */
+  gap: calc(var(--u) * 0.1);
+}
+
+/* ---------- Around the table ---------- */
+/* Sized for easy reading: large text, large targets. */
+/* One toolbar centred over the table: menu | status (truly centred) | round, rules, sound.
+   A soft backing bar ties the pieces together; it never grows wider than the table area. */
+.topbar {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(100%, 1180px);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.tb-left, .tb-right { display: flex; align-items: center; gap: 10px; }
+.tb-left { justify-self: start; }
+.tb-right { justify-self: end; }
+/* narrow screens: status on its own row on top, controls split below */
+@media (max-width: 900px) {
+  .topbar { grid-template-columns: 1fr 1fr; border-radius: 28px; }
+  .topbar .status { grid-column: 1 / -1; grid-row: 1; }
+}
+/* Top-bar chips: the same pill shape as the status, with a round icon badge on the left. */
+.chip {
+  height: 52px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 0 6px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 215, 94, 0.3);
+  background: linear-gradient(rgba(70, 22, 16, 0.92), rgba(38, 10, 8, 0.92));
+  color: #f6efe2;
+  font-size: 1.08rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: border-color 0.15s, background 0.15s, transform 0.08s;
+}
+button.chip:hover { border-color: rgba(255, 215, 94, 0.75); background: linear-gradient(rgba(92, 30, 22, 0.95), rgba(50, 14, 10, 0.95)); }
+button.chip:active { transform: translateY(2px); }
+button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
+.chip-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+.chip-icon svg { width: 22px; height: 22px; }
+.chip.icon-only { width: 52px; padding: 0; justify-content: center; }
+.chip.icon-only.off { opacity: 0.6; }                     /* music or sound switched off */
+/* the rules chip while the panel is open: gold outline and badge, but a dark body —
+   a fully gold pill is kept for "it's your move" so the two never compete */
+.chip.on { border-color: #e0b53a; }
+.chip.on .chip-icon { background: #e0b53a; color: #1a1a1a; }
+.chip.info { cursor: default; font-variant-numeric: tabular-nums; }
+/* round chip: the round's wind in the badge, "East round · Hand 3" over "87 tiles left" */
+.chip.round .chip-icon { background: var(--navy); color: #fff; font-family: 'Noto Serif TC', 'KaiTi', serif; font-size: 1.25rem; font-weight: 900; }
+.chip-stack { display: flex; flex-direction: column; line-height: 1.15; }
+.chip-stack .chip-small strong { font-size: 1.05rem; }
+.chip.info strong { font-size: 1.3rem; }
+.chip-small { font-weight: 500; opacity: 0.85; }
+.tile-icon {                                             /* a little face-down tile */
+  width: 15px;
+  height: 20px;
+  border-radius: 3px;
+  background: linear-gradient(#4558c4, var(--navy-dark));
+  box-shadow: 0 3px 0 var(--ivory);
+  margin-bottom: 3px;
+}
+
+/* Status pill: whose move (their wind), what's happening, and a hint. Gold and gently pulsing when it's you. */
+.status { display: flex; justify-content: center; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  min-height: 58px;
+  box-sizing: border-box;
+  padding: 5px 26px 5px 6px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.4);
+  color: #f3eee6;
+  transition: background 0.3s, color 0.3s;
+}
+.status-badge {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  color: #fff;
+  font-family: 'Noto Serif TC', 'KaiTi', serif;
+  font-size: 1.45rem;
+  font-weight: 900;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
+}
+.status-title { display: flex; align-items: center; gap: 2px; font-size: 1.3rem; font-weight: 800; line-height: 1.15; }
+.status-hint { font-size: 0.98rem; opacity: 0.8; }
+.status.mine .status-pill, .status.win .status-pill {
+  background: linear-gradient(#ffe68f, #e0b53a);
+  border-color: #fff3c4;
+  color: #1a1a1a;
+  box-shadow: 0 0 20px rgba(255, 215, 94, 0.6);
+}
+.status.mine .status-pill { animation: status-pulse 1.6s ease-in-out infinite; }
+.status.mine .status-badge, .status.win .status-badge { background: #b8231f; }
+@keyframes status-pulse { 50% { box-shadow: 0 0 6px rgba(255, 215, 94, 0.25); } }
+@media (prefers-reduced-motion: reduce) { .status.mine .status-pill { animation: none; } }
+
+.action-bar { position: relative; z-index: 1; min-height: 60px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
+.act { padding: 10px 28px; border-radius: 12px; background: #4a4f57; color: #fff; font-size: 1.4rem; font-weight: 700; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45); }
+.act.primary { background: #2e7d5b; box-shadow: 0 4px 0 #1d5a40; }
+.act:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45); }
+.act .tile.mini { font-size: 1.1rem; }
+.bar-hint { font-size: 1.2rem; opacity: 0.9; }
+
+/* "Your hand" meter: faan secured so far, patterns in reach, and — when ready — the winning tiles */
+.hand-meter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+.hm-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+.hm-total { color: inherit; cursor: pointer; transition: border-color 0.15s; }
+.hm-total:hover, .hm-total-wrap.open .hm-total { border-color: #ffd75e; }
+.hm-total:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
+.hm-total.ok { background: rgba(46, 125, 91, 0.45); border-color: #6fd39d; }
+.hm-more { font-size: 1.05rem; opacity: 0.75; }
+
+/* The details card above the score pill: opens on hover, keyboard focus, or a tap */
+.hm-total-wrap { position: relative; }
+.hm-card {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  bottom: calc(100% + 12px);
+  width: min(460px, 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 16px 18px 14px;
+  border-radius: 16px;
+  border: 3px solid #e0b53a;
+  background: #fffaf0;
+  color: #1a1a1a;
+  text-align: left;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+.hm-total-wrap:hover .hm-card, .hm-total-wrap:focus-within .hm-card, .hm-total-wrap.open .hm-card { display: block; }
+/* a small bridge so the mouse can travel from the pill up into the card without it closing */
+.hm-card::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; }
+.hm-card-title { font-size: 1.3rem; font-weight: 900; }
+.hm-card h4 { margin: 12px 0 6px; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8a6a1e; }
+.hm-empty { margin: 4px 0; font-size: 1rem; opacity: 0.75; }
+.hm-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: rgba(46, 125, 91, 0.1);
+  border-left: 4px solid #2e7d5b;
+}
+.hm-row.next { background: rgba(224, 181, 58, 0.12); border-left-color: #e0b53a; }
+.hm-row-name { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 1.08rem; }
+.hm-row-name .tile.mini { font-size: 1rem; margin: 0; }
+.hm-row-faan { font-weight: 900; font-size: 1.1rem; color: #1d7a3a; }
+.hm-row.next .hm-row-faan { color: #a8731a; }
+.hm-row-why { grid-column: 1 / -1; font-size: 0.98rem; opacity: 0.85; }
+.hm-row-tiles { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 2px; }
+.hm-row-tiles .tile.mini { font-size: 1.15rem; margin: 0; }
+.hm-tiles-label { margin-right: 4px; font-size: 0.95rem; font-weight: 700; }
+.hm-card-foot { margin-top: 8px; font-size: 0.92rem; opacity: 0.7; }
+
+/* "How to reach 3 faan": numbered plans, each listing what to complete */
+.hm-plans { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(224, 181, 58, 0.16); border: 2px solid #e0b53a; }
+.hm-plans h4 { margin-top: 0 !important; color: #8a5a00 !important; }
+.hm-plans-intro { margin: 0 0 8px; font-size: 1rem; }
+.hm-plan { margin-top: 8px; padding: 8px; border-radius: 12px; background: #fffdf6; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); }
+.hm-plan-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 2px 6px; }
+.hm-plan-num { font-weight: 900; font-size: 1.1rem; }
+.hm-plan-effort { flex: 1; margin-left: 10px; font-size: 0.92rem; opacity: 0.65; }
+.hm-plan-total { font-weight: 900; font-size: 1.1rem; color: #1d7a3a; }
+.hm-row.plan-step { margin-bottom: 4px; background: rgba(224, 181, 58, 0.12); border-left-color: #e0b53a; }
+.hm-row.plan-step.luck { background: rgba(47, 128, 208, 0.08); border-left-color: #2f80d0; }
+
+/* the gold "Way to 3 faan" chip in the bar when your hand is short of the minimum */
+.hm-way {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 2px solid #fff3c4;
+  background: linear-gradient(#ffe68f, #e0b53a);
+  color: #1a1a1a;
+  font-size: 1.02rem;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(255, 215, 94, 0.45);
+}
+.hm-way:hover { filter: brightness(1.06); }
+.hm-way-label { font-weight: 900; }
+.hm-label { font-size: 0.95rem; opacity: 0.85; }
+.hm-faan { font-size: 1.45rem; font-weight: 900; }
+.hm-need { font-size: 0.95rem; font-weight: 700; color: #ffd75e; }
+.hm-total.ok .hm-need { color: #a8f0c6; }
+.hm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.hm-chip .tile.mini { font-size: 0.95rem; margin: 0; }
+.hm-chip b { color: #ffd75e; }
+.hm-chip small { font-weight: 500; opacity: 0.8; }
+.hm-chip.have { background: rgba(46, 125, 91, 0.55); border: 2px solid rgba(111, 211, 157, 0.6); }
+.hm-chip.close { border: 2px dashed rgba(255, 215, 94, 0.55); color: #f6e7c4; }
+.hm-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: linear-gradient(#ffe68f, #e0b53a);
+  color: #1a1a1a;
+}
+.hm-ready-label { font-weight: 900; font-size: 1.1rem; }
+.hm-win { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; }
+.hm-win .tile.mini { font-size: 1.05rem; margin: 0; }
+.hm-win.short { opacity: 0.5; text-decoration: line-through; }
+
+/* The claim pop-up: floats over the lower part of the table, just above your hand. */
+.claim-card {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  bottom: 190px;
+  transform: translateX(-50%);
+  max-width: 94cqw;
+  box-sizing: border-box;
+  padding: 18px 24px 22px;
+  border-radius: 18px;
+  border: 4px solid #e0b53a;
+  background: #fffaf0;
+  color: #1a1a1a;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.65);
+  animation: pop-in 0.18s ease-out;
+}
+@keyframes pop-in { from { opacity: 0; transform: translateX(-50%) scale(0.9); } }
+.claim-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 16px; font-size: 1.6rem; font-weight: 700; }
+.tile.claim-tile { width: 66px; height: 88px; border-radius: 9px; box-shadow: 0 5px 0 var(--navy), 0 8px 16px rgba(0, 0, 0, 0.3); }
+.claim-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+.claim-btn {
+  min-width: 170px;
+  padding: 14px 22px 12px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #2e7d5b;
+  color: #fff;
+  box-shadow: 0 5px 0 #1d5a40;
+}
+.claim-btn:hover { filter: brightness(1.1); }
+.claim-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #1d5a40; }
+.claim-label { font-size: 1.9rem; font-weight: 800; display: flex; align-items: center; gap: 4px; }
+.claim-label .tile.mini { font-size: 1.4rem; }
+.claim-hint { font-size: 1.05rem; opacity: 0.92; }
+.claim-effects { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 0.95rem; font-weight: 700; }
+.claim-effects span { padding: 2px 8px; border-radius: 6px; }
+.claim-effects .ce-bad { background: #fde2df; color: #9b1c12; }
+.claim-effects .ce-good { background: #ddf5e6; color: #1d5a40; }
+.claim-btn.win { background: #e0b53a; color: #1a1a1a; box-shadow: 0 5px 0 #a8831f; }
+.claim-btn.pass { background: #5b6068; box-shadow: 0 5px 0 #3b3f45; }
+
+/* Your hand along the bottom edge: standing tiles seen slightly from above, navy backs showing on top. */
+.player-rack {
+  --w: min(72px, calc((100cqw - 70px) / 15));
+  --band: calc(var(--w) * 0.28);
+  min-height: calc(var(--w) * 1.34 + var(--band));       /* keeps its size while empty, before the deal */
+  min-width: 40%;
+  justify-content: center;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 12px 18px 14px;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(#1d6a33, #134a23);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.4);
+}
+.player-rack.winner { outline: 3px solid #ffd75e; outline-offset: -3px; }
+.player-rack .tile {
+  width: var(--w);
+  height: calc(var(--w) * 1.34);
+  padding-top: var(--band);
+  border-radius: 7px;
+  background: linear-gradient(to bottom,
+    #3445a8 0, var(--navy-dark) calc(var(--band) - 3px),
+    #d9d6cc calc(var(--band) - 3px), #ffffff var(--band), #f1efe6);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+}
+.player-rack .tile.drawn { margin-left: calc(var(--w) * 0.4); }
+.tile.clickable { cursor: pointer; transition: transform 0.1s; }
+.tile.clickable:hover { transform: translateY(-8px); }
+/* Pop-up banners over the table ("Your turn", "South: Pong!") — they pop in, then float away by themselves. */
+.banner {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(var(--anchor, -50%), -50%);       /* centred on its spot, or hugging a side edge */
+  padding: 12px 34px;
+  border-radius: 999px;
+  border: 3px solid #ffd75e;
+  background: rgba(18, 70, 36, 0.94);
+  color: #fff6d6;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 215, 94, 0.45);
+  pointer-events: none;
+  animation: turn-banner 1.9s ease-out forwards;
+}
+.banner.call {
+  padding: 10px 26px;
+  background: rgba(170, 32, 28, 0.95);
+  border-color: #ffe9a8;
+  font-size: 1.8rem;
+  animation-duration: 2.2s;
+}
+.banner[data-spot="1"] { --anchor: -100%; }               /* South: right edge */
+.banner[data-spot="3"] { --anchor: 0%; }                  /* North: left edge */
+.banner.flower {
+  padding: 10px 26px;
+  background: rgba(156, 45, 112, 0.95);
+  border-color: #ffd1ea;
+  font-size: 1.6rem;
+  animation-duration: 2.2s;
+}
+.banner .tile.mini { font-size: 1.25rem; margin-left: 2px; }
+.banner .tile.mini:first-of-type { margin-left: 12px; }
+/* animates scale/translate separately from the positioning transform above */
+@keyframes turn-banner {
+  0% { opacity: 0; scale: 0.7; translate: 0 14px; }
+  14% { opacity: 1; scale: 1.06; translate: 0 0; }
+  24% { scale: 1; }
+  75% { opacity: 1; scale: 1; translate: 0 0; }
+  100% { opacity: 0; scale: 0.96; translate: 0 -30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner { animation: turn-banner-fade 1.9s linear forwards; }
+  @keyframes turn-banner-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* ---------- The opening: dice and dealing ---------- */
+/* Two dice in the middle of the felt — 3D cubes (see box() in main.ts), the result on their tops. */
+.table-dice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.dice-row { display: flex; gap: calc(var(--u) * 0.9); transform-style: preserve-3d; }
+.box.die .face.top {
+  box-sizing: border-box;
+  padding: calc(var(--u) * 0.22);
+  border-radius: calc(var(--u) * 0.25);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  place-items: center;
+  background: linear-gradient(145deg, #ffffff, #ece8de);
+}
+.box.die .face.front, .box.die .face.back, .box.die .face.left, .box.die .face.right {
+  background: #ece8de;
+  border-radius: calc(var(--u) * 0.2);
+}
+.box.die { border-radius: calc(var(--u) * 0.25); }
+.pip { width: calc(var(--u) * 0.26); height: calc(var(--u) * 0.26); border-radius: 50%; background: #1a1a1a; }
+.pip.red { background: #d0282b; }
+.pip.big { width: calc(var(--u) * 0.5); height: calc(var(--u) * 0.5); }
+/* while rolling: bounce up off the felt and spin; each die slightly out of step */
+.table-dice.rolling .box.die { animation: die-tumble 0.3s ease-in-out infinite alternate; }
+.table-dice.rolling .box.die:nth-child(2) { animation-delay: -0.15s; }
+@keyframes die-tumble {
+  from { transform: translateZ(calc(var(--u) * 1.6)) rotateZ(-30deg) rotateX(12deg); }
+  to { transform: translateZ(0) rotateZ(25deg); }
+}
+.table-dice.landing .box.die { animation: die-land 0.35s ease-out; }   /* only as they land, not on later redraws */
+@keyframes die-land { from { transform: translateZ(calc(var(--u) * 0.8)) rotateZ(-12deg); } }
+/* the total, printed on the felt under the dice */
+.dice-total {
+  font-size: calc(var(--u) * 1.6);
+  font-weight: 900;
+  line-height: 1;
+  color: #ffe066;
+  text-shadow: 0 0 calc(var(--u) * 0.6) rgba(255, 224, 102, 0.6);
+  transform: translateZ(2px);                            /* just above the felt, so the cloth can't cover it */
+}
+.table-dice.landing .dice-total { animation: total-in 0.4s ease-out; }
+@keyframes total-in { from { opacity: 0; scale: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .table-dice .box.die, .dice-total { animation: none !important; } }
+
+/* face-down tiles sliding from the wall to a player during the deal */
+.flying-tile {
+  position: fixed;
+  z-index: 40;
+  width: 22px;
+  height: 30px;
+  border-radius: 4px;
+  background: linear-gradient(#4558c4, var(--navy-dark));
+  box-shadow: 0 3px 0 var(--ivory), 0 6px 10px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+
+/* End-of-round card: who won and the winning hand. Floats over the table until dismissed. */
+.result-card {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  top: 70px;
+  width: min(700px, 94cqw);
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 24px 28px 26px;
+  border-radius: 22px;
+  border: 5px solid #e0b53a;
+  background: #fffaf0;
+  color: #1a1a1a;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  transform: translateX(-50%);
+  animation: result-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.result-card.you { background: radial-gradient(circle at 50% 0%, #fffbe6, #ffe8a3); }
+@keyframes result-in { from { opacity: 0; transform: translateX(-50%) scale(0.75); } }
+.result-title { font-size: 2.6rem; font-weight: 900; line-height: 1.15; color: #b8231f; }
+.result-sub { margin-top: 6px; font-size: 1.6rem; font-weight: 700; }
+.result-how { margin-top: 4px; font-size: 1.15rem; opacity: 0.75; }
+.result-hand { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 18px 0 20px; }
+.rh-group { display: flex; gap: 2px; }
+.tile.rh { width: 38px; height: 51px; border-radius: 5px; box-shadow: 0 3px 0 var(--navy), 0 4px 8px rgba(0, 0, 0, 0.2); }
+.tile.rh.win-tile { transform: translateY(-8px); box-shadow: 0 0 0 3px #e0b53a, 0 3px 0 var(--navy), 0 6px 12px rgba(0, 0, 0, 0.3); }
+.result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+
+/* Faan breakdown beside the score table */
+.result-cols { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; margin: 4px 0 12px; text-align: left; }
+.result-cols h4 { grid-column: 1 / -1; margin: 0 0 4px; font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8a6a1e; }
+.faan-list, .score-box { flex: 1 1 250px; padding: 12px 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.05); }
+.faan-list { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-content: start; font-size: 1.1rem; }
+.faan-list strong { text-align: right; color: #1d7a3a; }
+.faan-list .total { margin-top: 4px; padding-top: 6px; border-top: 2px solid rgba(0, 0, 0, 0.12); font-weight: 800; font-size: 1.2rem; }
+.faan-list strong.total { color: #b8231f; }
+.faan-list .paid { grid-column: 1 / -1; margin-top: 6px; font-size: 1rem; opacity: 0.75; }
+.score-table { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 16px; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.st-name.you { font-weight: 800; }
+.st-delta { text-align: right; font-weight: 700; opacity: 0.6; }
+.st-delta.up { color: #1d7a3a; opacity: 1; }
+.st-delta.down { color: #b8231f; opacity: 1; }
+.st-total { text-align: right; font-weight: 700; }
+.result-next { margin: 0 0 14px; font-size: 1.1rem; opacity: 0.8; }
+
+/* Final standings */
+.standings { display: flex; flex-direction: column; gap: 8px; margin: 18px auto; max-width: 420px; }
+.standing { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; padding: 10px 18px; border-radius: 12px; background: rgba(0, 0, 0, 0.05); font-size: 1.3rem; text-align: left; }
+.standing.first { background: linear-gradient(#ffe68f, #f3cd57); font-weight: 800; }
+.standing.you .who { font-weight: 800; }
+.standing .place { font-weight: 800; color: #8a6a1e; }
+.standing .pts { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* Confetti for your win: paper pieces tumbling down over the table. */
+.confetti { position: absolute; z-index: 25; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti i {
+  position: absolute;
+  top: -20px;
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  animation: confetti-fall 3s ease-in forwards;
+}
+@keyframes confetti-fall {
+  to { transform: translate(var(--drift), 105vh) rotate(var(--spin)); opacity: 0.2; }
+}
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } }
+
+/* ---------- Help panel ---------- */
+.help {
+  flex: 0 0 clamp(360px, 28vw, 580px);                  /* grows into the spare room on wide screens */
+  box-sizing: border-box;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  position: sticky;
+  top: 12px;
+  padding: 16px 20px 20px;
+  border-radius: 16px;
+  background: rgba(24, 10, 8, 0.88);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 1.08rem;
+  line-height: 1.5;
+}
+.help-head { display: flex; align-items: center; justify-content: space-between; }
+.help h2 { margin: 0; font-size: 1.5rem; }
+.help h3 { margin: 0 0 6px; font-size: 1.2rem; color: #ffd75e; }
+.help p { margin: 6px 0; }
+.help section { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.14); }
+.help section.now { padding: 10px 14px; border: 2px solid rgba(255, 215, 94, 0.55); border-radius: 12px; background: rgba(255, 215, 94, 0.1); }
+.help .tile.mini { font-size: 1.15rem; }
+.close-btn { width: 44px; height: 44px; border-radius: 10px; background: rgba(255, 255, 255, 0.1); color: #f3eee6; font-size: 1.3rem; }
+.tiles-row { display: inline-flex; gap: 3px; align-items: center; }
+.tile.ex { width: 34px; height: 46px; border-radius: 5px; box-shadow: 0 3px 0 var(--navy); }
+.example-hand { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px; }
+.set-grid { display: grid; grid-template-columns: auto auto 1fr; gap: 10px 10px; align-items: center; }
+.set-what { font-size: 0.98rem; opacity: 0.9; }
+/* "How to earn points": one card per pattern */
+.min-note { display: inline-block; padding: 4px 10px; border-radius: 8px; background: rgba(255, 215, 94, 0.18); color: #ffe9a8; }
+.pattern-card { margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }
+.pattern-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.faan-badge { flex: none; padding: 2px 10px; border-radius: 999px; background: #e0b53a; color: #1a1a1a; font-size: 0.92rem; font-weight: 800; }
+.pattern-what { margin: 2px 0 6px; font-size: 0.98rem; opacity: 0.9; }
+.pattern-tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+.tile.ex.sm { width: 23px; height: 31px; border-radius: 4px; box-shadow: 0 2px 0 var(--navy); }
+.sub-h { margin-top: 14px !important; }
+.payout-table { display: grid; grid-template-columns: repeat(11, 1fr); border-radius: 10px; overflow: hidden; font-variant-numeric: tabular-nums; text-align: center; }
+.payout-table .pf { grid-row: 1; padding: 4px 0; background: rgba(255, 215, 94, 0.22); font-weight: 800; }
+.payout-table .pp { grid-row: 2; padding: 4px 0; background: rgba(255, 255, 255, 0.06); font-size: 0.8rem; }
+
+/* Wide screens: the panel has room, so make its text and example tiles bigger and easier to read. */
+@media (min-width: 1600px) {
+  .help { font-size: 1.18rem; padding: 20px 26px 24px; }
+  .help h2 { font-size: 1.7rem; }
+  .help h3 { font-size: 1.35rem; }
+  .tile.ex { width: 42px; height: 57px; border-radius: 6px; }
+  .tile.ex.sm { width: 31px; height: 42px; border-radius: 5px; }
+  .help .tile.mini { font-size: 1.3rem; }
+  .set-what, .pattern-what { font-size: 1.08rem; }
+  .faan-badge { font-size: 1rem; }
+  .payout-table .pp { font-size: 0.92rem; }
+}
+
+/* On narrower screens the panel slides over the right side instead of sitting beside the table. */
+@media (max-width: 1150px) {
+  .help {
+    position: fixed;
+    z-index: 30;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(380px, 92vw);
+    max-height: none;
+    border-radius: 16px 0 0 16px;
+    background: rgba(24, 10, 8, 0.96);
+  }
+}
+
+/* ---------- Beginner tips (coachmarks) ---------- */
+/* A full-screen layer that blocks the game while a tip is open. With a target, the spotlight's
+   huge shadow does the dimming (leaving a hole over the target); without one, the layer dims. */
+.coach-layer { position: fixed; inset: 0; z-index: 100; }
+.coach-layer.dim { background: rgba(0, 0, 0, 0.55); }
+.coach-spot {
+  position: fixed;
+  border-radius: 16px;
+  border: 3px solid #ffd75e;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 215, 94, 0.8);
+  pointer-events: none;
+  animation: coach-ring 1.6s ease-in-out infinite;
+}
+@keyframes coach-ring { 50% { border-color: #fff3c4; } }
+.coach-card {
+  position: fixed;
+  width: min(440px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 18px 20px 16px;
+  border-radius: 18px;
+  border: 4px solid #e0b53a;
+  background: #fffaf0;
+  color: #1a1a1a;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation: coach-in 0.25s ease-out;
+}
+@keyframes coach-in { from { opacity: 0; translate: 0 10px; } }
+.coach-title { font-size: 1.5rem; font-weight: 900; color: #b8231f; }
+.coach-body { margin-top: 6px; font-size: 1.15rem; line-height: 1.45; }
+.coach-body p { margin: 6px 0; }
+.coach-body .example-hand { margin: 8px 0; }
+.coach-body .tile.ex { box-shadow: 0 3px 0 var(--navy); }
+.coach-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.coach-count { flex: 1; text-align: center; font-size: 0.95rem; opacity: 0.6; }
+.coach-off { background: none; color: #6b5a3a; font-size: 0.95rem; text-decoration: underline; padding: 6px 0; }
+.coach-next { padding: 10px 26px; font-size: 1.25rem; }
+@media (prefers-reduced-motion: reduce) { .coach-spot, .coach-card { animation: none; } }
+
+/* ---------- Pause and "are you sure?" boxes ---------- */
+.dialog-layer { display: grid; place-items: center; }
+.dialog-card {
+  width: min(460px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 24px 26px 22px;
+  border-radius: 20px;
+  border: 4px solid #e0b53a;
+  background: #fffaf0;
+  color: #1a1a1a;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation: coach-in 0.2s ease-out;
+}
+.dialog-title { font-size: 1.8rem; font-weight: 900; color: #b8231f; }
+.dialog-text { margin: 8px 0 18px; font-size: 1.15rem; opacity: 0.85; }
+.dialog-actions { display: flex; flex-direction: column; gap: 10px; }
+.dialog-actions .act { width: 100%; }
+.act.danger { background: #b8231f; box-shadow: 0 4px 0 #7a1512; }
+
+/* ---------- Main menu ---------- */
+.menu-page {
+  position: relative;
+  width: min(560px, 100%);
+  margin: 4vh auto 4vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.menu-sound { position: fixed; top: 16px; right: 16px; z-index: 5; display: flex; gap: 10px; }
+.credit { margin: 18px 0 0; text-align: center; font-size: 0.92rem; opacity: 0.7; }
+
+.menu-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
+/* a fan of five tiles, like a hand being shown */
+.tile-fan { display: flex; justify-content: center; height: 110px; margin-bottom: 8px; }
+.tile-fan .fan-tile {
+  width: 62px;
+  height: 84px;
+  margin: 0 -6px;
+  border-radius: 9px;
+  box-shadow: 0 6px 0 var(--navy), 0 10px 18px rgba(0, 0, 0, 0.45);
+  transform-origin: 50% 160%;
+  animation: fan-in 0.6s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+.tile-fan .fan-tile:nth-child(1) { --r: -24deg; animation-delay: 0.05s; }
+.tile-fan .fan-tile:nth-child(2) { --r: -12deg; animation-delay: 0.1s; }
+.tile-fan .fan-tile:nth-child(3) { --r: 0deg; animation-delay: 0.15s; translate: 0 -8px; z-index: 1; }
+.tile-fan .fan-tile:nth-child(4) { --r: 12deg; animation-delay: 0.2s; }
+.tile-fan .fan-tile:nth-child(5) { --r: 24deg; animation-delay: 0.25s; }
+.tile-fan .fan-tile { rotate: var(--r); }
+@keyframes fan-in { from { rotate: 0deg; opacity: 0; } }
+.menu-title {
+  margin: 6px 0 0;
+  font-size: 3.6rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #fff6d6;
+  text-shadow: 0 3px 0 #7a1512, 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+.menu-cn { margin-top: 6px; font-family: 'Noto Serif TC', 'KaiTi', serif; font-size: 1.9rem; font-weight: 900; letter-spacing: 0.3em; color: #ffd75e; }
+.menu-tagline { margin: 10px 0 26px; font-size: 1.12rem; opacity: 0.85; }
+
+/* big cards: icon badge, title and explanation */
+.menu-cards { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.menu-card {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px 14px 14px;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 215, 94, 0.28);
+  background: linear-gradient(rgba(70, 22, 16, 0.92), rgba(38, 10, 8, 0.92));
+  color: #f6efe2;
+  text-align: left;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  transition: border-color 0.15s, transform 0.1s, background 0.15s;
+}
+.menu-card:not(:disabled):hover { border-color: rgba(255, 215, 94, 0.85); transform: translateY(-2px); }
+.menu-card:not(:disabled):active { transform: translateY(1px); }
+.menu-card:focus-visible { outline: 3px solid #ffd75e; outline-offset: 3px; }
+.mc-icon {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+.mc-icon svg { width: 28px; height: 28px; }
+.mc-text { display: flex; flex-direction: column; gap: 2px; }
+.mc-title { font-size: 1.45rem; font-weight: 800; }
+.mc-sub { font-size: 1.02rem; opacity: 0.82; }
+.mc-tag {
+  position: absolute;
+  top: -11px;
+  right: 16px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: #ffd75e;
+  color: #1a1a1a;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+/* the main action: green, like the start buttons in play */
+.menu-card.primary { background: linear-gradient(#36925f, #23704a); border-color: #6fd39d; }
+.menu-card.primary .mc-icon { background: rgba(255, 255, 255, 0.2); }
+.menu-card.primary .mc-sub { opacity: 0.92; }
+/* Learn to play: a warm gold accent so beginners spot it */
+.menu-card.learn .mc-icon { background: #e0b53a; color: #1a1a1a; }
+.menu-card.soon { opacity: 0.55; cursor: not-allowed; }
+.menu-card.soon .mc-tag { background: rgba(255, 255, 255, 0.85); }
+
+/* ---------- How to play page ---------- */
+.rules-page { width: min(860px, 100%); margin: 3vh auto 4vh; }
+.rules-head { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
+.rules-head h1 { margin: 0; font-size: 2.4rem; color: #fff6d6; }
+.help.rules-body { position: static; max-height: none; overflow: visible; width: auto; padding: 24px 30px 28px; font-size: 1.18rem; }
+.rules-body section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.rules-body .tile.ex { width: 42px; height: 57px; border-radius: 6px; }
+.rules-body .tile.ex.sm { width: 31px; height: 42px; border-radius: 5px; }
+.rules-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 22px; }
+
+/* ---------- New game setup ---------- */
+/* matches the main menu cards: dark lacquer with a gold edge; the questions are numbered steps */
+.setup {
+  max-width: 660px;
+  margin: 5vh auto 4vh;
+  padding: 28px 32px 30px;
+  border-radius: 22px;
+  border: 2px solid rgba(255, 215, 94, 0.3);
+  background: linear-gradient(rgba(70, 22, 16, 0.94), rgba(30, 9, 7, 0.94));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  counter-reset: setup-step;
+}
+.setup-title { margin: 0; font-size: 2.4rem; color: #fff6d6; }
+.setup-intro { margin: 4px 0 8px; font-size: 1.12rem; opacity: 0.85; }
+.setup-q { display: flex; align-items: center; gap: 10px; margin: 24px 0 4px; font-size: 1.35rem; color: #ffd75e; }
+.setup-q::before {
+  counter-increment: setup-step;
+  content: counter(setup-step);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #e0b53a;
+  color: #1a1a1a;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+.setup > .setup-help:last-of-type { margin-top: 20px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); }
+.setup-help { margin: 4px 0 10px; font-size: 1.02rem; line-height: 1.45; opacity: 0.85; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.choice {
+  flex: 1 1 160px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3eee6;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.choice:hover { border-color: rgba(255, 215, 94, 0.6); }
+.choice.picked { border-color: #ffd75e; background: rgba(255, 215, 94, 0.18); }
+.choice-label { font-size: 1.35rem; font-weight: 800; }
+.choice-sub { font-size: 0.98rem; opacity: 0.85; }
+.choice.picked .choice-label::before { content: '✓ '; color: #ffd75e; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 22px; }
+.setup-actions .act.big { flex: 1; }
+.act.big { padding: 14px 40px; font-size: 1.6rem; }
