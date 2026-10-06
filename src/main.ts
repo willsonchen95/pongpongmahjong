@@ -7,14 +7,16 @@ import {
 import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
 import * as motion from './motion'
-import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw } from './table'
+import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, newRoomCode, savedSession, type LocalView } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
 const HUMAN = 0
 declare const __APP_VERSION__: string        // filled in at build time (vite.config.ts)
 declare const __BUILD_DATE__: string
-const NAMES = ['You', 'Mei', 'Kai', 'Lin']
+const BOT_NAMES = ['You', 'Mei', 'Kai', 'Lin']
+let NAMES = BOT_NAMES                     // online: the room's players, turned round so you're first
 const WIND_CHARS = ['東', '南', '西', '北']
 const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
 const fmt = (n: number) => n.toLocaleString('en-US')
@@ -94,9 +96,9 @@ function sync() {
   offer = p.kind === 'claims' && !p.answers[HUMAN] ? p.offers[HUMAN] : null
 }
 
-// Turn the table's events into sounds and banners.
-function playEvents() {
-  for (const e of table.takeEvents()) {
+// Turn the table's events (or, online, the room's) into sounds and banners.
+function playEvents(events: TableEvent[] = table.takeEvents()) {
+  for (const e of events) {
     if (e.type === 'draw') sfx.draw(e.seat !== HUMAN)
     else if (e.type === 'flowers') announceFlowers(e.seat, e.tiles)
     else if (e.type === 'discard') sfx.discard()
@@ -158,25 +160,107 @@ async function drive() {
   refresh()
 }
 
+// Your moves. Online they go to the room, and the screen changes when the room's answer comes back.
 function humanClaim(kind: ClaimKind | 'win', run?: number[]) {
   if (!offer) return
+  if (online) return online.send({ type: 'answer', answer: { kind, run } })
   if (table.answer(HUMAN, { kind, run })) { playEvents(); void drive() }
 }
 
 function humanPass() {
   if (!offer) return
+  if (online) return online.send({ type: 'answer', answer: { kind: 'pass' } })
   if (table.answer(HUMAN, { kind: 'pass' })) { playEvents(); void drive() }
 }
 
 function humanKong(tile: Tile) {
+  if (online) return online.send({ type: 'kong', tile: tile.id! })
   if (table.kong(HUMAN, tile)) { playEvents(); void drive() }
 }
 
 function humanDiscard(tile: Tile) {
+  if (online) { if (mustDiscard) online.send({ type: 'discard', tile: tile.id! }); return }
   if (table.discard(HUMAN, tile)) { playEvents(); void drive() }
 }
 
+// ---------- Playing online ----------
+// In an online room the room server runs the game; this device only shows it. Each update from the
+// room (already turned so you're seat 0) is put into the local table object, so the whole screen —
+// and the hints, which score hands on that table — works just as it does in a game against bots.
+
+let online: OnlineRoom | null = null
+let onlineDeal = ''                       // the deal we've shown (your tiles' ids)
+
+function goOnline(code: string, name: string) {
+  online?.leave()
+  // a game against the bots stays saved as it was; it's loaded again when you leave the room
+  gen++
+  started = false
+  intro = null
+  table = new Table(settings, SEAT_IS_PERSON)
+  sync()
+  const room = new OnlineRoom(code, name)
+  online = room
+  room.onRoom = () => {
+    NAMES = room.names()
+    if (!room.room?.started || !room.view) { if (lobbyShowing()) renderLobby() }
+    else refresh()                                     // someone left or came back: their name on the table
+  }
+  room.onState = (view, events) => applyOnline(view, events)
+  room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
+  room.onConnection = () => { if (lobbyShowing()) renderLobby(); else refresh() }
+  room.connect()
+  renderLobby()
+}
+
+function leaveOnline() {
+  online?.leave()
+  online = null
+  NAMES = BOT_NAMES
+  onlineDeal = ''
+  intro = null
+  gen++
+  if (!loadMatch()) { table = new Table(settings, SEAT_IS_PERSON); sync() }   // back to your game against the bots, if any
+  renderMenu()
+}
+
+let onlineError = ''
+const lobbyShowing = () => !!app.querySelector('.lobby')
+
+// An update from the room: put it into the table, then show it — the deal first, if a hand just began.
+function applyOnline(view: LocalView, events: TableEvent[]) {
+  table.match = view.match
+  table.game = view.game
+  table.pool = view.pool
+  table.lastDiscard = view.lastDiscard
+  table.winFrom = view.winFrom
+  table.phase = view.phase
+  const w = view.game.winner
+  table.winTile = w === null ? null : view.game.hands[w].find(t => t.id === view.winTileId) ?? null
+  onlineError = ''
+  // a new deal: recognised by your tiles (the hand number alone repeats when a new game starts)
+  const deal = view.game.hands[HUMAN].map(t => t.id).join()
+  const newDeal = view.phase.kind === 'dealing' && deal !== onlineDeal
+  onlineDeal = deal
+  if (newDeal) {
+    gen++
+    sync()
+    banners = []; resultClosed = false; showFinal = false; celebrate = false
+    inMenu = false
+    void runIntro()
+    return
+  }
+  // play has begun while this screen was still showing the deal (a slow or backgrounded tab): the room
+  // doesn't wait, so drop the rest of the deal and show the table as it is now
+  if (intro && view.phase.kind !== 'dealing') { gen++; intro = null }
+  playEvents(events)
+  if (game.over && !resultClosed && events.some(e => e.type === 'win' || e.type === 'exhausted')) showFinal = false
+  if (inMenu && !intro) { inMenu = false; render() }
+  else if (!intro) refresh()
+}
+
 function startMatch() {
+  if (online) { online.leave(); online = null; NAMES = BOT_NAMES }   // a game against the bots instead
   music.start()                                       // the Start click is the gesture browsers want before playing audio
   saveSettings()
   table = new Table(settings, SEAT_IS_PERSON)
@@ -225,6 +309,8 @@ async function runIntro() {
   // Every pause also waits while the game is paused (menu, pause box, a tip), and nothing is
   // drawn over the menu — otherwise the deal would carry on behind it and pull you back in.
   const wait = async (ms: number) => { await sleep(ms); await gameIdle() }
+  // online the room waits ~7 seconds for the deal on everyone's screen, so it's shown a little quicker
+  const quick = !!online
 
   // 1. the dice tumble, then settle
   refresh()
@@ -237,7 +323,7 @@ async function runIntro() {
   it.rolling = false
   refresh()
   await coach('dice', TIPS.dice)
-  await wait(1700)
+  await wait(quick ? 900 : 1700)
   if (stale()) return
 
   // 2. deal: four tiles at a time to each player, three times round, then one more each
@@ -249,7 +335,7 @@ async function runIntro() {
       dealingTo = p                                    // the tiles fly from the wall to them as it redraws
       sfx.deal()
       refresh()
-      await wait(260)
+      await wait(quick ? 200 : 260)
       if (stale()) return
     }
   }
@@ -266,11 +352,12 @@ async function runIntro() {
     announceFlowers(p, game.bonus[p])
     refresh()
     await coach('flowers', TIPS.flowers)
-    await wait(1100)
+    await wait(quick ? 450 : 1100)
     if (stale()) return
   }
 
   intro = null
+  if (online) { refresh(); return }                    // the room starts the play itself
   table.begin()                                        // the dealer draws first
   void drive()
 }
@@ -380,6 +467,15 @@ const gameInProgress = () => started && !match.over
 // The Menu button (or Esc) in a game: pause, then keep playing, go to the menu, or quit.
 async function openPause() {
   if (paused || coachOpen) return
+  if (online) {                                        // an online game can't pause for everyone
+    const choice = await dialog('Leave the room?',
+      `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.`, [
+        { label: 'Stay', value: 'stay', cls: 'primary' },
+        { label: 'Leave room', value: 'leave', cls: 'danger' },
+      ])
+    if (choice === 'leave') leaveOnline()
+    return
+  }
   paused = true
   music.duck(true)
   const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`
@@ -429,7 +525,7 @@ function endMatchEarly() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !inMenu && !paused && !coachOpen && started) { e.preventDefault(); void openPause() }
+  if (e.key === 'Escape' && !inMenu && !paused && !coachOpen && (started || online)) { e.preventDefault(); void openPause() }
 })
 
 // Browsers only allow sound after a click or key press — start the music on the very first one,
@@ -444,6 +540,7 @@ document.addEventListener('keydown', startMusicOnce)
 
 // Show a tip (one or more steps) unless tips are off or it's been seen before.
 async function coach(id: string, steps: Steps): Promise<void> {
+  if (online) return                                  // an online game can't stop for one player's tip
   if (!settings.tips || tipsSeen.has(id) || inMenu || coachOpen) return
   tipsSeen.add(id)
   saveTipsSeen()
@@ -598,7 +695,7 @@ const tileIds = new WeakMap<Tile, number>()
 let nextTileId = 1
 function tag<T extends HTMLElement>(e: T, t: Tile, place: string): T {
   if (!tileIds.has(t)) tileIds.set(t, nextTileId++)
-  e.dataset.key = String(tileIds.get(t))
+  e.dataset.key = t.id === undefined ? 'o' + tileIds.get(t) : String(t.id)   // a tile's own id stays the same across online updates
   e.dataset.place = place
   return e
 }
@@ -761,7 +858,7 @@ function renderMenu() {
     menuCard(MENU_ICONS.learn, 'Learn to play', 'A guided game — friendly tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
     menuCard(MENU_ICONS.book, 'How to play', 'The rules, the sets and how scoring works — with pictures', renderRulesPage),
-    menuCard(MENU_ICONS.online, 'Play online', 'Play with friends and family', null, 'soon', 'Coming soon'),
+    onlineMenuCard(),
   )
   // which version this is, and when it was built — at the very bottom of the menu
   // (a dev server started before vite.config.ts existed doesn't fill them in — say so rather than break)
@@ -770,6 +867,23 @@ function renderMenu() {
     ? ` · ${new Date(__BUILD_DATE__).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
   page.append(menuHero(), sound, cards, el('p', 'menu-version', version + built))
   app.appendChild(page)
+}
+
+// "Play online" — or, while you're in a room, the way back to it (also after a reload).
+function onlineMenuCard(): HTMLElement {
+  if (!ROOM_SERVER) return menuCard(MENU_ICONS.online, 'Play online', 'Play with friends and family', null, 'soon', 'Coming soon')
+  const room = online
+  if (room) {
+    return menuCard(MENU_ICONS.online, `Back to room ${room.code}`, room.room?.started ? 'Your online game is still going' : 'Your friends are in the room', () => {
+      if (room.room?.started && room.view) { inMenu = false; render() } else renderLobby()
+    }, 'primary')
+  }
+  const session = savedSession()
+  if (session) {
+    return menuCard(MENU_ICONS.online, `Rejoin room ${session.code}`, `Back to your online game as ${session.name}`,
+      () => goOnline(session.code, session.name), '', 'Online')
+  }
+  return menuCard(MENU_ICONS.online, 'Play online', 'Play with friends — create a room or join one with a code', renderOnlineHome)
 }
 
 // The full rules guide as its own page, opened from the menu.
@@ -813,7 +927,17 @@ function renderSetup() {
   const card = el('div', 'setup')
   card.append(el('h1', 'setup-title', 'New game'), el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
 
-  const pick = (change: Partial<Settings>) => { settings = { ...settings, ...change }; renderSetup() }
+  ruleChoices(card, renderSetup, true)
+  const actions = el('div', 'setup-actions')
+  actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(startMatch), 'act primary big'))
+  card.appendChild(actions)
+  app.appendChild(card)
+}
+
+// The house rules, as rows of choices (the New game screen, and the host's in an online room).
+// Choosing one updates `settings` and redraws the screen with `redraw`.
+function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
+  const pick = (change: Partial<Settings>) => { settings = { ...settings, ...change }; saveSettings(); redraw() }
 
   card.append(el('h2', 'setup-q', 'Minimum to win'),
     el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. Higher makes winning harder but each win worth more.'),
@@ -829,11 +953,13 @@ function renderSetup() {
       { value: 4, label: 'Full game', sub: 'All four wind rounds · 16+ hands' },
     ], settings.rounds, v => pick({ rounds: v })))
 
-  card.append(el('h2', 'setup-q', 'Beginner tips'),
-    choiceRow([
-      { value: true, label: 'On', sub: 'Short pop-ups explain each new step' },
-      { value: false, label: 'Off', sub: 'I know how to play' },
-    ], settings.tips, v => pick({ tips: v })))
+  if (withTips) {
+    card.append(el('h2', 'setup-q', 'Beginner tips'),
+      choiceRow([
+        { value: true, label: 'On', sub: 'Short pop-ups explain each new step' },
+        { value: false, label: 'Off', sub: 'I know how to play' },
+      ], settings.tips, v => pick({ tips: v })))
+  }
 
   card.append(el('h2', 'setup-q', 'Starting points'),
     el('p', 'setup-help', 'Everyone starts with this many points. Winners collect from whoever pays; if anyone drops below zero the game ends early. Most points at the end wins.'),
@@ -842,9 +968,120 @@ function renderSetup() {
       { value: 2000, label: '2,000', sub: 'Room for a few bad hands' },
       { value: 5000, label: '5,000', sub: 'Plays to the end almost always' },
     ], settings.startPoints, v => pick({ startPoints: v })))
+}
+
+// ---------- Online: joining a room, and the room before the game ----------
+
+const NAME_KEY = 'mahjong-online-name'
+const savedName = () => { try { return localStorage.getItem(NAME_KEY) ?? '' } catch { return '' } }
+let inviteCode = ''                       // a room code from an invite link, waiting to be joined
+
+// "Play online": your name, then create a room or join one with its code.
+function renderOnlineHome() {
+  inMenu = true
+  app.innerHTML = ''
+  const card = el('div', 'setup online-home')
+  card.append(el('h1', 'setup-title', 'Play online'),
+    el('p', 'setup-intro', 'Play with friends: one of you creates a room and shares its code. Bots fill any empty seats.'))
+
+  const nameInput = el('input', 'text-input') as HTMLInputElement
+  nameInput.maxLength = 16
+  nameInput.placeholder = 'Your name'
+  nameInput.value = savedName()
+  nameInput.autocomplete = 'nickname' as AutoFill
+  const codeInput = el('input', 'text-input code-input') as HTMLInputElement
+  codeInput.maxLength = 5
+  codeInput.placeholder = 'CODE'
+  codeInput.value = inviteCode
+  codeInput.autocapitalize = 'characters'
+  codeInput.spellcheck = false
+  const message = el('p', 'form-message')
+
+  const go = (code: string) => {
+    const name = nameInput.value.trim()
+    if (!name) { message.textContent = 'Enter your name first.'; nameInput.focus(); return }
+    try { localStorage.setItem(NAME_KEY, name) } catch { /* fine */ }
+    inviteCode = ''
+    goOnline(code, name)
+  }
+  codeInput.oninput = () => { codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }
+
+  const create = button('Create a room', () => go(newRoomCode()), 'act primary big')
+  const join = button('Join', () => {
+    const code = codeInput.value.trim().toUpperCase()
+    if (!ROOM_CODE.test(code)) { message.textContent = 'A room code is 5 letters and numbers, like K7Q2M.'; codeInput.focus(); return }
+    go(code)
+  }, 'act')
+  const joinRow = el('div', 'join-row')
+  joinRow.append(codeInput, join)
+
+  card.append(el('h2', 'setup-q', 'Your name'), nameInput,
+    el('h2', 'setup-q', 'Start a room'), el('p', 'setup-help', 'You’ll get a code to send to your friends.'), create,
+    el('h2', 'setup-q', 'Or join one'), el('p', 'setup-help', 'Type the code a friend sent you.'), joinRow,
+    message)
   const actions = el('div', 'setup-actions')
-  actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(startMatch), 'act primary big'))
+  actions.append(button('‹ Back', renderMenu, 'act'))
   card.appendChild(actions)
+  app.appendChild(card)
+  ;(inviteCode && !nameInput.value ? nameInput : inviteCode ? join : nameInput).focus()
+}
+
+// The room before the game: its code to share, who's sitting where, and — for the host — the rules
+// and the Start button.
+function renderLobby() {
+  const room = online
+  if (!room) return renderMenu()
+  inMenu = true
+  app.innerHTML = ''
+  const card = el('div', 'setup lobby')
+  const r = room.room
+  card.append(el('h1', 'setup-title', 'Your room'))
+
+  const codeBox = el('div', 'room-code')
+  codeBox.append(el('span', 'room-code-label', 'Room code'), el('span', 'room-code-value', room.code))
+  const link = `${location.origin}${location.pathname}?room=${room.code}`
+  const copy = button('Copy invite link', async () => {
+    try {
+      if (navigator.share && touchScreen.matches) await navigator.share({ title: 'Pong Pong Mahjong!', text: `Join my mahjong room: ${room.code}`, url: link })
+      else { await navigator.clipboard.writeText(link); copy.textContent = 'Link copied ✓' }
+    } catch { /* closed the share sheet */ }
+  }, 'act')
+  codeBox.appendChild(copy)
+  card.appendChild(codeBox)
+
+  if (!room.connected) card.appendChild(el('p', 'form-message', r ? 'Connection lost — reconnecting…' : 'Connecting…'))
+  if (onlineError) card.appendChild(el('p', 'form-message', onlineError))
+
+  if (r) {
+    card.appendChild(el('h2', 'setup-q', 'Players'))
+    const list = el('div', 'seat-list')
+    r.seats.forEach((s, i) => {
+      const row = el('div', 'seat-row' + (i === r.you ? ' you' : '') + (s.person ? '' : ' bot'))
+      row.append(el('span', 'seat-wind', WIND_CHARS[i]), el('span', 'seat-name', s.name + (i === r.you ? ' (you)' : '')))
+      const tag = !s.person ? 'Bot' : s.host ? 'Host' : s.connected ? '' : 'Away'
+      if (tag) row.appendChild(el('span', 'seat-tag', tag))
+      list.appendChild(row)
+    })
+    card.appendChild(list)
+    const isHost = r.you !== null && r.seats[r.you]?.host
+    if (isHost) {
+      ruleChoices(card, renderLobby, false)
+      const actions = el('div', 'setup-actions')
+      actions.append(button('Leave', leaveOnline, 'act'),
+        button('Start game', () => room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints }), 'act primary big'))
+      card.appendChild(actions)
+    } else {
+      const host = r.seats.find(s => s.host)
+      card.appendChild(el('p', 'setup-help lobby-wait', `Waiting for ${host?.name ?? 'the host'} to start the game…`))
+      const actions = el('div', 'setup-actions')
+      actions.append(button('Leave', leaveOnline, 'act'))
+      card.appendChild(actions)
+    }
+  } else {
+    const actions = el('div', 'setup-actions')
+    actions.append(button('Leave', leaveOnline, 'act'))
+    card.appendChild(actions)
+  }
   app.appendChild(card)
 }
 
@@ -895,11 +1132,24 @@ function statusEl(): HTMLElement {
   const s = el('div', 'status ' + mood)
   const pill = el('div', 'status-pill')
   const text = el('div', 'status-text')
-  text.append(title, el('div', 'status-hint', hint))
+  const hintEl = el('div', 'status-hint', hint)
+  if (online && !online.connected) hintEl.textContent = 'Connection lost — reconnecting…'
+  else if (online && (offer || mustDiscard)) { hintEl.dataset.base = hint; showCountdown(hintEl) }
+  text.append(title, hintEl)
   pill.append(el('div', 'status-badge', badge), text)
   s.appendChild(pill)
   return s
 }
+
+// Online, the room plays for you when your time is up: count it down beside the hint.
+function showCountdown(hintEl: HTMLElement) {
+  const deadline = online?.view?.deadline
+  if (!deadline || !hintEl.dataset.base) return
+  const secs = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+  hintEl.textContent = `${hintEl.dataset.base} · ${secs}s`
+  hintEl.classList.toggle('hurry', secs <= 5)
+}
+setInterval(() => document.querySelectorAll<HTMLElement>('.status-hint[data-base]').forEach(showCountdown), 500)
 
 // The wall is a ring of 144 slots (72 stacks of 2, 18 stacks per side). The remaining tiles are the
 // contiguous run [wallFront, wallFront + wall.length) of the original array, rotated by the break point.
@@ -923,8 +1173,11 @@ function wallRow(side: number): HTMLElement {
 }
 
 // How many of a player's tiles to show: during the deal, only those handed out so far.
-const handCount = (seat: number) =>
-  intro && intro.phase !== 'flowers' ? Math.min(intro.shown[seat], game.hands[seat].length) : game.hands[seat].length
+// (Online, the others' hands aren't sent — only how many tiles they hold.)
+const handCount = (seat: number) => {
+  const held = online?.view && seat !== HUMAN && !game.over ? online.view.handCounts[seat] : game.hands[seat].length
+  return intro && intro.phase !== 'flowers' ? Math.min(intro.shown[seat], held) : held
+}
 // Flowers stay hidden during the opening until that player's turn to reveal them.
 const flowersVisible = (seat: number) => !intro || intro.flowersShown[seat]
 
@@ -985,9 +1238,22 @@ function discardPool(): HTMLElement {
 }
 
 // The button that moves the match on once a hand is over.
-const continueButton = () => (match.over
-  ? button('Final results', showStandings, 'act primary')
-  : button('Next hand', nextHand, 'act primary'))
+// Online the next hand starts once everyone has pressed it.
+const continueButton = () => {
+  if (match.over) return button('Final results', showStandings, 'act primary')
+  if (!online) return button('Next hand', nextHand, 'act primary')
+  const people = online.room?.seats.filter(x => x.person && x.connected).length ?? 1
+  const ready = online.view?.readyCount ?? 0
+  const pressed = pressedNext === match.hand
+  const b = button(pressed ? `Waiting for others… (${ready}/${people})` : 'Next hand', () => {
+    pressedNext = match.hand
+    online?.send({ type: 'ready' })
+    refresh()
+  }, 'act primary')
+  if (pressed) (b as HTMLButtonElement).disabled = true
+  return b
+}
+let pressedNext = 0                       // online: the hand after which you pressed "Next hand"
 
 // Why each pattern you already hold scores — in plain words for the hover card.
 const HAVE_WHY: [string, string][] = [
@@ -1641,8 +1907,15 @@ function finalCard(): HTMLElement {
   const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} ran out of points, so the game ended early`
   card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
   const actions = el('div', 'result-actions')
-  actions.append(button('Play again', startMatch, 'act primary'), button('Main menu', renderMenu, 'act'),
-    button('See the table', () => { resultClosed = true; render() }, 'act'))
+  if (online) {                                        // the host starts the next game; everyone else waits
+    const host = online.room?.seats[online.seat ?? -1]?.host
+    if (host) actions.append(button('Play again', () => online?.start(settings), 'act primary'))
+    else actions.append(el('div', 'result-next', 'The host can start another game.'))
+    actions.append(button('Leave room', leaveOnline, 'act'))
+  } else {
+    actions.append(button('Play again', startMatch, 'act primary'), button('Main menu', renderMenu, 'act'))
+  }
+  actions.append(button('See the table', () => { resultClosed = true; render() }, 'act'))
   card.appendChild(actions)
   return card
 }
@@ -1679,7 +1952,7 @@ let resumeSaved: (() => void) | null = null          // restarts play after a sa
 interface Saved { table: TableData; wallBreak: number; resultClosed: boolean; showFinal: boolean }
 
 function saveMatch() {
-  if (!started) return
+  if (!started || online) return                     // an online game is kept by the room
   const s: Saved = { table: table.toData(), wallBreak, resultClosed, showFinal }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)) } catch { /* storage full or unavailable — play on unsaved */ }
 }
@@ -1743,4 +2016,12 @@ function continueGame() {
 }
 
 loadMatch()
-renderMenu()
+// opened from an invite link (…?room=K7Q2M): straight to joining that room
+const invited = new URLSearchParams(location.search).get('room')?.toUpperCase() ?? ''
+if (ROOM_SERVER && ROOM_CODE.test(invited)) {
+  inviteCode = invited
+  history.replaceState(null, '', location.pathname)
+  renderOnlineHome()
+} else {
+  renderMenu()
+}

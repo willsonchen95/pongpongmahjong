@@ -21,6 +21,32 @@ function runClock(room: RoomCore, now: { t: number }): Out[] {
 }
 
 describe('a room', () => {
+  it('one person answering a claim doesn’t give the others more time', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    // play on (people throw their newest tile, never claim) until both people are offered the same tile
+    let now = 0
+    for (let i = 0; i < 3000; i++) {
+      const t = room.s.table!
+      const p = t.phase
+      if (p.kind === 'over') break
+      if (p.kind === 'claims' && p.offers[0] && p.offers[1]) {
+        const deadline = room.s.wakeAt
+        room.handle('a', { type: 'answer', answer: { kind: 'pass' } }, now + 5000)
+        expect(room.s.wakeAt).toBe(deadline)
+        return
+      }
+      if (p.kind === 'turn' && t.humans[p.seat]) {
+        const hand = t.game.hands[p.seat]
+        room.handle(p.seat === 0 ? 'a' : 'b', { type: 'discard', tile: hand[hand.length - 1].id! }, now)
+      } else if (p.kind === 'claims') {
+        for (const s of [0, 1]) if (p.offers[s] && !p.answers[s]) room.handle(s === 0 ? 'a' : 'b', { type: 'answer', answer: { kind: 'pass' } }, now)
+      } else { now = room.s.wakeAt ?? now; room.tick(now) }
+    }
+    // (in the rare deal where it never happens, there's nothing to check)
+  })
+
   it('seats people in the order they join, with the first as host', () => {
     const room = new RoomCore(newRoom('ABCD', RULES))
     room.join('a', 'Alice', 0)

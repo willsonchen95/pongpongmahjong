@@ -27,6 +27,7 @@ export interface RoomState {
   table: TableData | null              // the game, once started
   ready: string[]                      // players who've pressed "Next hand"
   wakeAt: number | null                // when the room next has something to do on its own
+  waitKey?: string | null              // which wait on people wakeAt belongs to (see schedule)
   pauseAfterClaim: boolean             // the next wait includes the pause after a tile was taken
 }
 
@@ -43,7 +44,7 @@ export type ClientMsg =
 export interface SeatInfo { name: string; person: boolean; connected: boolean; host: boolean }
 export type ServerMsg =
   | { type: 'room'; code: string; you: number | null; seats: SeatInfo[]; started: boolean; rules: Rules }
-  | { type: 'state'; view: SeatView; events: TableEvent[] }
+  | { type: 'state'; view: SeatView; events: TableEvent[]; now: number }   // now: the room's clock, for countdowns
   | { type: 'error'; message: string }
 
 // A player's view of the table: everything on the table, but only their own hand (everyone's is
@@ -103,7 +104,7 @@ export class RoomCore {
       this.table.humans[seat] = true
       this.schedule(now)
     }
-    return [...this.lobbyToAll(), ...this.statesToAll()]
+    return [...this.lobbyToAll(), ...this.statesToAll(now)]
   }
 
   leave(playerId: string, now: number): Out[] {
@@ -120,7 +121,7 @@ export class RoomCore {
     }
     if (this.s.hostId === playerId) this.s.hostId = this.connectedPeople()[0]?.playerId ?? null
     this.s.ready = this.s.ready.filter(id => id !== playerId)
-    return [...this.lobbyToAll(), ...this.statesToAll()]
+    return [...this.lobbyToAll(), ...this.statesToAll(now)]
   }
 
   handle(playerId: string, m: ClientMsg, now: number): Out[] {
@@ -134,7 +135,7 @@ export class RoomCore {
       this.s.rules = m.rules
       this.table = new Table(m.rules, this.s.seats.map(x => !!x?.connected))
       this.newHand(now)
-      return [...this.lobbyToAll(), ...this.statesToAll()]
+      return [...this.lobbyToAll(), ...this.statesToAll(now)]
     }
     if (!t) return [{ to: playerId, msg: { type: 'error', message: 'The game hasn’t started yet.' } }]
     let ok = true
@@ -147,12 +148,12 @@ export class RoomCore {
       if (t.phase.kind !== 'over' || t.match.over) return []
       if (!this.s.ready.includes(playerId)) this.s.ready.push(playerId)
       if (this.connectedPeople().every(x => this.s.ready.includes(x.playerId))) this.newHand(now)
-      return this.statesToAll()
+      return this.statesToAll(now)
     }
     if (!ok) return [{ to: playerId, msg: { type: 'error', message: 'That move isn’t possible right now.' } }]
     this.collect()
     this.schedule(now)
-    return this.statesToAll()
+    return this.statesToAll(now)
   }
 
   // ---------- The room running the game ----------
@@ -170,7 +171,7 @@ export class RoomCore {
     else for (const seat of t.waitingFor()) t.autoPlay(seat)    // out of time
     this.collect()
     this.schedule(now)
-    return this.statesToAll()
+    return this.statesToAll(now)
   }
 
   private newHand(now: number) {
@@ -204,10 +205,17 @@ export class RoomCore {
     if (!t || !this.connectedPeople().length) { this.s.wakeAt = null; return }
     const p = t.phase
     const pause = this.s.pauseAfterClaim ? CLAIM_PAUSE_MS : 0
+    // a wait on people keeps its deadline while it's the same wait (one person answering a claim
+    // doesn't give the others more time, nor does someone reconnecting)
+    const keep = (key: string, ms: number) => {
+      if (this.s.waitKey !== key || this.s.wakeAt === null) this.s.wakeAt = now + ms
+      this.s.waitKey = key
+    }
+    if (p.kind === 'turn' && t.humans[p.seat]) return keep(`turn:${p.seat}:${t.pool.length}:${t.game.wall.length}`, TURN_MS + pause)
+    if (p.kind === 'claims') return keep(`claims:${p.from}:${p.tile.id}:${p.robbing}:${t.pool.length}`, CLAIM_MS)
+    this.s.waitKey = null
     if (p.kind === 'dealing') this.s.wakeAt ??= now + INTRO_MS
-    else if (p.kind === 'turn' && !t.humans[p.seat]) this.s.wakeAt = now + BOT_MS + pause
-    else if (p.kind === 'turn') this.s.wakeAt = now + TURN_MS + pause
-    else if (p.kind === 'claims') this.s.wakeAt = now + CLAIM_MS
+    else if (p.kind === 'turn') this.s.wakeAt = now + BOT_MS + pause
     else this.s.wakeAt = null                                  // over: waits for "Next hand"
   }
 
@@ -225,13 +233,13 @@ export class RoomCore {
     return { type: 'room', code: this.s.code, you: you < 0 ? null : you, seats, started: !!this.table, rules: this.s.rules }
   }
 
-  private statesToAll(): Out[] {
+  private statesToAll(now: number): Out[] {
     const events = this.pendingEvents
     this.pendingEvents = []
     if (!this.table) return []
     return this.connectedPeople().map(p => {
       const seat = this.seatOf(p.playerId)
-      return { to: p.playerId, msg: { type: 'state', view: this.viewFor(seat), events: events.filter(e => e.type !== 'yourTurn' || e.seat === seat) } }
+      return { to: p.playerId, msg: { type: 'state', view: this.viewFor(seat), now, events: events.filter(e => e.type !== 'yourTurn' || e.seat === seat) } }
     })
   }
 
