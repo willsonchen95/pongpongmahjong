@@ -133,6 +133,29 @@ describe('a room', () => {
     expect(room.join('c', 'Carol', now.t)[0].msg).toMatchObject({ type: 'error' })   // the game's under way
   })
 
+  it('after a game: newcomers can join, and Play again frees the seats of anyone who left', () => {
+    const now = { t: 0 }
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    room.leave('b', 0)                                       // Bob leaves; a bot plays his seat
+    for (let i = 0; i < 20000 && !room.s.table!.match.over; i++) {
+      const t = room.s.table!
+      if (t.phase.kind === 'over') { room.handle('a', { type: 'ready' }, now.t); continue }
+      const p = t.phase
+      if (p.kind === 'turn' && p.seat === 0) { const h = t.game.hands[0]; room.handle('a', { type: 'discard', tile: h[h.length - 1].id! }, now.t); continue }
+      if (p.kind === 'claims' && p.offers[0] && !p.answers[0]) { room.handle('a', { type: 'answer', answer: { kind: 'pass' } }, now.t); continue }
+      now.t = room.s.wakeAt ?? now.t
+      room.tick(now.t)
+    }
+    expect(room.s.table!.match.over).toBe(true)
+    const joined = room.join('c', 'Carol', now.t)
+    expect(joined.find(o => o.to === 'c')?.msg.type).toBe('room')   // in, not turned away
+    room.handle('a', { type: 'start', rules: RULES }, now.t)
+    expect(room.lobbyFor('a')).toMatchObject({ started: true, seats: [{ name: 'Alice' }, { person: false }, { name: 'Carol' }, { person: false }] })
+    expect(room.s.table!.humans).toEqual([true, false, true, false])
+  })
+
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))

@@ -2065,9 +2065,10 @@ function finalCard(): HTMLElement {
   card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
   const actions = el('div', 'result-actions')
   if (online) {                                        // the host starts the next game; everyone else waits
-    const host = online.room?.seats[online.seat ?? -1]?.host
-    if (host) actions.append(button('Play again', () => online?.start(settings), 'act primary'))
-    else actions.append(el('div', 'result-next', 'The host can start another game.'))
+    const room = online.room, host = room?.seats[online.seat ?? -1]?.host
+    const hostName = room?.seats.find(s => s.host)?.name
+    if (host && room) actions.append(button('Play again', () => online?.start(room.rules), 'act primary'))   // same rules as this game
+    else actions.append(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
     actions.append(button('Leave room', leaveOnline, 'act'))
   } else {
     actions.append(button('Play again', startMatch, 'act primary'), button('Main menu', renderMenu, 'act'))

@@ -92,7 +92,8 @@ export class RoomCore {
     name = name.trim().slice(0, 16) || 'Player'
     let seat = this.seatOf(playerId)
     if (seat < 0) {
-      if (this.s.table) return [{ to: playerId, msg: { type: 'error', message: 'This game has already started.' } }]
+      // newcomers can take a free seat in the lobby, or between games (in time for "Play again")
+      if (this.table && !this.table.match.over) return [{ to: playerId, msg: { type: 'error', message: 'This game has already started.' } }]
       seat = this.s.seats.findIndex(x => !x)
       if (seat < 0) return [{ to: playerId, msg: { type: 'error', message: 'This room is full.' } }]
       this.s.seats[seat] = { playerId, name, connected: true }
@@ -133,6 +134,8 @@ export class RoomCore {
       if (playerId !== this.s.hostId) return [{ to: playerId, msg: { type: 'error', message: 'Only the host can start.' } }]
       if (t && !t.match.over) return [{ to: playerId, msg: { type: 'error', message: 'A game is already under way.' } }]
       this.s.rules = m.rules
+      // a new game after one finished: anyone who left in the meantime gives up their seat
+      if (t) this.s.seats = this.s.seats.map(x => (x?.connected ? x : null))
       this.table = new Table(m.rules, this.s.seats.map(x => !!x?.connected))
       this.newHand(now)
       return [...this.lobbyToAll(), ...this.statesToAll(now)]
