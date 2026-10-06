@@ -16,16 +16,18 @@ const WIND_CHARS = ['東', '南', '西', '北']
 const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
 const fmt = (n: number) => n.toLocaleString('en-US')
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
+const points = (n: number) => (n < 0 ? `−${fmt(-n)}` : fmt(n))      // a player's balance
 
 // ---------- The match: several hands, scores carried over, dealer and round wind moving on ----------
-// Everyone starts at 0; each win moves points from the payers to the winner, so scores always sum to 0.
+// Everyone starts with the same stack of points; each win moves points from the payers to the winner.
+// If anyone's points drop below zero they're bust and the game ends there.
 // Before the game the table agrees a minimum faan: a complete hand scoring less can't be declared.
 
 // What the players agree before a game; remembered for next time.
-interface Settings { rounds: number; minFaan: number; tips: boolean }
+interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number }
 const SETTINGS_KEY = 'mahjong-settings'
 let settings: Settings = (() => {
-  const fallback = { rounds: 1, minFaan: 1, tips: true }
+  const fallback = { rounds: 1, minFaan: 1, tips: true, startPoints: 1000 }
   try { return { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') } } catch { return fallback }
 })()
 function saveSettings() {
@@ -44,7 +46,9 @@ interface HandResult {
 interface Match {
   rounds: number                       // 1 = East round only, 4 = full game
   minFaan: number                      // the agreed minimum to declare a win
-  scores: number[]
+  startPoints: number                  // everyone's stack at the start
+  scores: number[]                     // each player's points now
+  bust: number | null                  // who ran out of points, ending the game early
   roundWind: number                    // 0 = East round …
   dealer: number                       // who deals the next/current hand
   passes: number                       // times the deal has passed on; every 4 the round wind moves on
@@ -53,8 +57,8 @@ interface Match {
   over: boolean
 }
 const newMatch = (s: Settings): Match => ({
-  rounds: s.rounds, minFaan: s.minFaan, scores: [0, 0, 0, 0],
-  roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
+  rounds: s.rounds, minFaan: s.minFaan, startPoints: s.startPoints, scores: [0, 0, 0, 0].map(() => s.startPoints),
+  bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
 })
 let match: Match = newMatch(settings)
 
@@ -132,7 +136,10 @@ function endHand(winner: number | null, from: number | null, input?: ScoreInput)
     match.passes++
     if (match.passes % 4 === 0) match.roundWind++
   }
-  match.over = match.roundWind >= match.rounds
+  // below zero is bust (the lowest, if a self-drawn win sinks two at once): the game stops here
+  const broke = [0, 1, 2, 3].filter(p => match.scores[p] < 0).sort((a, b) => match.scores[a] - match.scores[b])
+  match.bust = broke[0] ?? null
+  match.over = match.roundWind >= match.rounds || match.bust !== null
 }
 
 // How a player would be scored winning right now with these concealed tiles, including the special
@@ -601,7 +608,7 @@ async function openPause() {
   if (paused || coachOpen) return
   paused = true
   music.duck(true)
-  const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your score ${signed(match.scores[HUMAN])}`
+  const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`
   const choice = await dialog('Game paused', where, [
     { label: 'Keep playing', value: 'play', cls: 'primary' },
     { label: 'Main menu', value: 'menu', cls: '' },
@@ -923,7 +930,7 @@ function renderMenu() {
   const cards = el('div', 'menu-cards')
   if (started && !match.over) {
     cards.appendChild(menuCard(MENU_ICONS.resume, 'Continue game',
-      `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your score ${signed(match.scores[HUMAN])}`, render, 'primary'))
+      `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`, render, 'primary'))
   }
   const fresh = !(started && !match.over)
   cards.append(
@@ -1000,7 +1007,13 @@ function renderSetup() {
       { value: false, label: 'Off', sub: 'I know how to play' },
     ], settings.tips, v => pick({ tips: v })))
 
-  card.append(el('p', 'setup-help', 'Everyone starts at 0 points. Winners collect points from whoever pays; the highest score at the end wins the game.'))
+  card.append(el('h2', 'setup-q', 'Starting points'),
+    el('p', 'setup-help', 'Everyone starts with this many points. Winners collect from whoever pays; if anyone drops below zero the game ends early. Most points at the end wins.'),
+    choiceRow([
+      { value: 1000, label: '1,000', sub: 'Lively — one big hand can end it' },
+      { value: 2000, label: '2,000', sub: 'Room for a few bad hands' },
+      { value: 5000, label: '5,000', sub: 'Plays to the end almost always' },
+    ], settings.startPoints, v => pick({ startPoints: v })))
   const actions = el('div', 'setup-actions')
   actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(startMatch), 'act primary big'))
   card.appendChild(actions)
@@ -1099,7 +1112,7 @@ function sideLayer(seat: number): HTMLElement {
   const label = el('div', labelCls)
   const w = seatWind(game, seat)
   label.append(
-    el('div', 'wl-name', `${NAMES[seat]} · ${signed(match.scores[seat])}`),
+    el('div', 'wl-name', `${NAMES[seat]} · ${points(match.scores[seat])}`),
     el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`),
   )
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
@@ -1557,7 +1570,9 @@ function scoringSection(inGame: boolean): HTMLElement {
   s.append(el('h3', 'sub-h', 'What faan are worth'), table,
     para('If you win on someone’s thrown-away tile, ', el('strong', '', 'they pay'), ' the full amount. If you draw it yourself, ',
       el('strong', '', 'all three pay half'), ' each.'),
-    para('Everyone starts at 0. The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'))
+    para('Everyone starts with the same points (',
+      el('strong', '', inGame ? fmt(match.startPoints) : '1,000, 2,000 or 5,000'),
+      '). If anyone drops below zero, the game ends early. The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'))
   return s
 }
 
@@ -1648,7 +1663,7 @@ function scoreTable(deltas: number[]): HTMLElement {
     t.append(
       el('span', 'st-name' + (p === HUMAN ? ' you' : ''), NAMES[p]),
       el('span', 'st-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '—' : signed(d)),
-      el('span', 'st-total', signed(match.scores[p])),
+      el('span', 'st-total' + (match.scores[p] < 0 ? ' bust' : ''), points(match.scores[p])),
     )
   }
   return t
@@ -1737,7 +1752,8 @@ function resultCard(): HTMLElement {
 
   // what happens next
   let next: string
-  if (match.over) next = 'That was the last hand of the game.'
+  if (match.bust !== null) next = `${match.bust === HUMAN ? 'You have' : `${NAMES[match.bust]} has`} run out of points — the game ends here.`
+  else if (match.over) next = 'That was the last hand of the game.'
   else if (r.dealerStays) next = `${NAMES[game.dealer]} ${game.dealer === HUMAN ? 'stay' : 'stays'} dealer for the next hand.`
   else next = `Next hand: ${NAMES[match.dealer]} ${match.dealer === HUMAN ? 'deal' : 'deals'}${match.roundWind !== game.roundWind ? ` — the ${SEATS[match.roundWind]} round begins` : ''}.`
   card.appendChild(el('div', 'result-next', next))
@@ -1761,10 +1777,13 @@ function finalCard(): HTMLElement {
   const places = ['1st', '2nd', '3rd', '4th']
   order.forEach((p, i) => {
     const row = el('div', 'standing' + (p === HUMAN ? ' you' : '') + (i === 0 ? ' first' : ''))
-    row.append(el('span', 'place', places[i]), el('span', 'who', NAMES[p]), el('span', 'pts', `${signed(match.scores[p])} pts`))
+    const gain = match.scores[p] - match.startPoints
+    row.append(el('span', 'place', places[i]), el('span', 'who', NAMES[p]),
+      el('span', 'pts', `${points(match.scores[p])} pts`), el('span', 'gain ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), `(${signed(gain)})`))
     list.appendChild(row)
   })
-  card.append(list, el('div', 'result-next', `${match.hand} hands played`))
+  const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} ran out of points, so the game ended early`
+  card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
   const actions = el('div', 'result-actions')
   actions.append(button('Play again', startMatch, 'act primary'), button('Main menu', renderMenu, 'act'),
     button('See the table', () => { resultClosed = true; render() }, 'act'))
