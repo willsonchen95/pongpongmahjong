@@ -1161,8 +1161,10 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    --T: min(94cqw, calc(100dvh - 470px), 980px);
+    --T: min(92cqw, calc(100dvh - 470px), 980px);
     margin: 0;
+    position: relative;
+    top: calc(var(--T) * -0.06);                          /* the tilt draws it a little low: even out the gaps */
   }
   .table { transform: rotateX(14deg); }
 
