@@ -1642,6 +1642,7 @@ function showBanner(b: Banner, over: HTMLElement) {
 // Everyone's score change for the hand and their new total, best first.
 function scoreTable(deltas: number[]): HTMLElement {
   const t = el('div', 'score-table')
+  t.append(el('span', 'st-head'), el('span', 'st-head', 'This hand'), el('span', 'st-head', 'Total'))
   for (const p of standings()) {
     const d = deltas[p]
     t.append(
@@ -1651,6 +1652,43 @@ function scoreTable(deltas: number[]): HTMLElement {
     )
   }
   return t
+}
+
+// "Who pays, and why": the payment rule that applied this hand in one sentence, then each player's
+// share with the reason — so a minus score never comes as a surprise.
+function paymentBox(r: HandResult, w: number): HTMLElement {
+  const who = (p: number) => (p === HUMAN ? 'You' : NAMES[p])
+  const pays = (p: number) => (p === HUMAN ? 'you pay' : `${NAMES[p]} pays`)
+  const points = payout(r.faan)
+  const worth = `${r.faan} faan is worth ${fmt(points)} points.`
+  let rule: string
+  if (r.from === null) {
+    rule = `${worth} ${who(w)} drew the winning tile from the wall, so nobody gave it away — the other three share the cost and each pay half (${fmt(points / 2)}).`
+  } else if (wonByRobbing()) {
+    rule = `${worth} ${who(w)} robbed ${possessive(r.from)} kong: the tile added to the pong finished the hand. That counts like throwing away the winning tile, so ${pays(r.from)} the full ${fmt(points)} and the others pay nothing.`
+  } else {
+    rule = `${worth} ${who(r.from)} threw away the winning tile, so ${pays(r.from)} the full ${fmt(points)} — the others pay nothing.`
+  }
+
+  const box = el('div', 'pay-box')
+  box.append(el('h4', '', 'Who pays, and why'), el('p', 'pay-rule', rule))
+  const rows = el('div', 'pay-rows')
+  for (const p of [w, ...[1, 2, 3].map(k => (w + k) % 4)]) {
+    const d = r.deltas[p]
+    let why: string
+    const lower = (q: number) => (q === HUMAN ? 'you' : NAMES[q])
+    if (p === w) why = r.from === null ? 'won — collected half from each of the other three' : `won — collected it all from ${lower(r.from)}`
+    else if (r.from === null) why = `paid half to ${lower(w)}`
+    else if (p === r.from) why = wonByRobbing() ? 'paid it all — the kong was robbed' : 'paid it all — threw away the winning tile'
+    else why = 'paid nothing — didn’t throw the winning tile'
+    rows.append(
+      el('span', 'pay-name' + (p === HUMAN ? ' you' : ''), who(p)),
+      el('span', 'pay-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '0' : signed(d)),
+      el('span', 'pay-why', why),
+    )
+  }
+  box.appendChild(rows)
+  return box
 }
 
 // The end-of-hand card: who won (or a draw), the winning hand, its faan, and who paid whom.
@@ -1688,16 +1726,14 @@ function resultCard(): HTMLElement {
     if (r.items.length === 0) faan.append(el('span', '', 'No special patterns'), el('strong', '', '0'))
     for (const item of r.items) faan.append(el('span', '', item.name), el('strong', '', `+${item.faan}`))
     faan.append(el('span', 'total', r.limit ? 'Total (limit hand)' : 'Total'), el('strong', 'total', `${r.faan} faan`))
-    const paid = r.from === null
-      ? `Everyone else pays ${fmt(-r.deltas[(w + 1) % 4])}`
-      : `${r.from === HUMAN ? 'You pay' : `${NAMES[r.from]} pays`} ${fmt(-r.deltas[r.from])}`
-    faan.appendChild(el('div', 'paid', paid))
+    faan.appendChild(el('div', 'paid', `${r.faan} faan = ${fmt(payout(r.faan))} points`))
     cols.appendChild(faan)
   }
   const scores = el('div', 'score-box')
   scores.append(el('h4', '', 'Scores'), scoreTable(r.deltas))
   cols.appendChild(scores)
   card.appendChild(cols)
+  if (w !== null) card.appendChild(paymentBox(r, w))
 
   // what happens next
   let next: string

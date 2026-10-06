@@ -13,7 +13,7 @@ export function setMuted(m: boolean) {
 }
 
 function audio(): AudioContext | null {
-  if (muted) return null
+  if (muted || document.hidden) return null           // the bots play on in a hidden tab, silently
   if (!ctx) ctx = new AudioContext()
   if (ctx.state === 'suspended') void ctx.resume()
   return ctx
@@ -43,7 +43,7 @@ function tone(a: AudioContext, at: number, freq: number, length: number, gain: n
 }
 
 function say(word: string) {
-  if (muted || typeof speechSynthesis === 'undefined') return
+  if (muted || document.hidden || typeof speechSynthesis === 'undefined') return
   speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(word)
   u.rate = 1.1; u.pitch = 1.1; u.volume = 0.9
@@ -106,12 +106,30 @@ function restartTrack(fresh = false) {
   })
 }
 
+// Switching to another tab silences the game at once (a hidden tab's timers are slowed, so no
+// fade-out); coming back fades the music in again from where it stopped.
+let pausedByHiding = false
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
+    if (track && !track.paused) {
+      clearInterval(fade)
+      track.pause()
+      track.volume = 0
+      pausedByHiding = true
+    }
+  } else if (pausedByHiding) {
+    pausedByHiding = false
+    if (!musicOff) track?.play().then(() => fadeTo(musicVolume(), 1000)).catch(() => { /* not allowed yet */ })
+  }
+})
+
 export const music = {
   isOn: () => !musicOff,
   // Start (or keep) playing. Safe to call often; browsers refuse until the player has clicked
   // something, in which case the next call tries again.
   start() {
-    if (musicOff) return
+    if (musicOff || document.hidden) return
     if (!track) track = newTrack()
     if (!track.paused) return
     track.play().then(() => fadeTo(musicVolume(), 1500)).catch(() => { /* not allowed yet */ })
