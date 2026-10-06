@@ -1,43 +1,64 @@
 // Smooth movement between screens. The table is rebuilt from scratch on every change, so on its own
 // a tile would vanish from one spot and pop up in another. render() calls capture() just before
 // rebuilding and play() just after. Tiles are tagged with data-key (which physical tile) and
-// data-place (where it lies: 'rack-0', 'pool', 'meld-2' …):
+// data-place (where it lies: 'rack-0', 'pool', 'meld-2' …); wall stacks with data-stack and
+// data-height (how many tiles it still holds):
 //  - a tile that changed place flies there along a gentle arc, as a flat "ghost" over the page
 //    (the table is tilted in 3D, so the real tile waits hidden until the ghost lands on it);
 //  - a tile that only shifted within your flat rack slides across;
-//  - a new tile flies in from wherever `origin` says it came from, or drops into your rack.
+//  - tiles taken off the wall lift from the very stack they came from: into your rack (turning
+//    face up on the way), or face down to whoever is drawing;
+//  - any other new tile flies in from wherever `origin` says it came from, or drops into your rack.
 
 interface Seen { rect: DOMRect; face: string; place: string }
+interface Stack { rect: DOMRect; height: number }
 interface Flight { ghost: HTMLElement; anim: Animation }
 
+export interface Hooks {
+  origin(e: HTMLElement): DOMRect | null   // where a new tile (not from the wall) comes from
+  wallSink(): DOMRect | null               // where face-down tiles off the wall go (a bot's rack)
+}
+
 let before = new Map<string, Seen>()
+let stacks = new Map<string, Stack>()
 let hadTable = false                       // the last screen was the table (not the menu)
 const inFlight = new Map<string, Flight>()
 
 const FLY_MS = 420
 const SLIDE_MS = 260
+const STAGGER_MS = 45                      // between tiles taken together (four at a time in the deal)
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const inTable = (e: Element) => !!e.closest('.table')
 const faceOf = (e: Element) => (e.querySelector('.face.top') ?? e).innerHTML
 
-// Where a tile that wasn't on screen before comes from: a screen rectangle to fly in from, or null.
-export type Origin = (e: HTMLElement) => DOMRect | null
-
 export function capture(root: ParentNode) {
   before = new Map()
+  stacks = new Map()
   hadTable = !!root.querySelector('.table')
   if (!hadTable) return
   for (const e of root.querySelectorAll<HTMLElement>('[data-key]')) {
     before.set(e.dataset.key!, { rect: e.getBoundingClientRect(), face: faceOf(e), place: e.dataset.place ?? '' })
   }
+  for (const e of root.querySelectorAll<HTMLElement>('[data-stack]')) {
+    stacks.set(e.dataset.stack!, { rect: e.getBoundingClientRect(), height: Number(e.dataset.height) })
+  }
 }
 
-export function play(root: ParentNode, origin: Origin) {
+export function play(root: ParentNode, hooks: Hooks) {
   if (document.hidden) {                   // a background tab doesn't run animations: land everything now
     for (const f of inFlight.values()) f.anim.finish()
     return
   }
   if (!hadTable || reduced()) return       // coming from the menu: everything is simply there
+
+  // one entry per tile that just left the wall, at the stack it left from
+  const taken: DOMRect[] = []
+  for (const e of root.querySelectorAll<HTMLElement>('[data-stack]')) {
+    const was = stacks.get(e.dataset.stack!)
+    if (was) for (let n = Number(e.dataset.height); n < was.height; n++) taken.push(was.rect)
+  }
+  let delay = 0
+
   for (const e of root.querySelectorAll<HTMLElement>('[data-key]')) {
     const key = e.dataset.key!
     const was = before.get(key)
@@ -46,10 +67,20 @@ export function play(root: ParentNode, origin: Origin) {
       if (!inTable(e)) slide(e, was.rect)
       continue
     }
-    const from = was?.rect ?? origin(e)
-    if (from) fly(key, e, from, was?.face ?? faceOf(e))
+    if (was) { fly(key, e, was.rect, was.face); continue }
+    if (e.dataset.place === 'rack-0' && taken.length) {        // drawn or dealt to you: off the wall, turning over
+      fly(key, e, taken.shift()!, '', faceOf(e), delay)
+      delay += STAGGER_MS
+      continue
+    }
+    const from = hooks.origin(e)
+    if (from) fly(key, e, from, faceOf(e))
     else if (!inTable(e)) drop(e)
   }
+
+  // the rest went face down to someone else's rack
+  const sink = taken.length ? hooks.wallSink() : null
+  if (sink) for (const from of taken) { flyAway(from, sink, delay); delay += STAGGER_MS }
 }
 
 // FLIP within a flat row: start where it was, glide to where it is.
@@ -61,15 +92,37 @@ function slide(e: HTMLElement, from: DOMRect) {
     { duration: SLIDE_MS, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' })
 }
 
-// A new tile in your rack: it drops in from just above.
+// A new tile in your rack with nowhere to come from: it drops in from just above.
 function drop(e: HTMLElement) {
   e.animate([{ opacity: 0, transform: 'translateY(-28px)' }, { opacity: 1, transform: 'none' }],
     { duration: 320, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' })
 }
 
-// A flat copy of the tile flies from `from` to the real tile's place along an arc, growing a little
-// at the top of the arc as if lifted, then the real tile appears and settles.
-function fly(key: string, target: HTMLElement, from: DOMRect, face: string) {
+function ghostAt(from: DOMRect, face: string): HTMLElement {
+  const g = document.createElement('div')
+  g.className = 'ghost-tile' + (face.trim() ? '' : ' back')
+  g.innerHTML = face
+  Object.assign(g.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` })
+  document.body.appendChild(g)
+  return g
+}
+
+// The path from one rectangle to another: lifted at the top of the arc, growing a little as if
+// picked up. `end` adds to the last keyframe (to fade out, say).
+function arc(from: DOMRect, to: DOMRect, end: Keyframe = {}): Keyframe[] {
+  const dx = to.left - from.left, dy = to.top - from.top
+  const sx = to.width / from.width, sy = to.height / from.height
+  const lift = Math.min(70, Math.hypot(dx, dy) * 0.18)
+  return [
+    { transform: 'translate(0, 0) scale(1, 1)' },
+    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - lift}px) scale(${((1 + sx) / 2) * 1.12}, ${((1 + sy) / 2) * 1.12})`, offset: 0.45 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, ...end },
+  ]
+}
+
+// A flat copy of the tile flies from `from` to the real tile's place, then the real tile appears
+// and settles. With `reveal`, the copy starts face down and turns face up halfway.
+function fly(key: string, target: HTMLElement, from: DOMRect, face: string, reveal = '', delay = 0) {
   const to = target.getBoundingClientRect()
   if (to.width === 0) return
   const old = inFlight.get(key)
@@ -78,21 +131,15 @@ function fly(key: string, target: HTMLElement, from: DOMRect, face: string) {
     old.anim.cancel()
     old.ghost.remove()
   }
-  const g = document.createElement('div')
-  g.className = 'ghost-tile' + (face.trim() ? '' : ' back')
-  g.innerHTML = face
-  Object.assign(g.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` })
-  document.body.appendChild(g)
+  const g = ghostAt(from, face)
   target.style.visibility = 'hidden'
-
-  const dx = to.left - from.left, dy = to.top - from.top
-  const sx = to.width / from.width, sy = to.height / from.height
-  const lift = Math.min(70, Math.hypot(dx, dy) * 0.18)
-  const anim = g.animate([
-    { transform: 'translate(0, 0) scale(1, 1)' },
-    { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - lift}px) scale(${((1 + sx) / 2) * 1.12}, ${((1 + sy) / 2) * 1.12})`, offset: 0.45 },
-    { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
-  ], { duration: FLY_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' })
+  const anim = g.animate(arc(from, to), { duration: FLY_MS, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
+  if (reveal) {
+    // turn over at the top of the arc: squash flat, swap to the face, open out again
+    g.animate([{ scale: '1 1' }, { scale: '0 1', offset: 0.5 }, { scale: '1 1' }],
+      { duration: 160, delay: delay + FLY_MS * 0.35, easing: 'ease-in-out' })
+    setTimeout(() => { g.classList.remove('back'); g.innerHTML = reveal }, delay + FLY_MS * 0.35 + 80)
+  }
   inFlight.set(key, { ghost: g, anim })
   anim.onfinish = () => {
     g.remove()
@@ -102,4 +149,11 @@ function fly(key: string, target: HTMLElement, from: DOMRect, face: string) {
     live.style.visibility = ''
     live.animate([{ transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 180, easing: 'ease-out' })
   }
+}
+
+// A face-down tile off the wall to another player's rack, where it melts into their hand.
+function flyAway(from: DOMRect, to: DOMRect, delay: number) {
+  const g = ghostAt(from, '')
+  g.animate(arc(from, to, { opacity: 0.2 }), { duration: FLY_MS, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
+    .onfinish = () => g.remove()
 }

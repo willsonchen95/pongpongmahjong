@@ -450,7 +450,7 @@ async function runIntro() {
   for (const batch of [4, 4, 4, 1]) {
     for (const p of order) {
       it.shown[p] += batch
-      flyTiles(it.breakSide, p, batch)
+      dealingTo = p                                    // the tiles fly from the wall to them as it redraws
       sfx.deal()
       refresh()
       await wait(260)
@@ -509,30 +509,6 @@ function tableDice(it: Intro): HTMLElement {
   wrap.appendChild(row)
   if (!it.rolling) wrap.appendChild(el('div', 'dice-total', String(diceTotal(it))))
   return wrap
-}
-
-// Small face-down tiles sliding from the broken wall to a player's rack.
-// Positions are fractions of the table's on-screen box (your rack is just below the table).
-const WALL_SPOT: [number, number][] = [[0.5, 0.7], [0.72, 0.5], [0.5, 0.28], [0.28, 0.5]]
-const RACK_SPOT: [number, number][] = [[0.5, 1.12], [0.96, 0.5], [0.5, 0.04], [0.04, 0.5]]
-function flyTiles(fromSide: number, to: number, n: number) {
-  const scene = document.querySelector('.scene')
-  if (!scene) return
-  const r = scene.getBoundingClientRect()
-  const at = ([fx, fy]: [number, number]) => [r.left + r.width * fx, r.top + r.height * fy]
-  const [x0, y0] = at(WALL_SPOT[fromSide]), [x1, y1] = at(RACK_SPOT[to])
-  for (let i = 0; i < n; i++) {
-    const t = el('div', 'flying-tile')
-    const off = (i - (n - 1) / 2) * 16
-    t.style.left = `${x0}px`
-    t.style.top = `${y0}px`
-    document.body.appendChild(t)
-    t.animate(
-      [{ transform: `translate(calc(-50% + ${off}px), -50%) scale(0.9)`, opacity: 0.95 },
-       { transform: `translate(calc(-50% + ${x1 - x0 + off}px), calc(-50% + ${y1 - y0}px)) scale(1.1)`, opacity: 0.9 }],
-      { duration: 380, delay: i * 25, easing: 'cubic-bezier(0.3, 0.7, 0.4, 1)', fill: 'forwards' },
-    ).onfinish = () => t.remove()
-  }
 }
 
 function showStandings() {
@@ -827,16 +803,31 @@ function tag<T extends HTMLElement>(e: T, t: Tile, place: string): T {
   return e
 }
 
-// Where a tile that wasn't on screen before comes from: a bot's rack (its discards, sets, flowers),
-// or yours. A small tile-sized spot in the middle of that rack.
-function tileOrigin(e: HTMLElement): DOMRect | null {
-  const [what, seatText] = (e.dataset.place ?? '').split('-')
-  const seat = what === 'pool' ? lastDiscard : Number(seatText)
-  if (seat === null || Number.isNaN(seat) || (what !== 'pool' && what !== 'meld' && what !== 'bonus')) return null
+// A tile-sized spot in the middle of a player's rack, on screen.
+function rackSpot(seat: number, w: number, h: number): DOMRect | null {
   const rack = seat === HUMAN ? document.querySelector('.player-rack') : document.querySelector(`.layer[data-seat="${seat}"] .rack-row`)
   if (!rack) return null
-  const r = rack.getBoundingClientRect(), size = e.getBoundingClientRect()
-  return new DOMRect(r.left + r.width / 2 - size.width / 2, r.top + r.height / 2 - size.height / 2, size.width, size.height)
+  const r = rack.getBoundingClientRect()
+  return new DOMRect(r.left + r.width / 2 - w / 2, r.top + r.height / 2 - h / 2, w, h)
+}
+
+// Where tiles appearing on the table come from, for motion.ts: a new discard, set or flower comes
+// from its owner's rack; tiles off the wall go to whoever is being dealt to or drawing.
+let dealingTo = 0
+const motionHooks: motion.Hooks = {
+  origin(e) {
+    const [what, seatText] = (e.dataset.place ?? '').split('-')
+    const seat = what === 'pool' ? lastDiscard : Number(seatText)
+    if (seat === null || Number.isNaN(seat) || (what !== 'pool' && what !== 'meld' && what !== 'bonus')) return null
+    const size = e.getBoundingClientRect()
+    return rackSpot(seat, size.width, size.height)
+  },
+  wallSink() {
+    const seat = intro ? dealingTo : game.current
+    if (seat === HUMAN) return null                    // yours fly to the actual tiles in your rack
+    const stack = document.querySelector('[data-stack]')?.getBoundingClientRect()
+    return stack ? rackSpot(seat, stack.width, stack.height) : null
+  },
 }
 
 function tileEl(tile: Tile, cls = '', onClick?: () => void): HTMLElement {
@@ -1109,9 +1100,10 @@ function wallRow(side: number): HTMLElement {
   for (let j = 0; j < 18; j++) {
     const k = side * 18 + j
     const height = Number(present(2 * k)) + Number(present(2 * k + 1))
-    if (height === 2) row.appendChild(box('down2', 1, 1.34, 1.1))
-    else if (height === 1) row.appendChild(box('down1', 1, 1.34, 0.55))
-    else row.appendChild(el('div', 'stack-gap'))
+    const stack = height === 2 ? box('down2', 1, 1.34, 1.1) : height === 1 ? box('down1', 1, 1.34, 0.55) : el('div', 'stack-gap')
+    stack.dataset.stack = String(k)                    // motion.ts flies tiles taken from it to whoever drew them
+    stack.dataset.height = String(height)
+    row.appendChild(stack)
   }
   return row
 }
@@ -1649,7 +1641,7 @@ function render() {
   app.appendChild(layout)
 
   if (game.over && !resultClosed) main.appendChild(showFinal ? finalCard() : resultCard())
-  motion.play(app, tileOrigin)
+  motion.play(app, motionHooks)
   music.start()                                      // carries on (or resumes, e.g. via Continue game)
   if (!coachOpen && !paused) music.duck(game.over && !resultClosed)   // quieter while the result card is showing
   if (celebrate) { celebrate = false; main.appendChild(confetti()) }
