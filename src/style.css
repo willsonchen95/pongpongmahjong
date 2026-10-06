@@ -1276,7 +1276,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .hm-chip, .hm-way { padding: 3px 9px; font-size: 0.85rem; }
 
   /* the claim pop-up: full width, buttons share each row */
-  .claim-card { width: calc(100vw - 16px); max-width: none; top: 120px; bottom: auto; padding: 12px 10px 14px; border-width: 3px; }   /* over the table, leaving your hand in view */
+  .claim-card { width: calc(100vw - 16px); max-width: none; top: auto; bottom: calc(var(--above-rack, 190px) + 8px); padding: 12px 10px 14px; border-width: 3px; }   /* just above your hand, so you can check it while deciding */
   .claim-head { gap: 10px; margin-bottom: 10px; font-size: 1.15rem; }
   .tile.claim-tile { width: 44px; height: 59px; border-radius: 6px; }
   .claim-options { gap: 8px; }

@@ -1896,6 +1896,8 @@ function renderTable() {
   partsBefore = partsNow
   stage('build', t); t = performance.now()
   void app.offsetHeight                               // (lay the page out now, so the timing below is the animations alone)
+  // (upright phones stand the pong/chi/kong pop-up just above your hand: see .claim-card in style.css)
+  if (offer && sh.rack) main.style.setProperty('--above-rack', `${Math.round(main.getBoundingClientRect().bottom - sh.rack.getBoundingClientRect().top)}px`)
   stage('layout', t); t = performance.now()
   motion.play(app, motionHooks)
   stage('play', t)
