@@ -790,7 +790,11 @@ function box(kind: string, w: number, d: number, h: number, cls = '', face?: Til
   b.appendChild(top)
   return b
 }
-const lyingTile = (t: Tile, cls = '') => box('up', 1.15, 1.54, 0.8, cls, t)
+// Phones draw the tiles players read — discards, sets, flowers, the others' hands — a size bigger
+// (the wall stays: its 18 stacks a side have to fit along the table's edge).
+const phoneScreen = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
+const tileScale = () => (phoneScreen.matches ? 1.16 : 1)
+const lyingTile = (t: Tile, cls = '') => box('up', 1.15 * tileScale(), 1.54 * tileScale(), 0.8, cls, t)
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -1209,7 +1213,7 @@ function sideParts(seat: number): HTMLElement[] {
   const w = seatWind(game, seat)
   const labelKey = [NAMES[seat], match.scores[seat], w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current].join(';')
   const rackKey = [
-    seat === game.winner,
+    tileScale(), seat === game.winner,
     seat === HUMAN ? '' : game.over ? ids(sortHand(game.hands[seat])) : handCount(seat),
     game.melds[seat].map(m => ids(m) + (isConcealedKong(game, seat, m) ? '*' : '')).join('|'),
     flowersVisible(seat) ? ids(game.bonus[seat]) : '',
@@ -1254,13 +1258,17 @@ function sideRack(seat: number): HTMLElement {
       rack.appendChild(g)
     } else {                                           // otherwise it stands on edge, backs toward the table
       const n = handCount(seat)
-      if (n > 0) rack.appendChild(box('stand', 1.15 * n, 0.8, 1.54))
+      if (n > 0) {
+        const b = box('stand', 1.15 * tileScale() * n, 0.8, 1.54 * tileScale())
+        b.style.setProperty('--ts', String(tileScale()))   // for the seams between its tiles (style.css)
+        rack.appendChild(b)
+      }
     }
   }
   for (const meld of game.melds[seat]) {
     const g = el('div', 'group')
     const hidden = isConcealedKong(game, seat, meld)   // declared from the hand: its end tiles lie face down
-    meld.forEach((t, i) => g.appendChild(tag(hidden && (i === 0 || i === 3) ? box('up', 1.15, 1.54, 0.8, 'facedown') : lyingTile(t), t, `meld-${seat}`)))
+    meld.forEach((t, i) => g.appendChild(tag(hidden && (i === 0 || i === 3) ? box('up', 1.15 * tileScale(), 1.54 * tileScale(), 0.8, 'facedown') : lyingTile(t), t, `meld-${seat}`)))
     rack.appendChild(g)
   }
   if (game.bonus[seat].length && flowersVisible(seat)) {
@@ -1273,15 +1281,17 @@ function sideRack(seat: number): HTMLElement {
 
 // All discards, pooled in the middle of the table in the order they were thrown, facing you. Each
 // tile is its own part, so a new discard adds one tile rather than redrawing the pile.
-// On a phone they're bigger (rows of 9, not 11), so they can be read at that size.
-const phoneScreen = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
+// On a phone they're the same size as the sets round the edge (rows of 9, not 11), so they can be read.
 function poolTiles(): HTMLElement[] {
   const big = phoneScreen.matches
   shell?.pool.classList.toggle('big', big)
-  const [w, d] = big ? [1.33, 1.78] : [1.02, 1.37]
+  // (a long hand's seventh row of 9 would reach the names: then they go back to 10 a row, a little smaller)
+  const crowded = big && pool.length > 54
+  shell?.pool.classList.toggle('crowded', crowded)
+  const [w, d] = crowded ? [1.15, 1.54] : big ? [1.15 * tileScale(), 1.54 * tileScale()] : [1.02, 1.37]
   return pool.map((t, i) => {
     const latest = lastDiscard !== null && i === pool.length - 1
-    return part(`pool${ids([t])}`, `${latest}:${big}`, () => tag(box('up', w, d, 0.7, latest ? 'latest' : '', t), t, 'pool'))
+    return part(`pool${ids([t])}`, `${latest}:${w}`,() => tag(box('up', w, d, 0.7, latest ? 'latest' : '', t), t, 'pool'))
   })
 }
 
