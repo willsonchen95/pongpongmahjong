@@ -753,7 +753,9 @@ const TIPS = {
       { title: 'How to win', body: [para('Make ', el('strong', '', '4 sets and 1 pair'), ' — 14 tiles, like this:'), example,
           'A set is three the same (a Pong) or three in a row of one suit (a Chi).'] },
       { target: '.player-rack', title: 'Your turn',
-        body: ['You just drew a tile — it’s set apart on the right. Now you have one tile too many.', 'Tap the tile you need least to throw it away.'] },
+        body: ['You just drew a tile — it’s set apart on the right. Now you have one tile too many.', touchScreen.matches
+          ? 'Tap the tile you need least to lift it, then tap it again to throw it away.'
+          : 'Tap the tile you need least to throw it away.'] },
       { target: '.hm-total', title: 'Your hand’s score',
         body: ['This shows the faan (points) your hand already has.', 'Hover over it — or tap it — to see what you have and what to aim for next.'] },
       { target: '.status-pill', title: 'What’s happening',
@@ -1077,7 +1079,8 @@ function statusEl(): HTMLElement {
     title.append(`${NAMES[offer.from]} ${offer.robbing ? 'adds to a pong' : 'threw away'}`, mini(offer.tile))
     hint = offer.robbing ? 'Rob the kong, or pass' : 'Take it, or pass'
   } else if (mustDiscard) {
-    mood = 'mine'; badge = windChar(HUMAN); title.textContent = 'Your turn'; hint = 'Tap a tile to throw it away'
+    mood = 'mine'; badge = windChar(HUMAN); title.textContent = 'Your turn'
+    hint = touchScreen.matches ? 'Tap a tile, then tap it again to throw it' : 'Tap a tile to throw it away'
   } else if (intro) {
     badge = windChar(game.dealer)
     const roller = game.dealer === HUMAN ? 'You' : NAMES[game.dealer]
@@ -1406,16 +1409,36 @@ function claimCard(o: Offer): HTMLElement {
   return card
 }
 
+// On touch screens a tap only lifts a tile; tapping the lifted tile throws it away, so one stray tap
+// doesn't cost you a tile. With a mouse, a click throws it straight away.
+const touchScreen = matchMedia('(pointer: coarse)')
+let lifted: Tile | null = null
+function tapTile(t: Tile, e: HTMLElement) {
+  if (touchScreen.matches && lifted !== t) {
+    lifted = t
+    e.parentElement?.querySelector('.lifted')?.classList.remove('lifted')
+    e.classList.add('lifted')
+    return
+  }
+  lifted = null
+  humanDiscard(t)
+}
+
 // Your hand on the big rack: sorted, with the freshly drawn tile set apart on the right.
 function playerRack(): HTMLElement {
   const rack = el('div', 'player-rack' + (game.winner === HUMAN ? ' winner' : ''))
   const canDiscard = !game.over && mustDiscard && !offer
   const drawn = canDiscard ? game.drawn : null
+  if (!canDiscard) lifted = null
   // mid-deal your tiles arrive in batches and sit in the order dealt; once dealt you sort them
   const tiles = intro && intro.phase !== 'flowers'
     ? game.hands[HUMAN].slice(0, handCount(HUMAN))
     : sortHand(game.hands[HUMAN].filter(t => t !== drawn))
-  const add = (t: Tile, cls = '') => rack.appendChild(tag(tileEl(t, cls, canDiscard ? () => humanDiscard(t) : undefined), t, 'rack-0'))
+  const add = (t: Tile, cls = '') => {
+    const e = tag(tileEl(t, cls + (t === lifted ? ' lifted' : '')), t, 'rack-0')
+    if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
+    rack.appendChild(e)
+  }
   for (const t of tiles) add(t)
   if (drawn) add(drawn, 'drawn')
   return rack
@@ -1453,7 +1476,9 @@ function nowSection(): HTMLElement {
       ? `${NAMES[offer.from]} is adding a tile to their pong — and that tile would finish your hand! Press Mahjong! to rob the kong, or Pass.`
       : `${NAMES[offer.from]} threw away a tile you can use. Choose a big button in the box, or press Pass.`))
   } else if (mustDiscard) {
-    s.append(para('Your turn. You have one tile too many — tap a tile in your hand to throw it away.'))
+    s.append(para(touchScreen.matches
+      ? 'Your turn. You have one tile too many — tap a tile in your hand to lift it, then tap it again to throw it away.'
+      : 'Your turn. You have one tile too many — tap a tile in your hand to throw it away.'))
     if (isWinningHand(hand, melds)) {               // complete, but below the agreed minimum
       const f = faanOf(HUMAN, hand, true)
       s.append(para(`Your hand is complete but scores only ${f} faan — you need ${match.minFaan} to win. Keep going for a better hand!`))
