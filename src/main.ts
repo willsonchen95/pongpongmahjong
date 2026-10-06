@@ -234,6 +234,7 @@ async function play(seat: number, draw: Draw) {
       }
       break
     }
+    botNext = { seat, draw: 'none' }              // saved with the match: this bot moves next
     refresh()
     await gameIdle()                              // a tip, the pause box or the menu is up: wait
     await sleep(BOT_THINK_MS)
@@ -244,6 +245,7 @@ async function play(seat: number, draw: Draw) {
     const r = resolveDiscard(seat)
     if (r === null) break                         // you're deciding on a claim, or someone won
     if (r[1] !== 'normal') {                      // a bot claimed the discard — let it register
+      botNext = { seat: r[0], draw: r[1] }
       refresh()
       if (r[0] !== HUMAN) await coach('bot-call', TIPS.botCall(r[0]))   // first time only
       await sleep(CLAIM_PAUSE_MS)
@@ -628,8 +630,9 @@ function endMatchEarly() {
   offer = null
   mustDiscard = false
   intro = null
+  clearSave()
   wakeWaiters()
-  document.querySelectorAll('.banner, .flying-tile').forEach(e => e.remove())
+  document.querySelectorAll('.banner, .ghost-tile').forEach(e => e.remove())
 }
 
 document.addEventListener('keydown', e => {
@@ -953,7 +956,7 @@ function renderMenu() {
   const cards = el('div', 'menu-cards')
   if (started && !match.over) {
     cards.appendChild(menuCard(MENU_ICONS.resume, 'Continue game',
-      `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`, render, 'primary'))
+      `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`, continueGame, 'primary'))
   }
   const fresh = !(started && !match.over)
   cards.append(
@@ -1655,7 +1658,8 @@ function render() {
   if (celebrate) { celebrate = false; main.appendChild(confetti()) }
   for (const b of banners) showBanner(b, scene)
   banners = []
-  if (!paused) wakeWaiters()                          // back at the table: a paused deal or bot turn carries on
+  saveMatch()
+  if (!paused) wakeWaiters()                         // back at the table: a paused deal or bot turn carries on
 }
 
 // Where on the table each player's banners appear (fractions of the table's on-screen box).
@@ -1836,4 +1840,69 @@ function confetti(): HTMLElement {
   return layer
 }
 
+// ---------- Saving the match ----------
+// After every redraw the match is saved in this browser, so a refresh or a closed tab doesn't lose
+// it: the menu then offers "Continue game", which picks up exactly where play stopped. The game
+// state is plain data; what needs care is restarting play, which only ever waits at a few points —
+// a bot about to move (or just after a claim), your move or claim, the deal, or the result card.
+
+const SAVE_KEY = 'mahjong-save-v1'
+type Resume = { kind: 'intro' } | { kind: 'over' } | { kind: 'you' } | { kind: 'bot'; seat: number; draw: Draw }
+let botNext: { seat: number; draw: Draw } = { seat: 0, draw: 'none' }   // set by play() before each wait
+let resumeSaved: (() => void) | null = null          // restarts play after a saved match is loaded
+
+interface Saved {
+  match: Match; game: GameState; pool: Tile[]; wallBreak: number; lastDiscard: number | null
+  winFrom: number | null; winTileAt: number; drawnAt: number; offer: Offer | null; mustDiscard: boolean
+  resultClosed: boolean; showFinal: boolean; next: Resume
+}
+
+function saveMatch() {
+  if (!started) return
+  const next: Resume = intro ? { kind: 'intro' } : game.over ? { kind: 'over' }
+    : offer || mustDiscard ? { kind: 'you' } : { kind: 'bot', ...botNext }
+  const s: Saved = {
+    match, game, pool, wallBreak, lastDiscard, winFrom, offer, mustDiscard, resultClosed, showFinal, next,
+    // tiles come back as copies, so remember these two by their place in the hand
+    winTileAt: game.winner !== null && winTile ? game.hands[game.winner].indexOf(winTile) : -1,
+    drawnAt: game.drawn ? game.hands[game.current].indexOf(game.drawn) : -1,
+  }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)) } catch { /* storage full or unavailable — play on unsaved */ }
+}
+
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY) } catch { /* nothing saved */ }
+}
+
+// Load a match still being played, if one was saved. Returns whether there was one.
+function loadMatch(): boolean {
+  let s: Saved | null
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') } catch { s = null }
+  if (!s?.match || !s.game?.hands || s.match.over) { clearSave(); return false }
+  match = s.match; game = s.game; wallBreak = s.wallBreak; lastDiscard = s.lastDiscard; winFrom = s.winFrom
+  offer = s.offer; mustDiscard = s.mustDiscard; resultClosed = s.resultClosed; showFinal = s.showFinal
+  game.drawn = s.drawnAt >= 0 ? game.hands[game.current][s.drawnAt] : null
+  winTile = s.winTileAt >= 0 && game.winner !== null ? game.hands[game.winner][s.winTileAt] : null
+  // the middle of the table shows the very tiles lying in the discard piles
+  const thrown = game.discards.flat()
+  pool = s.pool.map(t => { const i = thrown.findIndex(d => sameTile(d, t)); return i >= 0 ? thrown.splice(i, 1)[0] : t })
+  started = true
+  const next = s.next
+  resumeSaved = () => {
+    if (next.kind === 'intro') void runIntro()          // the tiles are already dealt; show the deal again
+    else if (next.kind === 'bot') void play(next.seat, next.draw)
+    // your move, your claim, or the result card: the screen itself is all that's needed
+  }
+  return true
+}
+
+// "Continue game" on the menu: back to the table, restarting play if the match was just loaded.
+function continueGame() {
+  render()
+  const resume = resumeSaved
+  resumeSaved = null
+  resume?.()
+}
+
+loadMatch()
 renderMenu()
