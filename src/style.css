@@ -1215,23 +1215,156 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .act.big { padding: 12px 20px; font-size: 1.3rem; }
 }
 
-/* A phone turned sideways is too short for the table: ask for it upright instead. */
+/* ---------- Phones: played sideways ---------- */
+/* Held upright, a phone is asked to turn sideways (on Android the button goes fullscreen and locks
+   it there). Sideways, the screen is laid out like the computer version: the table on the left, a
+   slim column on the right for the status, buttons and "Your hand", and your hand along the bottom. */
 .rotate-note { display: none; }
-@media (orientation: landscape) and (max-height: 500px) {
+@media (orientation: portrait) and (max-width: 600px) and (pointer: coarse) {
   .rotate-note {
     position: fixed;
     inset: 0;
     z-index: 200;
     display: grid;
     place-content: center;
-    gap: 10px;
+    justify-items: center;
+    gap: 14px;
     padding: 24px;
     text-align: center;
-    background: radial-gradient(ellipse at 50% 30%, #a3221f 0%, #6e1210 75%);
+    background:
+      radial-gradient(circle, transparent 0 14px, rgba(255, 190, 120, 0.07) 15px 17px, transparent 18px) 0 0 / 44px 44px,
+      radial-gradient(ellipse at 50% 30%, #a3221f 0%, #6e1210 75%);
     font-size: 1.3rem;
     font-weight: 700;
   }
-  .rotate-note .rn-icon { font-size: 3rem; }
+  .rn-phone {
+    width: 46px;
+    height: 80px;
+    border: 4px solid #ffd75e;
+    border-radius: 10px;
+    animation: rn-turn 2.4s ease-in-out infinite;
+  }
+  @keyframes rn-turn { 0%, 25% { rotate: 0deg; } 55%, 100% { rotate: -90deg; } }
+  .rn-sub { font-size: 1rem; font-weight: 500; opacity: 0.85; }
+  .rotate-note .act { margin-top: 6px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  body { touch-action: manipulation; place-items: start center; }   /* no double-tap zoom while tapping tiles */
+  #app { padding: 6px 8px 0; }
+  .wl-name { font-size: calc(var(--u) * 1.3); }
+  .wl-wind { font-size: calc(var(--u) * 0.95); }
+
+  /* the game screen: table | side column, your hand across the bottom */
+  .main-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 230px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "scene top" "scene meter" "rack rack";
+    gap: 6px 10px;
+    height: calc(100dvh - 8px);
+  }
+  .scene {
+    grid-area: scene;
+    align-self: center;
+    justify-self: center;
+    /* as big as the height above your hand allows, and narrow enough to leave the side column */
+    --T: min(calc((100dvh - 128px) / 0.86), calc((100cqw - 250px) / 1.3), 980px);
+    margin: 0;
+  }
+
+  /* side column: status, then the buttons, then the round */
+  .topbar {
+    grid-area: top;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 16px;
+  }
+  .topbar .status { order: -1; flex: 1 1 100%; }
+  .status-pill { min-width: 0; width: 100%; min-height: 40px; gap: 8px; padding: 3px 10px 3px 3px; }
+  .status-badge { width: 32px; height: 32px; font-size: 1rem; }
+  .status-title { font-size: 0.95rem; }
+  .status-hint { font-size: 0.75rem; }
+  .tb-left, .tb-right { gap: 6px; }
+  .tb-right { flex: 1; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar .chip { height: 36px; gap: 6px; padding: 0 10px 0 3px; font-size: 0.82rem; }
+  .topbar .chip-icon { width: 28px; height: 28px; }
+  .topbar .chip-icon svg { width: 17px; height: 17px; }
+  .topbar .chip:not(.round) { width: 36px; padding: 0; justify-content: center; }
+  .topbar .chip:not(.round) .chip-label { display: none; }
+  .chip.round { order: 1; flex: 1 1 100%; min-width: 0; }
+  .chip.round .chip-icon { font-size: 0.95rem; }
+  .chip.round .chip-stack { min-width: 0; overflow: hidden; }
+  .chip.round .chip-stack > span { overflow: hidden; text-overflow: ellipsis; }
+  .chip.info strong { font-size: 0.95rem; }
+
+  /* "Your hand" meter under the buttons, scrolling if it's long */
+  .action-bar { grid-area: meter; align-self: stretch; align-content: flex-start; min-height: 0; overflow-y: auto; gap: 6px; }
+  .hand-meter { gap: 4px 5px; padding: 4px 6px; border-radius: 12px; }
+  .hm-total { padding: 2px 8px; gap: 5px; }
+  .hm-faan { font-size: 1.05rem; }
+  .hm-label, .hm-need { font-size: 0.72rem; }
+  .hm-chip, .hm-way { padding: 2px 8px; font-size: 0.78rem; }
+  .hm-card { position: fixed; left: auto; right: 8px; bottom: auto; top: 8px; max-height: calc(100dvh - 16px); width: min(420px, 70vw); }
+  .action-bar .act { padding: 6px 14px; font-size: 1rem; }
+
+  /* your hand: one row along the bottom, as on a computer */
+  .player-rack {
+    grid-area: rack;
+    justify-self: center;
+    --w: min(54px, calc((100cqw - 60px) / 14.8));
+    min-width: 0;
+    gap: 2px;
+    padding: 6px 10px 8px;
+  }
+  .player-rack .tile { border-radius: 5px; }
+  .player-rack .tile.drawn { margin-left: calc(var(--w) * 0.3); }
+
+  /* the claim box over the table */
+  .claim-card { left: calc((100% - 240px) / 2); top: 6px; bottom: auto; width: min(560px, calc(100% - 260px)); padding: 10px 12px 12px; border-width: 3px; }
+  .claim-head { gap: 10px; margin-bottom: 8px; font-size: 1.05rem; }
+  .tile.claim-tile { width: 38px; height: 51px; border-radius: 5px; }
+  .claim-options { gap: 8px; }
+  .claim-btn { flex: 1 1 120px; min-width: 0; padding: 8px 8px 6px; }
+  .claim-label { font-size: 1.2rem; }
+  .claim-label .tile.mini { font-size: 1rem; }
+  .claim-hint { font-size: 0.78rem; }
+  .claim-effects { font-size: 0.75rem; }
+
+  /* end-of-hand card and final standings: the faan and scores side by side, scrolling if need be */
+  .result-card { top: 4px; width: min(680px, calc(100vw - 16px)); max-height: calc(100dvh - 8px); padding: 12px 16px 14px; border-width: 3px; }
+  .result-title { font-size: 1.6rem; }
+  .result-sub { font-size: 1.1rem; }
+  .result-how { font-size: 0.9rem; }
+  .result-hand { gap: 5px; margin: 8px 0 10px; }
+  .tile.rh { width: 26px; height: 35px; border-radius: 3px; }
+  .faan-list, .score-table, .pay-rows { font-size: 0.92rem; }
+  .pay-rule, .result-next { font-size: 0.88rem; }
+  .act { padding: 8px 18px; font-size: 1.05rem; }
+  .standings { margin: 10px auto; }
+  .standing { padding: 6px 12px; font-size: 1rem; }
+
+  /* the rules panel slides over the right half, leaving the table in view */
+  .help { width: min(380px, 55vw); font-size: 0.95rem; }
+
+  /* menu: the logo on the left, the choices on the right */
+  .menu-page { width: min(860px, 100%); margin: 2dvh auto; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 0 28px; }
+  .menu-sound { top: auto; bottom: 8px; right: 8px; }   /* clear of the menu cards */
+  .menu-sound .chip { height: 40px; width: 40px; }
+  .tile-fan { height: 70px; margin-bottom: 4px; }
+  .tile-fan .fan-tile { width: 42px; height: 57px; }
+  .mt-line { font-size: 2.1rem; }
+  .mt-line.mt-big { font-size: 3.2rem; }
+  .menu-cn { font-size: 1.3rem; }
+  .menu-tagline { margin: 8px 0 0; font-size: 0.9rem; }
+  .menu-cards { gap: 8px; }
+  .menu-card { padding-top: 8px; padding-bottom: 8px; }
+  .mc-title { font-size: 1.15rem; }
+  .mc-sub { font-size: 0.85rem; }
+  .setup-q { margin-top: 14px; }
 }
 
 /* On touch screens a tap lifts a tile (tap it again to throw it), so one stray tap doesn't cost a tile. */

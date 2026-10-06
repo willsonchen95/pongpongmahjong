@@ -1929,5 +1929,18 @@ function continueGame() {
   resume?.()
 }
 
+// Phones play sideways. Held upright, a note asks to turn the phone; where the browser allows it
+// (Android, not iPhone), its button goes full screen and locks the screen sideways in one tap.
+const fullscreenButton = document.querySelector<HTMLButtonElement>('#rotate-fullscreen')
+if (fullscreenButton && document.fullscreenEnabled) {
+  fullscreenButton.hidden = false
+  fullscreenButton.onclick = async () => {
+    try {
+      await document.documentElement.requestFullscreen()
+      await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape')
+    } catch { /* not allowed on this device — turning the phone by hand works too */ }
+  }
+}
+
 loadMatch()
 renderMenu()

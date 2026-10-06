@@ -14,8 +14,13 @@
   </head>
   <body>
     <div id="app"></div>
-    <!-- shown only on a phone turned sideways (see .rotate-note) -->
-    <div class="rotate-note"><div class="rn-icon">📱↻</div><div>Turn your phone upright to play</div></div>
+    <!-- shown only on a phone held upright: the game is played sideways (see .rotate-note) -->
+    <div class="rotate-note">
+      <div class="rn-phone"></div>
+      <div>Turn your phone sideways to play</div>
+      <div class="rn-sub">Pong Pong Mahjong is played in landscape.</div>
+      <button class="act primary" id="rotate-fullscreen" hidden>Play full screen</button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
