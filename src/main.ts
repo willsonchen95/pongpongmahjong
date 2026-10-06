@@ -930,8 +930,8 @@ function menuHero(): HTMLElement {
   const hero = el('div', 'menu-hero')
   const fan = el('div', 'tile-fan')
   for (const spec of ['1p', '5z', '6z', '1s', '1z']) fan.appendChild(tileEl(parse(spec)[0], 'fan-tile'))
-  hero.append(fan, el('h1', 'menu-title', 'Mahjong'), el('div', 'menu-cn', '麻雀'),
-    el('p', 'menu-tagline', 'Hong Kong style · play against three computer players'))
+  hero.append(fan, el('h1', 'menu-title', 'Pong Pong Mahjong!'), el('div', 'menu-cn', '麻雀'),
+    el('p', 'menu-tagline', 'Hong Kong Style - Pong until you can’t Pong anymore!'))
   return hero
 }
 
