@@ -1273,11 +1273,34 @@ function sideRack(seat: number): HTMLElement {
 
 // All discards, pooled in the middle of the table in the order they were thrown, facing you. Each
 // tile is its own part, so a new discard adds one tile rather than redrawing the pile.
+// On a phone they're bigger (rows of 9, not 11), so they can be read at that size.
+const phoneScreen = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
 function poolTiles(): HTMLElement[] {
+  const big = phoneScreen.matches
+  shell?.pool.classList.toggle('big', big)
+  const [w, d] = big ? [1.33, 1.78] : [1.02, 1.37]
   return pool.map((t, i) => {
     const latest = lastDiscard !== null && i === pool.length - 1
-    return part(`pool${ids([t])}`, String(latest), () => tag(box('up', 1.02, 1.37, 0.7, latest ? 'latest' : '', t), t, 'pool'))
+    return part(`pool${ids([t])}`, `${latest}:${big}`, () => tag(box('up', w, d, 0.7, latest ? 'latest' : '', t), t, 'pool'))
   })
+}
+
+// Tapping the middle of the table: every discard, full size, in the order thrown (newest marked).
+function showDiscards() {
+  if (!pool.length || document.querySelector('.discards-layer')) return
+  const layer = el('div', 'coach-layer dim dialog-layer discards-layer')
+  const card = el('div', 'dialog-card discards-card')
+  const grid = el('div', 'discards-grid')
+  pool.forEach((t, i) => grid.appendChild(tileEl(t, lastDiscard !== null && i === pool.length - 1 ? 'newest' : '')))
+  const close = () => { document.removeEventListener('keydown', onKey); layer.remove() }
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close() } }
+  const actions = el('div', 'dialog-actions')
+  actions.appendChild(button('Close', close, 'act primary'))
+  card.append(el('div', 'dialog-title', `Discards · ${pool.length}`), grid, actions)
+  layer.appendChild(card)
+  layer.onclick = e => { if (e.target === layer) close() }
+  document.body.appendChild(layer)
+  document.addEventListener('keydown', onKey)
 }
 
 // The button that moves the match on once a hand is over.
@@ -1795,6 +1818,8 @@ function renderTable() {
     const layout = el('div', 'layout'), main = el('div', 'main-col')
     const scene = el('div', 'scene'), table = el('div', 'table')   // the scene supplies the perspective for the tilted table
     const sides = [0, 1, 2, 3].map(sideLayer), poolEl = el('div', 'pool')
+    poolEl.title = 'See all the discards up close'
+    poolEl.onclick = showDiscards
     table.append(...sides, poolEl)
     scene.appendChild(table)
     main.appendChild(scene)
