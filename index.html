@@ -3,7 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" id="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Phones show the game scaled to fit, like a picture: held sideways it's laid out for a screen
+      // 960 wide, then shrunk to the phone's real width, so every phone shows the same proportions
+      // instead of a zoomed-in close-up. Upright (the "turn sideways" note) and on tablets and
+      // computers it's shown at its natural size.
+      (function () {
+        var DESIGN_WIDTH = 960
+        function fit() {
+          var short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height)
+          var sideways = matchMedia('(orientation: landscape)').matches
+          var content = 'width=device-width, initial-scale=1.0'
+          if (short <= 500 && sideways && long < DESIGN_WIDTH) {
+            content = 'width=' + DESIGN_WIDTH + ', initial-scale=' + (long / DESIGN_WIDTH).toFixed(3)
+          }
+          var meta = document.getElementById('viewport')
+          if (meta.getAttribute('content') !== content) meta.setAttribute('content', content)
+        }
+        fit()
+        addEventListener('orientationchange', function () { setTimeout(fit, 150) })
+        addEventListener('resize', fit)
+      })()
+    </script>
     <title>Pong Pong Mahjong!</title>
     <!-- Only the characters drawn on tile faces, so the font download stays tiny -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

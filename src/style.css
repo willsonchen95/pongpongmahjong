@@ -1249,7 +1249,8 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .rotate-note .act { margin-top: 6px; }
 }
 
-@media (orientation: landscape) and (max-height: 500px) {
+/* (a sideways phone is laid out 960 wide — see index.html — so 440–540 tall, depending on its shape) */
+@media (orientation: landscape) and (max-height: 600px) {
   body { touch-action: manipulation; place-items: start center; }   /* no double-tap zoom while tapping tiles */
   #app { padding: 6px 8px 0; }
   .wl-name { font-size: calc(var(--u) * 1.3); }
