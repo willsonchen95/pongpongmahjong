@@ -1230,7 +1230,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
     display: grid;
     grid-template-columns: minmax(0, 1fr) 230px;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: "scene top" "scene meter" "rack rack";
+    grid-template-areas: "scene top" "scene meter" "rack meter";   /* your hand right under the table */
     gap: 6px 10px;
     height: calc(100dvh - 16px);                         /* a little margin under your hand */
   }
@@ -1246,37 +1246,60 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
     top: calc(var(--T) * -0.1);
   }
 
-  /* side column: status, then the buttons, then the round */
+  /* side column, one tidy panel: the status, then the four buttons in an even row, then the round */
   .topbar {
     grid-area: top;
     width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 6px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: center;
+    gap: 8px 6px;
+    padding: 8px;
     border-radius: 16px;
   }
-  .topbar .status { order: -1; flex: 1 1 100%; }
+  .tb-left, .tb-right { display: contents; }               /* their buttons join the panel's grid */
+  .topbar .status { grid-column: 1 / -1; order: -1; width: 100%; }
   .status-pill { min-width: 0; width: 100%; min-height: 40px; gap: 8px; padding: 3px 10px 3px 3px; }
   .status-badge { width: 32px; height: 32px; font-size: 1rem; }
   .status-title { font-size: 0.95rem; }
   .status-hint { font-size: 0.75rem; }
-  .tb-left, .tb-right { gap: 6px; }
-  .tb-right { flex: 1; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
   .topbar .chip { height: 36px; gap: 6px; padding: 0 10px 0 3px; font-size: 0.82rem; }
   .topbar .chip-icon { width: 28px; height: 28px; }
   .topbar .chip-icon svg { width: 17px; height: 17px; }
   .topbar .chip:not(.round) { width: 36px; padding: 0; justify-content: center; }
   .topbar .chip:not(.round) .chip-label { display: none; }
-  .chip.round { order: 1; flex: 1 1 100%; min-width: 0; }
+  .chip.round { grid-column: 1 / -1; order: 1; justify-self: stretch; min-width: 0; }
   .chip.round .chip-icon { font-size: 0.95rem; }
   .chip.round .chip-stack { min-width: 0; overflow: hidden; }
   .chip.round .chip-stack > span { overflow: hidden; text-overflow: ellipsis; }
   .chip.info strong { font-size: 0.95rem; }
 
-  /* "Your hand" meter under the buttons, scrolling if it's long */
-  .action-bar { grid-area: meter; align-self: stretch; align-content: flex-start; min-height: 0; overflow-y: auto; gap: 6px; }
-  .hand-meter { gap: 4px 5px; padding: 4px 6px; border-radius: 12px; }
+  /* "Your hand" under the buttons, in a matching panel that runs to the bottom (scrolling if long) */
+  .action-bar {
+    grid-area: meter;
+    align-self: stretch;
+    min-height: 0;
+    overflow-y: auto;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .hand-meter {
+    box-sizing: border-box;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px;
+    border: 0;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+  .hand-meter > * { align-self: center; }
+  .hm-chips { justify-content: center; }
   .hm-total { padding: 2px 8px; gap: 5px; }
   .hm-faan { font-size: 1.05rem; }
   .hm-label, .hm-need { font-size: 0.72rem; }
@@ -1288,8 +1311,8 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .player-rack {
     grid-area: rack;
     justify-self: center;
-    /* fits across the width, and stays short enough to leave the table room on a short screen */
-    --w: min(54px, calc((100cqw - 60px) / 14.8), calc(100dvh * 0.12));
+    /* fits across the table's column, and stays short enough to leave the table room on a short screen */
+    --w: min(54px, calc((100cqw - 310px) / 14.8), calc(100dvh * 0.12));
     min-width: 0;
     gap: 2px;
     padding: 6px 10px 8px;
