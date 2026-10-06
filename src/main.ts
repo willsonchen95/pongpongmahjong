@@ -7,6 +7,7 @@ import {
 } from './engine'
 import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
+import * as motion from './motion'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -815,6 +816,29 @@ function el(tag: string, cls = '', text = ''): HTMLElement {
   return e
 }
 // A flat tile, for your rack and inline in text/buttons.
+// Every physical tile gets a lasting id, and on-table elements are tagged with it and with where the
+// tile lies, so motion.ts can glide it from its old place to its new one between renders.
+const tileIds = new WeakMap<Tile, number>()
+let nextTileId = 1
+function tag<T extends HTMLElement>(e: T, t: Tile, place: string): T {
+  if (!tileIds.has(t)) tileIds.set(t, nextTileId++)
+  e.dataset.key = String(tileIds.get(t))
+  e.dataset.place = place
+  return e
+}
+
+// Where a tile that wasn't on screen before comes from: a bot's rack (its discards, sets, flowers),
+// or yours. A small tile-sized spot in the middle of that rack.
+function tileOrigin(e: HTMLElement): DOMRect | null {
+  const [what, seatText] = (e.dataset.place ?? '').split('-')
+  const seat = what === 'pool' ? lastDiscard : Number(seatText)
+  if (seat === null || Number.isNaN(seat) || (what !== 'pool' && what !== 'meld' && what !== 'bonus')) return null
+  const rack = seat === HUMAN ? document.querySelector('.player-rack') : document.querySelector(`.layer[data-seat="${seat}"] .rack-row`)
+  if (!rack) return null
+  const r = rack.getBoundingClientRect(), size = e.getBoundingClientRect()
+  return new DOMRect(r.left + r.width / 2 - size.width / 2, r.top + r.height / 2 - size.height / 2, size.width, size.height)
+}
+
 function tileEl(tile: Tile, cls = '', onClick?: () => void): HTMLElement {
   const e = el('div', 'tile ' + cls)
   e.innerHTML = tileSVG(tile.category, tile.value)
@@ -1103,6 +1127,7 @@ const flowersVisible = (seat: number) => !intro || intro.flowersShown[seat]
 // and seat wind are printed on the felt just inside it.
 function sideLayer(seat: number): HTMLElement {
   const layer = el('div', 'layer')
+  layer.dataset.seat = String(seat)
   layer.style.transform = `rotate(${-90 * seat}deg)`   // seats go counter-clockwise: right, top, left
 
   // Lights up on that player's turn.
@@ -1133,12 +1158,12 @@ function sideLayer(seat: number): HTMLElement {
   for (const meld of game.melds[seat]) {
     const g = el('div', 'group')
     const hidden = isConcealedKong(game, seat, meld)   // declared from the hand: its end tiles lie face down
-    meld.forEach((t, i) => g.appendChild(hidden && (i === 0 || i === 3) ? box('up', 1.15, 1.54, 0.8, 'facedown') : lyingTile(t)))
+    meld.forEach((t, i) => g.appendChild(tag(hidden && (i === 0 || i === 3) ? box('up', 1.15, 1.54, 0.8, 'facedown') : lyingTile(t), t, `meld-${seat}`)))
     rack.appendChild(g)
   }
   if (game.bonus[seat].length && flowersVisible(seat)) {
     const g = el('div', 'group')
-    for (const t of game.bonus[seat]) g.appendChild(lyingTile(t, 'bonus'))
+    for (const t of game.bonus[seat]) g.appendChild(tag(lyingTile(t, 'bonus'), t, `bonus-${seat}`))
     rack.appendChild(g)
   }
 
@@ -1149,7 +1174,7 @@ function sideLayer(seat: number): HTMLElement {
 // All discards, pooled in the middle of the table in the order they were thrown, facing you.
 function discardPool(): HTMLElement {
   const p = el('div', 'pool')
-  pool.forEach((t, i) => p.appendChild(box('up', 1.02, 1.37, 0.7, lastDiscard !== null && i === pool.length - 1 ? 'latest' : '', t)))
+  pool.forEach((t, i) => p.appendChild(tag(box('up', 1.02, 1.37, 0.7, lastDiscard !== null && i === pool.length - 1 ? 'latest' : '', t), t, 'pool')))
   return p
 }
 
@@ -1387,7 +1412,7 @@ function playerRack(): HTMLElement {
   const tiles = intro && intro.phase !== 'flowers'
     ? game.hands[HUMAN].slice(0, handCount(HUMAN))
     : sortHand(game.hands[HUMAN].filter(t => t !== drawn))
-  const add = (t: Tile, cls = '') => rack.appendChild(tileEl(t, cls, canDiscard ? () => humanDiscard(t) : undefined))
+  const add = (t: Tile, cls = '') => rack.appendChild(tag(tileEl(t, cls, canDiscard ? () => humanDiscard(t) : undefined), t, 'rack-0'))
   for (const t of tiles) add(t)
   if (drawn) add(drawn, 'drawn')
   return rack
@@ -1584,6 +1609,7 @@ function toggleHelp() {
 
 function render() {
   inMenu = false
+  motion.capture(app)                                 // where every tile is now, to glide them after the rebuild
   app.innerHTML = ''
   const main = el('div', 'main-col')
   const top = el('div', 'topbar')
@@ -1623,7 +1649,8 @@ function render() {
   app.appendChild(layout)
 
   if (game.over && !resultClosed) main.appendChild(showFinal ? finalCard() : resultCard())
-  music.start()                                       // carries on (or resumes, e.g. via Continue game)
+  motion.play(app, tileOrigin)
+  music.start()                                      // carries on (or resumes, e.g. via Continue game)
   if (!coachOpen && !paused) music.duck(game.over && !resultClosed)   // quieter while the result card is showing
   if (celebrate) { celebrate = false; main.appendChild(confetti()) }
   for (const b of banners) showBanner(b, scene)

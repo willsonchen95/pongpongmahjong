@@ -573,8 +573,9 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
 }
 .player-rack .tile.drawn { margin-left: calc(var(--w) * 0.4); }
-.tile.clickable { cursor: pointer; transition: transform 0.1s; }
-.tile.clickable:hover { transform: translateY(-8px); }
+.tile.clickable { cursor: pointer; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.18s; }
+.tile.clickable:hover { transform: translateY(-10px); box-shadow: 0 12px 16px rgba(0, 0, 0, 0.4); }
+.tile.clickable:active { transform: translateY(-4px); transition-duration: 0.06s; }
 /* Pop-up banners over the table ("Your turn", "South: Pong!") — they pop in, then float away by themselves. */
 .banner {
   position: fixed;
@@ -681,6 +682,20 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .table-dice.landing .dice-total { animation: total-in 0.4s ease-out; }
 @keyframes total-in { from { opacity: 0; scale: 0.6; } }
 @media (prefers-reduced-motion: reduce) { .table-dice .box.die, .dice-total { animation: none !important; } }
+
+/* a tile in flight between two places on the screen (see motion.ts) */
+.ghost-tile {
+  position: fixed;
+  z-index: 45;
+  transform-origin: 0 0;
+  border-radius: 12%/9%;
+  background: linear-gradient(160deg, #ffffff, #f1efe6);
+  box-shadow: 0 3px 0 var(--navy), 0 10px 18px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  pointer-events: none;
+}
+.ghost-tile svg { display: block; width: 100%; height: 100%; }
+.ghost-tile.back { background: linear-gradient(160deg, #3a4cb3, var(--navy)); }
 
 /* face-down tiles sliding from the wall to a player during the deal */
 .flying-tile {
