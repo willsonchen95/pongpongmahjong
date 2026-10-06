@@ -86,12 +86,12 @@ let showFinal = false             // the match is over and the final standings a
 let celebrate = false             // confetti pending — shown once, not on every re-render
 let faanCardOpen = false          // the "Your hand" details card, tapped open (it also opens on hover)
 const HELP_KEY = 'mahjong-help-open'
-// Open by default only when it fits beside the table. On a narrow screen (a phone) it would cover
-// the table, so there it always starts closed, whatever was chosen last time.
+// The rule book never opens by itself — a coachmark in the tutorial points at the Rules button
+// instead. If the player opened it last time on a screen with room beside the table, it's open
+// again; on a narrow screen (a phone) it would cover the table, so there it always starts closed.
 let helpOpen = (() => {
-  const roomy = window.innerWidth > 1150
-  if (!roomy) return false
-  try { const saved = localStorage.getItem(HELP_KEY); return saved === null ? roomy : saved === '1' } catch { return roomy }
+  if (window.innerWidth <= 1150) return false
+  try { return localStorage.getItem(HELP_KEY) === '1' } catch { return false }
 })()
 
 // A discard you may claim. Only options that would actually succeed are offered —
@@ -732,6 +732,7 @@ async function coachForState() {
 function startGuidedGame() {
   tipsSeen = new Set()
   saveTipsSeen()
+  helpOpen = false                                    // the table first; a coachmark shows where the rule book is
   settings = { ...settings, tips: true, rounds: 1 }
   startMatch()
 }
@@ -764,8 +765,9 @@ const TIPS = {
         body: ['This shows the faan (points) your hand already has.', 'Hover over it — or tap it — to see what you have and what to aim for next.'] },
       { target: '.status-pill', title: 'What’s happening',
         body: ['This tells you whose turn it is. It glows gold whenever it’s your move.'] },
-      { target: '.rules-chip', title: 'Need help?',
-        body: ['The Rules button opens the guide — every set and every scoring pattern, with pictures.'] },
+      { target: '.rules-chip', title: 'The rule book',
+        body: ['Stuck? Tap here any time to open the rule book — every set and every scoring pattern, with pictures.',
+          'Tap it again to close it and get back to the table.'] },
     ]
   },
   claim: (): CoachStep[] => [{

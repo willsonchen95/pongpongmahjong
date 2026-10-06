@@ -1134,8 +1134,8 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .main-col { gap: 6px; }
 
   /* top bar: the status pill across the top, then icon-only buttons and the round below */
-  .topbar { grid-template-columns: auto minmax(0, 1fr); gap: 6px; padding: 5px; border-radius: 22px; }
-  .tb-left, .tb-right { gap: 6px; }
+  .topbar { grid-template-columns: auto minmax(0, 1fr); gap: 10px 8px; padding: 8px; border-radius: 22px; }
+  .tb-left, .tb-right { gap: 8px; }
   .tb-right { min-width: 0; justify-content: flex-end; }
   .chip.round { min-width: 0; flex: 0 1 auto; }             /* on the narrowest phones "East round · Hand 3" gets cut with … */
   .chip.round .chip-stack { min-width: 0; overflow: hidden; }
@@ -1155,29 +1155,29 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   /* the whole screen used: the top bar at the top, your hand at the bottom where your thumbs are,
      and the table filling the middle — seen more from above, so it suits a tall screen and its
      near corners stay on screen */
-  .main-col { min-height: calc(100dvh - 20px); }
+  .main-col { min-height: calc(100dvh - 20px); gap: 12px; }
   .scene {
     flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    --T: min(86cqw, calc((100dvh - 400px) / 0.9), 980px);
+    --T: min(94cqw, calc(100dvh - 470px), 980px);
     margin: 0;
   }
-  .table { transform: rotateX(24deg); }
+  .table { transform: rotateX(14deg); }
 
   /* your hand in two rows of seven, so the tiles are big enough to read and tap; the drawn tile
      ends the second row */
   .player-rack {
-    --w: min(50px, calc((100cqw - 34px) / 7.4));
+    --w: min(54px, calc((100cqw - 40px) / 7.4));
     box-sizing: border-box;
     width: 100%;
-    max-width: calc(var(--w) * 7.25 + 36px);             /* seven to a row, so the two rows match */
+    max-width: calc(var(--w) * 7.25 + 44px);             /* seven to a row, so the two rows match */
     min-width: 0;
     flex-wrap: wrap;
     align-content: flex-end;
-    gap: 6px 3px;
-    padding: 10px 6px 12px;
+    gap: 10px 4px;
+    padding: 12px 10px 14px;
     border-radius: 12px;
   }
   .player-rack .tile { border-radius: 6px; }
