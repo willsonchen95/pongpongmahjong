@@ -8,7 +8,7 @@ import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, newRoomCode, savedSession, type LocalView } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, newRoomCode, savedSession, type LocalView } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -209,6 +209,7 @@ function goOnline(code: string, name: string) {
   room.onState = (view, events) => applyOnline(view, events)
   room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
   room.onConnection = () => { if (lobbyShowing()) renderLobby(); else refresh() }
+  room.onReact = (seat, emoji) => { if (!lobbyShowing()) showReaction(seat, emoji) }
   room.connect()
   renderLobby()
 }
@@ -1853,6 +1854,11 @@ function renderTable() {
   // three columns: menu | status (centred over the table) | game info and settings
   const leftGroup = el('div', 'tb-left')
   leftGroup.appendChild(chip(ICONS.menu, 'Menu', () => void openPause()))
+  if (online) {                                       // quick reactions for the others at the table
+    const react = chip('😀', null, () => toggleReactions(react), 'react-chip')
+    react.title = 'Send a reaction'
+    leftGroup.appendChild(react)
+  }
   const rightGroup = el('div', 'tb-right')
   // the gold outline shows when the rules are open, so the label can stay short
   const rules = chip(ICONS.book, 'Rules', toggleHelp, 'rules-chip' + (helpOpen ? ' on' : ''))
@@ -1919,6 +1925,39 @@ const BANNER_SPOT: Record<string, [number, number]> = {
 
 // A short pop-up banner over the table. It lives outside #app so re-renders don't restart it,
 // and removes itself when its animation ends. A new banner replaces one already in the same spot.
+// ---------- Reactions (online) ----------
+// The 😀 button opens a small tray of emoji; the one you tap floats up from your place at the table
+// on everyone's screen. (The tray lives outside the top bar, which is redrawn on every move.)
+function toggleReactions(from: HTMLElement) {
+  const open = document.querySelector('.react-tray')
+  if (open) return void open.remove()
+  const tray = el('div', 'react-tray')
+  const r = from.getBoundingClientRect()
+  tray.style.left = `${r.left}px`
+  tray.style.top = `${r.bottom + 8}px`
+  const close = () => { tray.remove(); document.removeEventListener('pointerdown', outside, true) }
+  const outside = (e: Event) => { if (!tray.contains(e.target as Node) && !from.contains(e.target as Node)) close() }
+  for (const emoji of REACTIONS) {
+    const b = el('button', 'react-pick', emoji)
+    b.onclick = () => { online?.react(emoji); close() }
+    tray.appendChild(b)
+  }
+  document.body.appendChild(tray)
+  document.addEventListener('pointerdown', outside, true)
+}
+
+function showReaction(seat: number, emoji: string) {
+  const scene = shell?.scene
+  if (!scene || !document.contains(scene)) return
+  const r = scene.getBoundingClientRect()
+  const [fx, fy] = BANNER_SPOT[String(seat)]
+  const bubble = el('div', 'reaction', emoji)
+  bubble.style.left = `${r.left + r.width * Math.min(0.88, Math.max(0.12, fx))}px`   // (kept clear of the screen's edges)
+  bubble.style.top = `${r.top + r.height * fy}px`
+  bubble.addEventListener('animationend', () => bubble.remove())
+  document.body.appendChild(bubble)
+}
+
 function showBanner(b: Banner, over: HTMLElement) {
   const spot = b.seat === null ? 'middle' : String(b.seat)
   document.querySelector(`.banner[data-spot="${spot}"]`)?.remove()

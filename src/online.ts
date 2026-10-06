@@ -7,6 +7,7 @@ import type { Rules, Phase, Match, TableEvent } from './table'
 import { makeTile, type GameState, type Tile } from './engine'
 
 export type { SeatInfo }
+export { REACTIONS } from '../server/room-core'
 
 // Where the room server is: set at build time for the live site (VITE_ROOM_SERVER), or, while
 // developing on this computer or its home network, the local `npm run server:dev` on port 8787.
@@ -119,6 +120,7 @@ export class OnlineRoom {
   onState: (view: LocalView, events: TableEvent[]) => void = () => {}
   onError: (message: string) => void = () => {}
   onConnection: () => void = () => {}
+  onReact: (seat: number, emoji: string) => void = () => {}   // seat as on screen (you = 0)
 
   constructor(code: string, name: string) {
     this.code = code
@@ -153,6 +155,8 @@ export class OnlineRoom {
       else if (m.type === 'state') {
         this.view = turnView(m.view, m.now)
         this.onState(this.view, turnEvents(m.events, m.view.seat))
+      } else if (m.type === 'react') {
+        if (this.seat !== null) this.onReact(seat(m.seat, this.seat), m.emoji)
       } else if (m.type === 'error') this.onError(m.message)
     }
     ws.onclose = () => {
@@ -171,6 +175,7 @@ export class OnlineRoom {
   }
 
   start(rules: Rules) { this.send({ type: 'start', rules }) }
+  react(emoji: string) { this.send({ type: 'react', emoji }) }
 
   // Leave the room for good (a bot takes your seat; you can still come back with the code).
   leave() {

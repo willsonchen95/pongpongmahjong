@@ -64,7 +64,7 @@ button { font: inherit; cursor: pointer; border: 0; }
    The table is tilted back under a fairly close camera; the negative margins reclaim the
    space the tilt frees up. The near corners may run slightly off a narrow screen. */
 .scene {
-  /* 74cqw: the tilt makes the near edge ~1.25Ã— wider than the table, and it must still fit the column */
+  /* 74cqw: the tilt makes the near edge ~1.25× wider than the table, and it must still fit the column */
   --T: min(74cqw, calc((100vh - 300px) / 0.92), 980px);
   --u: calc(var(--T) / 30);
   perspective: calc(var(--T) * 1.6);
@@ -151,10 +151,10 @@ button { font: inherit; cursor: pointer; border: 0; }
 .wind-label.winner { color: #ffd75e; opacity: 1; text-shadow: 0 0 calc(var(--u) * 0.6) #ffd75e; }
 
 /* ---------- 3D tiles ---------- */
-/* A box is the tile's footprint on the felt (w Ã— d); its five faces fold up from it to height h.
+/* A box is the tile's footprint on the felt (w × d); its five faces fold up from it to height h.
    Sizes come from --bw/--bd/--bh (in table units) set in main.ts. Each side face is painted with
-   the tile's layers â€” ivory face layer and navy back â€” in the right order for how the tile lies.
-   Side gradients run edgeâ†’edge as laid out flat: front/right start at the felt, back/left at the top. */
+   the tile's layers — ivory face layer and navy back — in the right order for how the tile lies.
+   Side gradients run edge→edge as laid out flat: front/right start at the felt, back/left at the top. */
 .box {
   --H: calc(var(--u) * var(--bh));
   position: relative;
@@ -314,12 +314,12 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .chip-icon svg { width: 22px; height: 22px; }
 .chip.icon-only { width: 52px; padding: 0; justify-content: center; }
 .chip.icon-only.off { opacity: 0.6; }                     /* music or sound switched off */
-/* the rules chip while the panel is open: gold outline and badge, but a dark body â€”
+/* the rules chip while the panel is open: gold outline and badge, but a dark body —
    a fully gold pill is kept for "it's your move" so the two never compete */
 .chip.on { border-color: #e0b53a; }
 .chip.on .chip-icon { background: #e0b53a; color: #1a1a1a; }
 .chip.info { cursor: default; font-variant-numeric: tabular-nums; }
-/* round chip: the round's wind in the badge, "East round Â· Hand 3" over "87 tiles left" */
+/* round chip: the round's wind in the badge, "East round · Hand 3" over "87 tiles left" */
 .chip.round .chip-icon { background: var(--navy); color: #fff; font-family: 'Noto Serif TC', 'KaiTi', serif; font-size: 1.25rem; font-weight: 900; }
 .chip-stack { display: flex; flex-direction: column; line-height: 1.15; }
 .chip-stack .chip-small strong { font-size: 1.05rem; }
@@ -372,7 +372,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   color: #1a1a1a;
   box-shadow: 0 0 20px rgba(255, 215, 94, 0.6);
 }
-/* the pulse is a glow layer fading in and out â€” opacity, which the graphics chip does on its own,
+/* the pulse is a glow layer fading in and out — opacity, which the graphics chip does on its own,
    rather than animating the shadow, which would repaint the pill every frame */
 .status.mine .status-pill { position: relative; box-shadow: 0 0 6px rgba(255, 215, 94, 0.25); }
 .status.mine .status-pill::after {
@@ -395,7 +395,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .act .tile.mini { font-size: 1.1rem; }
 .bar-hint { font-size: 1.2rem; opacity: 0.9; }
 
-/* "Your hand" meter: faan secured so far, patterns in reach, and â€” when ready â€” the winning tiles */
+/* "Your hand" meter: faan secured so far, patterns in reach, and — when ready — the winning tiles */
 .hand-meter {
   display: flex;
   flex-wrap: wrap;
@@ -610,7 +610,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .tile.clickable:hover { transform: translateY(-10px); box-shadow: 0 12px 16px rgba(0, 0, 0, 0.4); }
   .tile.clickable:active { transform: translateY(-4px); transition-duration: 0.06s; }
 }
-/* Pop-up banners over the table ("Your turn", "South: Pong!") â€” they pop in, then float away by themselves. */
+/* Pop-up banners over the table ("Your turn", "South: Pong!") — they pop in, then float away by themselves. */
 .banner {
   position: fixed;
   z-index: 50;
@@ -631,6 +631,38 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   pointer-events: none;
   animation: turn-banner 1.9s ease-out forwards;
 }
+/* Reactions (online): a big emoji that pops up from a player's place and floats away */
+.reaction {
+  position: fixed;
+  z-index: 55;
+  font-size: 3.2rem;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
+  animation: reaction-float 2.4s ease-out forwards;
+}
+@keyframes reaction-float {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  12% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+  22% { transform: translate(-50%, -62%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -160%) scale(1); }
+}
+.react-tray {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 16px;
+  border: 3px solid #e0b53a;
+  background: #fffaf0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.react-pick { width: 46px; height: 46px; border: 0; border-radius: 12px; background: transparent; font-size: 1.8rem; line-height: 1; cursor: pointer; }
+.react-pick:hover, .react-pick:focus-visible { background: rgba(224, 181, 58, 0.25); }
+.react-pick:active { transform: scale(0.9); }
+.chip.react-chip .chip-icon { font-size: 1.15rem; line-height: 1; }
 .banner.call {
   padding: 10px 26px;
   background: rgba(170, 32, 28, 0.95);
@@ -663,7 +695,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 }
 
 /* ---------- The opening: dice and dealing ---------- */
-/* Two dice in the middle of the felt â€” 3D cubes (see box() in main.ts), the result on their tops. */
+/* Two dice in the middle of the felt — 3D cubes (see box() in main.ts), the result on their tops. */
 .table-dice {
   position: absolute;
   left: 50%;
@@ -1156,7 +1188,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .choice.picked { border-color: #ffd75e; background: rgba(255, 215, 94, 0.18); }
 .choice-label { font-size: 1.35rem; font-weight: 800; }
 .choice-sub { font-size: 0.98rem; opacity: 0.85; }
-.choice.picked .choice-label::before { content: 'âœ“ '; color: #ffd75e; }
+.choice.picked .choice-label::before { content: '✓ '; color: #ffd75e; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 22px; }
 
 /* ---------- Online: Play online, and the room before the game ---------- */
@@ -1219,7 +1251,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .topbar { grid-template-columns: auto minmax(0, 1fr); gap: 10px 8px; padding: 8px; border-radius: 22px; }
   .tb-left, .tb-right { gap: 8px; }
   .tb-right { min-width: 0; justify-content: flex-end; }
-  .chip.round { min-width: 0; flex: 0 1 auto; }             /* on the narrowest phones "East round Â· Hand 3" gets cut with â€¦ */
+  .chip.round { min-width: 0; flex: 0 1 auto; }             /* on the narrowest phones "East round · Hand 3" gets cut with … */
   .chip.round .chip-stack { min-width: 0; overflow: hidden; }
   .chip.round .chip-stack > span { overflow: hidden; text-overflow: ellipsis; }
   .topbar .chip { height: 40px; gap: 6px; padding: 0 12px 0 4px; font-size: 0.9rem; }
@@ -1235,7 +1267,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   .status-hint { font-size: 0.85rem; }
 
   /* the whole screen used: the top bar at the top, your hand at the bottom where your thumbs are,
-     and the table filling the middle â€” seen more from above, so it suits a tall screen and its
+     and the table filling the middle — seen more from above, so it suits a tall screen and its
      near corners stay on screen */
   .main-col { min-height: calc(100dvh - 20px); gap: 12px; }
   .scene {
@@ -1320,7 +1352,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 /* ---------- Phones held sideways ---------- */
 /* Laid out like the computer version: the table on the left, a slim column on the right for the
    status, buttons and "Your hand", and your hand along the bottom. (A sideways phone is laid out
-   about 1120 wide â€” see index.html â€” which keeps it under 600 tall.) */
+   about 1120 wide — see index.html — which keeps it under 600 tall.) */
 @media (orientation: landscape) and (max-height: 600px) {
   body { touch-action: manipulation; place-items: start center; }   /* no double-tap zoom while tapping tiles */
   #app { padding: 6px 8px 0; }
@@ -1493,6 +1525,16 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 /* Everything that floats over the game, and the screens around it, in phone sizes: smaller cards,
    tighter spacing and text a step down, so nothing reads as a zoomed-in close-up. */
 @media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  /* New game, Play online and the room: the buttons stay at the bottom of the screen while you scroll */
+  .setup .setup-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 18px -18px -18px;
+    padding: 12px 18px 18px;
+    border-radius: 0 0 16px 16px;
+    background: linear-gradient(rgba(30, 9, 7, 0), rgba(30, 9, 7, 0.97) 30%);
+  }
   /* "Your hand" details card */
   .hm-card { width: min(320px, calc(100vw - 24px)); max-height: 70dvh; padding: 10px 12px; border-width: 2px; border-radius: 12px; }
   .hm-card-title { font-size: 1rem; }
@@ -1578,7 +1620,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 }
 
 /* ---------- Phones and tablets: the table drawn flat ---------- */
-/* On a computer every tile is a real 3D box â€” five faces, hundreds of them, sorted in depth by the
+/* On a computer every tile is a real 3D box — five faces, hundreds of them, sorted in depth by the
    graphics chip every frame anything moves. That's more than a phone can redraw at 60 frames a
    second. So there (html.lite3d, set in index.html) each tile is one flat face with a strip of its
    ivory layer and blue back showing beneath, and the whole table is tilted as a single picture: the

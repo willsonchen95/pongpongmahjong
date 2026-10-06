@@ -29,6 +29,7 @@ export interface RoomState {
   wakeAt: number | null                // when the room next has something to do on its own
   waitKey?: string | null              // which wait on people wakeAt belongs to (see schedule)
   pauseAfterClaim: boolean             // the next wait includes the pause after a tile was taken
+  reactedAt?: Record<string, number>   // when each player last sent a reaction (they're limited to one a second)
 }
 
 // What a player may send.
@@ -39,6 +40,11 @@ export type ClientMsg =
   | { type: 'kong'; tile: number }
   | { type: 'answer'; answer: Answer }
   | { type: 'ready' }                                    // ready for the next hand
+  | { type: 'react'; emoji: string }                     // one of REACTIONS, shown to everyone
+
+// Quick reactions people can send during a game (only these, at most one a second each).
+export const REACTIONS = ['👍', '😂', '😮', '😭', '😡', '🎉']
+export const REACT_GAP_MS = 1000
 
 // What a player is told.
 export interface SeatInfo { name: string; person: boolean; connected: boolean; host: boolean }
@@ -46,6 +52,7 @@ export type ServerMsg =
   | { type: 'room'; code: string; you: number | null; seats: SeatInfo[]; started: boolean; rules: Rules }
   | { type: 'state'; view: SeatView; events: TableEvent[]; now: number }   // now: the room's clock, for countdowns
   | { type: 'error'; message: string }
+  | { type: 'react'; seat: number; emoji: string }
 
 // A player's view of the table: everything on the table, but only their own hand (everyone's is
 // shown once the hand is over) and none of the wall.
@@ -129,6 +136,12 @@ export class RoomCore {
     if (m.type === 'join') return this.join(playerId, m.name, now)
     const seat = this.seatOf(playerId)
     if (seat < 0) return [{ to: playerId, msg: { type: 'error', message: 'Join the room first.' } }]
+    if (m.type === 'react') {                                // everyone sees it float up from that seat
+      const reacted = (this.s.reactedAt ??= {})
+      if (!REACTIONS.includes(m.emoji) || now - (reacted[playerId] ?? -Infinity) < REACT_GAP_MS) return []
+      reacted[playerId] = now
+      return this.connectedPeople().map(p => ({ to: p.playerId, msg: { type: 'react', seat, emoji: m.emoji } }))
+    }
     const t = this.table
     if (m.type === 'start') {
       if (playerId !== this.s.hostId) return [{ to: playerId, msg: { type: 'error', message: 'Only the host can start.' } }]

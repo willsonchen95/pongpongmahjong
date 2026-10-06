@@ -156,6 +156,17 @@ describe('a room', () => {
     expect(room.s.table!.humans).toEqual([true, false, true, false])
   })
 
+  it('passes reactions to everyone, only known ones, at most one a second each', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    const out = room.handle('b', { type: 'react', emoji: '😂' }, 5000)
+    expect(out.map(o => o.to).sort()).toEqual(['a', 'b'])
+    expect(out[0].msg).toEqual({ type: 'react', seat: 1, emoji: '😂' })
+    expect(room.handle('b', { type: 'react', emoji: '👍' }, 5500)).toEqual([])         // too soon
+    expect(room.handle('b', { type: 'react', emoji: '👍' }, 6000)).toHaveLength(2)
+    expect(room.handle('a', { type: 'react', emoji: '<b>hi</b>' }, 9000)).toEqual([])  // not one of the reactions
+  })
+
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))
