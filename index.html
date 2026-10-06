@@ -28,6 +28,10 @@
         addEventListener('resize', fit)
       })()
     </script>
+    <script>
+      // Phones and tablets draw the table flat (see .lite3d in style.css); ?lite previews it on a computer.
+      if (matchMedia('(pointer: coarse)').matches || /[?&]lite\b/.test(location.search)) document.documentElement.classList.add('lite3d')
+    </script>
     <title>Pong Pong Mahjong!</title>
     <!-- Only the characters drawn on tile faces, so the font download stays tiny -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

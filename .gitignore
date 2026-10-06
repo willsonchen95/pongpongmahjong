@@ -25,3 +25,6 @@ dist-ssr
 
 # local Cloudflare dev state (wrangler)
 .wrangler
+
+# screen recordings for testing
+screen record/
