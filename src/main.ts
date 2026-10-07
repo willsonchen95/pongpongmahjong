@@ -65,6 +65,12 @@ let resultClosed = false          // the end-of-hand card was dismissed to look 
 let showFinal = false             // the match is over and the final standings are showing
 let celebrate = false             // confetti pending — shown once, not on every re-render
 let faanCardOpen = false          // the "Your hand" details card, tapped open (it also opens on hover)
+// a tap anywhere else puts the "Your hand" card away (the pill and "Way to" chip toggle it themselves)
+document.addEventListener('pointerdown', e => {
+  if (!faanCardOpen || (e.target as Element).closest?.('.hm-total-wrap, .hm-way')) return
+  faanCardOpen = false
+  document.querySelector('.hm-total-wrap.open')?.classList.remove('open')   // no redraw, so the tap itself still lands
+}, true)
 const HELP_KEY = 'mahjong-help-open'
 // The rule book never opens by itself — a coachmark in the tutorial points at the Rules button
 // instead. If the player opened it last time on a screen with room beside the table, it's open
@@ -1496,7 +1502,9 @@ function handMeter(): HTMLElement {
     el('span', 'hm-more', 'ⓘ'))
   head.setAttribute('aria-label', 'Your hand score — show details')
   head.onclick = () => { faanCardOpen = !faanCardOpen; render() }
-  wrap.append(head, faanCard(have, close, total, plans))
+  const card = faanCard(have, close, total, plans)
+  card.onclick = () => { if (faanCardOpen) { faanCardOpen = false; render() } }   // tap the card to put it away
+  wrap.append(head, card)
   m.appendChild(wrap)
 
   // short of the minimum: point straight at the easiest way to reach it (details in the card)
