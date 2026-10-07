@@ -39,9 +39,22 @@ export interface RoomState {
   reactedAt?: Record<string, number>   // when each player last sent a reaction (they're limited to one a second)
 }
 
+// Players' own recorded voices: said instead of the computer voice when they call Pong!, Chi!, Kong! or
+// Mahjong!, and three clips of their own for the soundboard. Each is a short WAV (base64), recorded and
+// kept on their phone; the room keeps a copy while they have a seat and passes it to everyone else.
+export const VOICE_SLOTS = ['pong', 'chow', 'kong', 'win', 'own1', 'own2', 'own3'] as const
+export type VoiceSlot = typeof VOICE_SLOTS[number]
+export const BUILTIN_SOUNDS = ['horn', 'drum', 'trombone', 'clap'] as const   // the soundboard's ready-made sounds
+export const MAX_CLIP_CHARS = 90_000   // about 2½ seconds of voice
+export interface Clip { id: string; data: string; label?: string }   // label: a soundboard clip's name
+export type Voices = Record<string, Partial<Record<VoiceSlot, Clip>>>   // by playerId
+// With join: the ids of your clips (so the room asks only for new ones), and the "seat:slot:id" of
+// everyone else's you already have (so it sends only what's missing).
+export interface VoiceSync { mine: Partial<Record<VoiceSlot, string>>; have: string[] }
+
 // What a player may send.
 export type ClientMsg =
-  | { type: 'join'; playerId: string; name: string }
+  | { type: 'join'; playerId: string; name: string; voices?: VoiceSync }
   | { type: 'start'; rules: Rules }                      // host only, in the lobby or after a match
   | { type: 'discard'; tile: number }                    // by tile id
   | { type: 'kong'; tile: number }
@@ -50,6 +63,8 @@ export type ClientMsg =
   | { type: 'react'; emoji: string }                     // one of REACTIONS or PHRASES, shown to everyone
   | { type: 'back' }                                     // back after being away: take your seat from the bot
   | { type: 'leave' }                                    // pressed Leave (not just a dropped connection): the host leaving closes the room
+  | { type: 'voice'; slot: VoiceSlot; clip: Clip | null }  // a clip of yours, new or changed (null: deleted)
+  | { type: 'sound'; slot: string }                      // play a soundboard sound for everyone: one of BUILTIN_SOUNDS, or own1–3
 
 // Quick reactions and chat phrases people can send during a game (only these, at most one a second each).
 export const REACTIONS = ['👍', '😂', '😮', '😭', '😡', '🎉']
@@ -64,6 +79,9 @@ export type ServerMsg =
   | { type: 'error'; message: string }
   | { type: 'react'; seat: number; emoji: string }
   | { type: 'closed'; host: string }                     // the host left, so the room closed: back to the menu
+  | { type: 'voice'; seat: number; slot: VoiceSlot; clip: Clip | null }   // someone's clip (null: they deleted it)
+  | { type: 'voice-need'; slots: VoiceSlot[] }           // your clips the room doesn't have yet: send them
+  | { type: 'sound'; seat: number; slot: string }
 
 // A player's view of the table: everything on the table, but only their own hand (everyone's is
 // shown once the hand is over) and none of the wall.
@@ -86,6 +104,17 @@ export interface SeatView {
 
 export interface Out { to: string; msg: ServerMsg }
 
+const CLIP_ID = /^[A-Za-z0-9]{6,24}$/
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/
+function cleanClip(c: unknown): Clip | null {
+  if (!c || typeof c !== 'object') return null
+  const { id, data, label } = c as Clip
+  if (typeof id !== 'string' || !CLIP_ID.test(id) || typeof data !== 'string' || data.length > MAX_CLIP_CHARS || !BASE64.test(data)) return null
+  const name = typeof label === 'string' ? label.trim().slice(0, 16) : ''
+  return name ? { id, data, label: name } : { id, data }
+}
+const isSlot = (x: unknown): x is VoiceSlot => (VOICE_SLOTS as readonly unknown[]).includes(x)
+
 export function newRoom(code: string, rules: Rules): RoomState {
   return { code, hostId: null, seats: [null, null, null, null], rules, table: null, ready: [], wakeAt: null, pauseAfterClaim: false }
 }
@@ -94,10 +123,13 @@ export class RoomCore {
   s: RoomState
   private table: Table | null
   private pendingEvents: TableEvent[] = []
+  voices: Voices                       // kept apart from the room (they're big): room.ts saves the ones in voiceWrites
+  voiceWrites = new Set<string>()      // "playerId:slot" of clips added, changed or removed
 
-  constructor(state: RoomState) {
+  constructor(state: RoomState, voices: Voices = {}) {
     this.s = state
     this.table = state.table ? Table.fromData(state.table) : null
+    this.voices = voices
   }
 
   private seatOf(playerId: string): number {
@@ -108,7 +140,7 @@ export class RoomCore {
 
   // ---------- Messages from players ----------
 
-  join(playerId: string, name: string, now: number): Out[] {
+  join(playerId: string, name: string, now: number, voices?: VoiceSync): Out[] {
     name = name.trim().slice(0, 16) || 'Player'
     let seat = this.seatOf(playerId)
     if (seat < 0) {
@@ -125,7 +157,7 @@ export class RoomCore {
       this.table.humans[seat] = this.plays(this.s.seats[seat])
       this.schedule(now)
     }
-    return [...this.lobbyToAll(), ...this.statesToAll(now)]
+    return [...this.lobbyToAll(), ...this.statesToAll(now), ...this.syncVoices(playerId, seat, voices)]
   }
 
   leave(playerId: string, now: number): Out[] {
@@ -143,11 +175,18 @@ export class RoomCore {
     if (this.s.hostId === playerId) this.s.hostId = this.connectedPeople()[0]?.playerId ?? null
     this.s.ready = this.s.ready.filter(id => id !== playerId)
     this.nextHandIfAllReady(now)                             // everyone still here may have pressed "Next hand" already
+    this.dropVoicesOfEmptySeats()
     return [...this.lobbyToAll(), ...this.statesToAll(now)]
   }
 
   handle(playerId: string, m: ClientMsg, now: number): Out[] {
-    if (m.type === 'join') return this.join(playerId, m.name, now)
+    const out = this.handleMsg(playerId, m, now)
+    this.dropVoicesOfEmptySeats()
+    return out
+  }
+
+  private handleMsg(playerId: string, m: ClientMsg, now: number): Out[] {
+    if (m.type === 'join') return this.join(playerId, m.name, now, m.voices)
     const seat = this.seatOf(playerId)
     if (seat < 0) return m.type === 'leave' ? [] : [{ to: playerId, msg: { type: 'error', message: 'Join the room first.' } }]
     if (m.type === 'leave') return playerId === this.s.hostId ? this.close(playerId) : this.leave(playerId, now)
@@ -156,6 +195,14 @@ export class RoomCore {
       if (![...REACTIONS, ...PHRASES].includes(m.emoji) || now - (reacted[playerId] ?? -Infinity) < REACT_GAP_MS) return []
       reacted[playerId] = now
       return this.connectedPeople().map(p => ({ to: p.playerId, msg: { type: 'react', seat, emoji: m.emoji } }))
+    }
+    if (m.type === 'voice') return this.voiceFrom(playerId, seat, m.slot, m.clip)
+    if (m.type === 'sound') {                                // the same one-a-second limit as reactions
+      const reacted = (this.s.reactedAt ??= {})
+      const own = isSlot(m.slot) && m.slot.startsWith('own') && !!this.voices[playerId]?.[m.slot]
+      if (!(own || (BUILTIN_SOUNDS as readonly string[]).includes(m.slot)) || now - (reacted[playerId] ?? -Infinity) < REACT_GAP_MS) return []
+      reacted[playerId] = now
+      return this.connectedPeople().map(p => ({ to: p.playerId, msg: { type: 'sound', seat, slot: m.slot } }))
     }
     const t = this.table
     if (m.type === 'start') {
@@ -201,6 +248,53 @@ export class RoomCore {
     this.collect()
     this.schedule(now)
     return this.statesToAll(now)
+  }
+
+  // ---------- Voices ----------
+
+  // Someone joining (or reconnecting): ask for their clips the room doesn't have, forget the ones they've
+  // deleted since, and send them everyone else's they're missing.
+  private syncVoices(playerId: string, seat: number, v: VoiceSync | undefined): Out[] {
+    if (seat < 0 || !v || typeof v !== 'object') return []          // (an older game doesn't send voices)
+    const out: Out[] = []
+    const said = (v.mine && typeof v.mine === 'object' ? v.mine : {}) as Record<string, unknown>
+    const mine = this.voices[playerId] ?? {}
+    for (const slot of VOICE_SLOTS) if (mine[slot] && typeof said[slot] !== 'string') out.push(...this.voiceFrom(playerId, seat, slot, null))
+    const need = VOICE_SLOTS.filter(slot => typeof said[slot] === 'string' && mine[slot]?.id !== said[slot])
+    if (need.length) out.push({ to: playerId, msg: { type: 'voice-need', slots: need } })
+    const have = new Set(Array.isArray(v.have) ? v.have.slice(0, 64).filter(h => typeof h === 'string') : [])
+    const hadAny = (prefix: string) => [...have].some(h => h.startsWith(prefix))
+    this.s.seats.forEach((x, i) => {
+      if (!x || x.playerId === playerId) return
+      const theirs = this.voices[x.playerId] ?? {}
+      for (const slot of VOICE_SLOTS) {
+        const c = theirs[slot]
+        if (c ? !have.has(`${i}:${slot}:${c.id}`) : hadAny(`${i}:${slot}:`)) out.push({ to: playerId, msg: { type: 'voice', seat: i, slot, clip: c ?? null } })
+      }
+    })
+    return out
+  }
+
+  // A clip of someone's, new, changed or deleted: kept, and passed to everyone else.
+  private voiceFrom(playerId: string, seat: number, slot: unknown, clip: unknown): Out[] {
+    if (!isSlot(slot)) return []
+    const c = clip === null ? null : cleanClip(clip)
+    if (clip !== null && !c) return []
+    const mine = (this.voices[playerId] ??= {})
+    if (c) mine[slot] = c
+    else if (mine[slot]) delete mine[slot]
+    else return []
+    this.voiceWrites.add(`${playerId}:${slot}`)
+    return this.connectedPeople().filter(p => p.playerId !== playerId).map(p => ({ to: p.playerId, msg: { type: 'voice', seat, slot, clip: c } }))
+  }
+
+  // Clips are kept only while their owner has a seat.
+  private dropVoicesOfEmptySeats() {
+    for (const id of Object.keys(this.voices)) {
+      if (this.seatOf(id) >= 0) continue
+      for (const slot of Object.keys(this.voices[id])) this.voiceWrites.add(`${id}:${slot}`)
+      delete this.voices[id]
+    }
   }
 
   // The host left for good: everyone else is sent back to the menu, and the room starts over empty

@@ -12,20 +12,35 @@ export function setMuted(m: boolean) {
   if (m) speechSynthesis?.cancel()
 }
 
-function audio(): AudioContext | null {
-  if (muted || document.hidden) return null           // the bots play on in a hidden tab, silently
+// The audio context, sound on or off (recording and getting players' clips ready need it either way).
+export function audioContext(): AudioContext {
   if (!ctx) ctx = new AudioContext()
-  if (ctx.state === 'suspended') void ctx.resume()
   return ctx
 }
 
+function audio(): AudioContext | null {
+  if (muted || document.hidden) return null           // the bots play on in a hidden tab, silently
+  const a = audioContext()
+  if (a.state === 'suspended') void a.resume()
+  return a
+}
+
+// Play recorded sound (a player's own clip), unless the sound is off.
+export function playBuffer(buf: AudioBuffer) {
+  const a = audio(); if (!a) return
+  const src = a.createBufferSource()
+  src.buffer = buf
+  src.connect(a.destination)
+  src.start()
+}
+
 // A short filtered noise burst — the "click" of tile on tile.
-function knock(a: AudioContext, at: number, freq: number, q: number, gain: number, length: number) {
+function knock(a: AudioContext, at: number, freq: number, q: number, gain: number, length: number, type: BiquadFilterType = 'bandpass') {
   const buf = a.createBuffer(1, Math.ceil(a.sampleRate * length), a.sampleRate)
   const data = buf.getChannelData(0)
   for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 3
   const src = a.createBufferSource(); src.buffer = buf
-  const filter = a.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = freq; filter.Q.value = q
+  const filter = a.createBiquadFilter(); filter.type = type; filter.frequency.value = freq; filter.Q.value = q
   const g = a.createGain(); g.gain.value = gain
   src.connect(filter).connect(g).connect(a.destination)
   src.start(at)
@@ -40,6 +55,43 @@ function tone(a: AudioContext, at: number, freq: number, length: number, gain: n
   g.gain.exponentialRampToValueAtTime(0.0001, at + length)
   osc.connect(g).connect(a.destination)
   osc.start(at); osc.stop(at + length + 0.02)
+}
+
+// A tone that slides from one pitch to another (a drum's thud drops in pitch as it fades).
+function slide(a: AudioContext, at: number, from: number, to: number, length: number, gain: number, type: OscillatorType = 'sine') {
+  const osc = a.createOscillator(); osc.type = type
+  osc.frequency.setValueAtTime(from, at)
+  osc.frequency.exponentialRampToValueAtTime(to, at + length)
+  const g = a.createGain()
+  g.gain.setValueAtTime(gain, at)
+  g.gain.exponentialRampToValueAtTime(0.0001, at + length)
+  osc.connect(g).connect(a.destination)
+  osc.start(at); osc.stop(at + length + 0.02)
+}
+
+// A brassy note: buzzy waves through a filter that opens and closes ("wah"), with a wobble if held.
+function brass(a: AudioContext, at: number, freqs: number[], length: number, gain: number, wobble = 0) {
+  const filter = a.createBiquadFilter(); filter.type = 'lowpass'; filter.Q.value = 4
+  filter.frequency.setValueAtTime(400, at)
+  filter.frequency.linearRampToValueAtTime(2200, at + 0.08)
+  filter.frequency.linearRampToValueAtTime(900, at + length)
+  const g = a.createGain()
+  g.gain.setValueAtTime(0.0001, at)
+  g.gain.exponentialRampToValueAtTime(gain, at + 0.04)
+  g.gain.setValueAtTime(gain, at + length - 0.08)
+  g.gain.exponentialRampToValueAtTime(0.0001, at + length)
+  filter.connect(g).connect(a.destination)
+  for (const f of freqs) {
+    const osc = a.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = f
+    if (wobble) {
+      const lfo = a.createOscillator(); lfo.frequency.value = 5.5
+      const depth = a.createGain(); depth.gain.value = wobble
+      lfo.connect(depth).connect(osc.frequency)
+      lfo.start(at); lfo.stop(at + length + 0.02)
+    }
+    osc.connect(filter)
+    osc.start(at); osc.stop(at + length + 0.02)
+  }
 }
 
 function say(word: string) {
@@ -162,14 +214,15 @@ export const sfx = {
     const a = audio(); if (!a) return
     knock(a, a.currentTime, 4200, 1.5, quiet ? 0.12 : 0.35, 0.04)
   },
-  // pong / chow / kong: a two-note chime and the word spoken aloud
-  call(word: string) {
+  // pong / chow / kong: a two-note chime and the word spoken aloud (not when the player's own
+  // recorded voice says it instead)
+  call(word: string, spoken = true) {
     const a = audio(); if (!a) return
     const t = a.currentTime
     knock(a, t, 2200, 1.2, 0.6, 0.06)
     tone(a, t, 660, 0.25, 0.18, 'triangle')
     tone(a, t + 0.09, 990, 0.35, 0.18, 'triangle')
-    say(word)
+    if (spoken) say(word)
   },
   // dice rattling in the hand, then landing on the table
   dice() {
@@ -204,10 +257,32 @@ export const sfx = {
     tone(a, t, 784, 0.35, 0.12)
     tone(a, t + 0.14, 1175, 0.5, 0.12)
   },
-  win() {
+  win(spoken = true) {
     const a = audio(); if (!a) return
     const t = a.currentTime
     ;[523, 659, 784, 1047].forEach((f, i) => tone(a, t + i * 0.11, f, 0.6, 0.2, 'triangle'))
-    say('Mahjong!')
+    if (spoken) say('Mahjong!')
+  },
+  // the soundboard's ready-made sounds (see BUILTIN_SOUNDS)
+  board(name: string) {
+    const a = audio(); if (!a) return
+    const t = a.currentTime
+    if (name === 'horn') {                             // air horn: honk, honk, hoooonk
+      ;[[0, 0.16], [0.22, 0.16], [0.44, 0.75]].forEach(([at, len]) => brass(a, t + at, [466, 470, 587], len, 0.09))
+    } else if (name === 'drum') {                      // ba-dum-tss
+      slide(a, t, 190, 110, 0.18, 0.5)
+      knock(a, t, 900, 1, 0.25, 0.05)
+      slide(a, t + 0.17, 150, 85, 0.22, 0.5)
+      knock(a, t + 0.17, 700, 1, 0.25, 0.05)
+      knock(a, t + 0.45, 7500, 0.7, 0.55, 1.1, 'highpass')
+    } else if (name === 'trombone') {                  // sad trombone: wah, wah, wah, waaaah
+      ;[[0, 294, 0.38], [0.42, 277, 0.38], [0.84, 262, 0.38], [1.26, 247, 1.2]].forEach(([at, f, len], i) =>
+        brass(a, t + at, [f, f * 1.003], len, 0.11, i === 3 ? 7 : 0))
+    } else if (name === 'clap') {                      // applause: lots of claps, dying away
+      for (let i = 0; i < 70; i++) {
+        const at = Math.random() ** 1.6 * 1.8
+        knock(a, t + at, 1100 + Math.random() * 1500, 1.4, 0.35 * (1 - at / 2.2), 0.03)
+      }
+    }
   },
 }

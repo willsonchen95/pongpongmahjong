@@ -104,6 +104,18 @@ export const MENU_ICONS = {
   book: ICONS.book,
   install: svgIcon('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7.5M9 11.5l3 3 3-3"/><path d="M10.5 18.5h3"/>'),
   online: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
+  voice: svgIcon('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
+}
+
+// A page's title with a round back button before it, so going back never means scrolling down to the
+// button at the bottom. `onBack` does what that bottom button does.
+export function pageTitle(title: string, onBack: () => void, backLabel: string): HTMLElement {
+  const row = el('div', 'page-title-row')
+  const back = button('‹', onBack, 'page-back')
+  back.title = backLabel
+  back.setAttribute('aria-label', backLabel)
+  row.append(back, el('h1', 'setup-title', title))
+  return row
 }
 
 // A row of tiles written in parse() notation, e.g. '123m' — for the rules and tips.

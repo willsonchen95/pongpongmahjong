@@ -170,6 +170,37 @@ describe('a room', () => {
     expect(room.handle('b', { type: 'react', emoji: 'Hello there' }, 10000)).toEqual([])   // only the set phrases
   })
 
+  it('passes players’ recorded clips to the others, and only what each is missing when they (re)join', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    const clip = { id: 'abc123', data: 'UklGRg==' }
+    // Alice joins saying she has a Pong! clip: the room asks for it
+    const asked = room.join('a', 'Alice', 0, { mine: { pong: 'abc123' }, have: [] })
+    expect(asked.find(o => o.msg.type === 'voice-need')?.msg).toEqual({ type: 'voice-need', slots: ['pong'] })
+    room.handle('a', { type: 'voice', slot: 'pong', clip }, 0)
+    expect([...room.voiceWrites]).toEqual(['a:pong'])
+    // Bob joining gets it; rejoining with it already, he doesn't get it again
+    const bobs = room.join('b', 'Bob', 0, { mine: {}, have: [] }).filter(o => o.to === 'b' && o.msg.type === 'voice')
+    expect(bobs.map(o => o.msg)).toEqual([{ type: 'voice', seat: 0, slot: 'pong', clip }])
+    expect(room.join('b', 'Bob', 0, { mine: {}, have: ['0:pong:abc123'] }).filter(o => o.msg.type === 'voice')).toEqual([])
+    // a new clip goes to Bob straight away; nonsense is ignored
+    const sent = room.handle('a', { type: 'voice', slot: 'own1', clip: { id: 'def456', data: 'AAAA', label: '  Haha  ' } }, 0)
+    expect(sent).toEqual([{ to: 'b', msg: { type: 'voice', seat: 0, slot: 'own1', clip: { id: 'def456', data: 'AAAA', label: 'Haha' } } }])
+    expect(room.handle('a', { type: 'voice', slot: 'own1', clip: { id: 'x', data: '<script>' } }, 0)).toEqual([])
+    expect(room.handle('a', { type: 'voice', slot: 'boo' as never, clip }, 0)).toEqual([])
+    // Alice comes back having deleted her Pong! clip: Bob is told to forget it
+    const back = room.join('a', 'Alice', 0, { mine: { own1: 'def456' }, have: [] })
+    expect(back.filter(o => o.msg.type === 'voice').map(o => o.msg)).toEqual([{ type: 'voice', seat: 0, slot: 'pong', clip: null }])
+    // her own soundboard clip and the ready-made sounds play for everyone; others' clips aren't hers to play
+    expect(room.handle('a', { type: 'sound', slot: 'own1' }, 1000).map(o => o.to).sort()).toEqual(['a', 'b'])
+    expect(room.handle('b', { type: 'sound', slot: 'own1' }, 1000)).toEqual([])
+    expect(room.handle('b', { type: 'sound', slot: 'horn' }, 1000)[0].msg).toEqual({ type: 'sound', seat: 1, slot: 'horn' })
+    // leaving the room (in the lobby) frees the seat, and the room forgets the clips
+    room.voiceWrites.clear()
+    room.handle('a', { type: 'leave' }, 2000)                // (Alice is host: the room closes)
+    expect(room.voices).toEqual({})
+    expect([...room.voiceWrites]).toEqual(['a:own1'])
+  })
+
   it('out of time on your turn: throws the tile you just drew; twice in a row and a bot takes over until you’re back', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))

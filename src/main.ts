@@ -11,11 +11,13 @@ import { TIPS, type CoachStep, type Steps } from './tips'
 import { confetti, mahjongBurst, turnGlow, notice } from './fx'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
-import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points, fmt } from './ui'
+import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points, fmt, pageTitle } from './ui'
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, BUILTIN_SOUNDS, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
+import { myClips, playClip, CALL_SLOTS, OWN_SLOTS, type VoiceSlot } from './voice'
+import { renderVoicePage, BUILTIN_LABELS, ownLabel } from './voice-page'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -121,7 +123,7 @@ function playEvents(events: TableEvent[] = table.takeEvents()) {
     else if (e.type === 'discard') { sfx.discard(); if (e.seat !== HUMAN) explainShortWin(e.tile) }
     else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
     else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn(); explainShortWin(null) }
-    else if (e.type === 'win') { celebrate = e.seat === HUMAN; burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sfx.win() }
+    else if (e.type === 'win') { celebrate = e.seat === HUMAN; burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sayOrPlay('win', e.seat, () => sfx.win(), () => sfx.win(false)) }
   }
   sync()
 }
@@ -154,9 +156,22 @@ function announceFlowers(seat: number, tiles: Tile[]) {
   sfx.flower()
 }
 
+// A player's own recorded voice for a call, if they made one: online, anyone at the table; against the
+// bots, just yours.
+function voiceClip(seat: number, slot: VoiceSlot) {
+  return online ? online.clipFor(seat, slot) : seat === HUMAN ? myClips()[slot] : undefined
+}
+// Their own voice with the chime (`withVoice`), or the game's voice (`plain`).
+function sayOrPlay(slot: VoiceSlot, seat: number, plain: () => void, withVoice: () => void) {
+  const clip = voiceClip(seat, slot)
+  if (!clip) return plain()
+  withVoice()
+  void playClip(clip)
+}
+
 // Someone called pong/chow/kong: say it, and pop up a banner on their side showing the set.
 function announceCall(seat: number, kind: ClaimKind, meld: Tile[]) {
-  sfx.call(CALL_WORDS[kind])
+  sayOrPlay(kind, seat, () => sfx.call(CALL_WORDS[kind]), () => sfx.call(CALL_WORDS[kind], false))
   banners.push({ text: `${NAMES[seat]}: ${CALL_WORDS[kind]}`, kind: 'call', seat, tiles: meld })
 }
 
@@ -245,6 +260,7 @@ function goOnline(code: string, name: string) {
   room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
   room.onConnection = () => { if (lobbyShowing()) renderLobby(); else refresh() }
   room.onReact = (seat, emoji) => { if (!lobbyShowing()) showReaction(seat, emoji) }
+  room.onSound = (seat, slot) => playSound(room, seat, slot)
   room.onClosed = host => {                           // the host left: back to the menu, saying why
     leaveRoom(false)
     void dialog('The room has closed', `${host} (the host) left the room, so the game has ended.`, [{ label: 'OK', value: true, cls: 'primary' }])
@@ -809,6 +825,7 @@ function renderMenu() {
       tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
     heading('Play with friends', 'Online · share a room code'),
     onlineMenuCard(),
+    menuCard(MENU_ICONS.voice, 'Your voice', 'Record your own Pong!, Chi!, Kong! and soundboard sounds', () => openVoicePage(renderMenu), 'voice-card'),
   )
   const extras = el('div', 'menu-extras')
   const rules = el('button', 'menu-extra')
@@ -874,17 +891,6 @@ function renderRulesPage() {
   page.append(head, body, foot, credit)
   app.appendChild(page)
   window.scrollTo(0, 0)
-}
-
-// A page's title with a round back button before it, so going back never means scrolling down to the
-// button at the bottom. `onBack` does what that bottom button does.
-function pageTitle(title: string, onBack: () => void, backLabel: string): HTMLElement {
-  const row = el('div', 'page-title-row')
-  const back = button('‹', onBack, 'page-back')
-  back.title = backLabel
-  back.setAttribute('aria-label', backLabel)
-  row.append(back, el('h1', 'setup-title', title))
-  return row
 }
 
 // A row of big choice buttons; the chosen one is lit. `onPick` gets the chosen value.
@@ -957,6 +963,27 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
     ], settings.startPoints, v => pick({ startPoints: v })))
 }
 
+// ---------- Your voice ----------
+
+// The "Your voice" page (voice-page.ts); `back` redraws the page it was opened from. In a room, a clip
+// you record or delete there goes to the others straight away.
+function openVoicePage(back: () => void) {
+  inMenu = true
+  renderVoicePage(app, back, slot => online?.sendClip(slot))
+}
+// "Your voice · 2 calls and 1 sound recorded" — the way to it from the online pages.
+function voiceLink(back: () => void): HTMLElement {
+  const clips = myClips()
+  const calls = CALL_SLOTS.filter(s => clips[s]).length, own = OWN_SLOTS.filter(s => clips[s]).length
+  const made = calls + own ? `${calls} call${calls === 1 ? '' : 's'} and ${own} sound${own === 1 ? '' : 's'} recorded` : 'Shout your own Pong! — your friends hear it'
+  const b = button('', () => openVoicePage(back), 'voice-link')
+  b.innerHTML = MENU_ICONS.voice
+  const text = el('span', 'vl-text')
+  text.append(el('strong', '', 'Your voice'), el('span', '', made))
+  b.append(text, el('span', 'vl-go', '›'))
+  return b
+}
+
 // ---------- Online: joining a room, and the room before the game ----------
 
 const NAME_KEY = 'mahjong-online-name'
@@ -1005,7 +1032,7 @@ function renderOnlineHome() {
   card.append(el('h2', 'setup-q', 'Your name'), nameInput,
     el('h2', 'setup-q', 'Start a room'), el('p', 'setup-help', 'You’ll get a code to send to your friends.'), create,
     el('h2', 'setup-q', 'Or join one'), el('p', 'setup-help', 'Type the code a friend sent you.'), joinRow,
-    message)
+    message, voiceLink(renderOnlineHome))
   const actions = el('div', 'setup-actions')
   actions.append(button('‹ Back', renderMenu, 'act'))
   card.appendChild(actions)
@@ -1053,7 +1080,7 @@ function renderLobby() {
       if (tag) row.appendChild(el('span', 'seat-tag', tag))
       list.appendChild(row)
     })
-    card.appendChild(list)
+    card.append(list, voiceLink(renderLobby))
     const isHost = r.you !== null && r.seats[r.you]?.host
     if (isHost) {
       ruleChoices(card, renderLobby, false)
@@ -1828,7 +1855,19 @@ function toggleReactions(from: HTMLElement) {
   const emojis = el('div', 'react-row'), phrases = el('div', 'phrase-grid')   // the emoji, then a few short phrases
   for (const emoji of REACTIONS) { const b = el('button', 'react-pick', emoji); b.onclick = send(emoji); emojis.appendChild(b) }
   for (const text of PHRASES) { const b = el('button', 'phrase-pick', text); b.onclick = send(text); phrases.appendChild(b) }
-  tray.append(emojis, phrases)
+  // then the soundboard: the ready-made sounds, and your own recorded ones
+  const board = el('div', 'sound-grid')
+  const play = (slot: string) => () => { online?.sound(slot); close() }
+  for (const name of BUILTIN_SOUNDS) {
+    const [emoji, label] = BUILTIN_LABELS[name]
+    const b = el('button', 'sound-pick', `${emoji} ${label}`); b.onclick = play(name); board.appendChild(b)
+  }
+  for (const slot of OWN_SLOTS) {
+    if (!myClips()[slot]) continue
+    const b = el('button', 'sound-pick own', `🔊 ${ownLabel(slot)}`); b.onclick = play(slot); board.appendChild(b)
+  }
+  tray.append(emojis, phrases, el('div', 'tray-head', 'Soundboard'), board)
+  if (!OWN_SLOTS.some(s => myClips()[s])) tray.appendChild(el('p', 'tray-hint', 'Add sounds of your own on the Your voice page (in the menu).'))
   document.body.appendChild(tray)
   // under the button, kept on screen
   const r = from.getBoundingClientRect()
@@ -1837,12 +1876,22 @@ function toggleReactions(from: HTMLElement) {
   document.addEventListener('pointerdown', outside, true)
 }
 
-function showReaction(seat: number, emoji: string) {
+// Someone played a soundboard sound: play it, with a speech bubble saying what it is.
+function playSound(room: OnlineRoom, seat: number, slot: string) {
+  const builtin = BUILTIN_LABELS[slot]
+  const clip = builtin ? undefined : room.clipFor(seat, slot as VoiceSlot)
+  if (builtin) sfx.board(slot)
+  else if (clip) void playClip(clip)
+  else return
+  if (!lobbyShowing()) showReaction(seat, builtin ? builtin.join(' ') : `🔊 ${clip?.label ?? 'Sound'}`, true)
+}
+
+function showReaction(seat: number, emoji: string, bubbled = PHRASES.includes(emoji)) {
   const scene = shell?.scene
   if (!scene || !document.contains(scene)) return
   const r = scene.getBoundingClientRect()
   const [fx, fy] = BANNER_SPOT[String(seat)]
-  const bubble = el('div', 'reaction' + (PHRASES.includes(emoji) ? ' phrase' : ''), emoji)   // a phrase comes in a speech bubble
+  const bubble = el('div', 'reaction' + (bubbled ? ' phrase' : ''), emoji)   // a phrase comes in a speech bubble
   bubble.style.left = `${r.left + r.width * Math.min(0.88, Math.max(0.12, fx))}px`   // (kept clear of the screen's edges)
   bubble.style.top = `${r.top + r.height * fy}px`
   bubble.addEventListener('animationend', () => bubble.remove())

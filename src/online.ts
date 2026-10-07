@@ -5,9 +5,11 @@
 import type { ServerMsg, ClientMsg, SeatView, SeatInfo } from '../server/room-core'
 import type { Rules, Phase, Match, TableEvent } from './table'
 import { makeTile, type GameState, type Tile } from './engine'
+import { myClips, prepare, type Clip, type VoiceSlot } from './voice'
+import { VOICE_SLOTS } from '../server/room-core'
 
 export type { SeatInfo }
-export { REACTIONS, PHRASES, TURN_MS } from '../server/room-core'
+export { REACTIONS, PHRASES, TURN_MS, BUILTIN_SOUNDS } from '../server/room-core'
 
 // Where the room server is: while developing on this computer or its home network, the local
 // `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`).
@@ -134,6 +136,10 @@ export class OnlineRoom {
   private ws: WebSocket | null = null
   private closing = false
   private retry = 0
+  // the others' recorded clips, by seat as the server numbers it, and who they belong to (a seat's
+  // clips are dropped when someone else sits there)
+  private clips: Partial<Record<VoiceSlot, Clip>>[] = [{}, {}, {}, {}]
+  private owners: string[] = ['', '', '', '']
 
   onRoom: () => void = () => {}
   onState: (view: LocalView, events: TableEvent[]) => void = () => {}
@@ -141,6 +147,7 @@ export class OnlineRoom {
   onConnection: () => void = () => {}
   onReact: (seat: number, emoji: string) => void = () => {}   // seat as on screen (you = 0)
   onClosed: (host: string) => void = () => {}               // the host left, so the room closed
+  onSound: (seat: number, slot: string) => void = () => {}  // someone played a soundboard sound (seat as on screen)
 
   constructor(code: string, name: string) {
     this.code = code
@@ -181,12 +188,27 @@ export class OnlineRoom {
       this.connected = true
       this.everConnected = true
       this.retry = 0
-      this.send({ type: 'join', playerId: this.playerId, name: this.name })
+      const mine = Object.fromEntries(Object.entries(myClips()).map(([slot, c]) => [slot, c!.id]))
+      const have = this.clips.flatMap((cs, seat) => Object.entries(cs).map(([slot, c]) => `${seat}:${slot}:${c!.id}`))
+      this.send({ type: 'join', playerId: this.playerId, name: this.name, voices: { mine, have } })
       this.onConnection()
     }
     ws.onmessage = ev => {
       const m: ServerMsg = JSON.parse(ev.data)
-      if (m.type === 'room') { this.room = m; this.onRoom() }
+      if (m.type === 'room') {
+        m.seats.forEach((s, i) => {
+          const owner = s.person ? s.name : ''
+          if (owner !== this.owners[i]) { this.clips[i] = {}; this.owners[i] = owner }
+        })
+        this.room = m
+        this.onRoom()
+      }
+      else if (m.type === 'voice') {
+        if (m.clip) { this.clips[m.seat][m.slot] = m.clip; void prepare(m.clip) }
+        else delete this.clips[m.seat][m.slot]
+      }
+      else if (m.type === 'voice-need') for (const slot of m.slots) this.sendClip(slot)
+      else if (m.type === 'sound') { if (this.seat !== null) this.onSound(seat(m.seat, this.seat), m.slot) }
       else if (m.type === 'state') {
         this.view = turnView(m.view, m.now)
         this.onState(this.view, turnEvents(m.events, m.view.seat))
@@ -212,6 +234,19 @@ export class OnlineRoom {
 
   start(rules: Rules) { this.send({ type: 'start', rules }) }
   react(emoji: string) { this.send({ type: 'react', emoji }) }
+  sound(slot: string) { this.send({ type: 'sound', slot }) }
+
+  // One of your clips, new, changed or deleted: pass it on to the room.
+  sendClip(slot: VoiceSlot) {
+    if (VOICE_SLOTS.includes(slot)) this.send({ type: 'voice', slot, clip: myClips()[slot] ?? null })
+  }
+
+  // The clip a player at the table recorded for `slot`, if any (seat as on screen: you = 0).
+  clipFor(screenSeat: number, slot: VoiceSlot): Clip | undefined {
+    const you = this.seat
+    if (screenSeat === 0 || you === null) return myClips()[slot]
+    return this.clips[(screenSeat + you) % 4][slot]
+  }
   back() { this.send({ type: 'back' }) }
 
   // Leave the room for good (a bot takes your seat; you can still come back with the code). Telling

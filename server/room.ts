@@ -4,7 +4,7 @@
 // deal, someone's time running out). All the actual rules live in RoomCore.
 
 import { DurableObject } from 'cloudflare:workers'
-import { RoomCore, newRoom, type RoomState, type ClientMsg, type Out } from './room-core'
+import { RoomCore, newRoom, type RoomState, type ClientMsg, type Out, type Voices, type Clip, type VoiceSlot } from './room-core'
 
 export interface Env { ROOMS: DurableObjectNamespace<Room> }
 
@@ -12,6 +12,20 @@ const DEFAULT_RULES = { rounds: 1, minFaan: 1, startPoints: 1000 }
 const PLAYER_ID = /^[A-Za-z0-9-]{8,64}$/
 
 export class Room extends DurableObject<Env> {
+  // players' recorded clips, each stored under its own key ("voice:<playerId>:<slot>"): read in once
+  // when the room wakes, then kept here
+  private voices: Voices | null = null
+
+  private async loadVoices(): Promise<Voices> {
+    if (this.voices) return this.voices
+    const voices: Voices = {}
+    for (const [key, clip] of await this.ctx.storage.list<Clip>({ prefix: 'voice:' })) {
+      const [, id, slot] = key.split(':')
+      ;(voices[id] ??= {})[slot as VoiceSlot] = clip
+    }
+    return (this.voices = voices)
+  }
+
   // A player connecting: /rooms/<code>/ws?player=<their id>
   async fetch(req: Request): Promise<Response> {
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 })
@@ -49,9 +63,15 @@ export class Room extends DurableObject<Env> {
   private async update(change: (core: RoomCore) => Out[]) {
     const state = await this.ctx.storage.get<RoomState>('room')
     if (!state) return
-    const core = new RoomCore(state)
+    const core = new RoomCore(state, await this.loadVoices())
     const out = change(core)
     await this.ctx.storage.put('room', core.s)
+    for (const w of core.voiceWrites) {
+      const [id, slot] = w.split(':')
+      const clip = core.voices[id]?.[slot as VoiceSlot]
+      if (clip) await this.ctx.storage.put(`voice:${w}`, clip)
+      else await this.ctx.storage.delete(`voice:${w}`)
+    }
     if (core.s.wakeAt !== null) await this.ctx.storage.setAlarm(core.s.wakeAt)
     else await this.ctx.storage.deleteAlarm()
     for (const o of out) {
