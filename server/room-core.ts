@@ -115,6 +115,51 @@ function cleanClip(c: unknown): Clip | null {
 }
 const isSlot = (x: unknown): x is VoiceSlot => (VOICE_SLOTS as readonly unknown[]).includes(x)
 
+// The host's rules, kept to what the game offers (anything else is refused).
+export function cleanRules(r: unknown): Rules | null {
+  if (!r || typeof r !== 'object') return null
+  const { rounds, minFaan, startPoints, bots } = r as Rules
+  if (![1, 4].includes(rounds) || ![0, 1, 3].includes(minFaan) || ![1000, 2000, 5000].includes(startPoints)) return null
+  if (bots !== undefined && !['easy', 'normal', 'hard'].includes(bots)) return null
+  return bots ? { rounds, minFaan, startPoints, bots } : { rounds, minFaan, startPoints }
+}
+
+// An answer to a tile on offer: one of the known kinds, and for a chow, the three tile ids it uses.
+export function cleanAnswer(a: unknown): Answer | null {
+  if (!a || typeof a !== 'object') return null
+  const { kind, run } = a as { kind: unknown; run?: unknown }
+  if (kind === 'pass' || kind === 'win' || kind === 'pong' || kind === 'kong') return { kind }
+  if (kind === 'chow' && Array.isArray(run) && run.length === 3 && run.every(Number.isInteger)) return { kind, run: [...run] }
+  return null
+}
+
+// How fast one connection may send: a bucket of `size` that refills `perSecond`. A message costs
+// one; a voice clip (big, and passed on to everyone) costs CLIP_COST. Out of tokens: the message is
+// dropped. Far beyond (a script flooding the room): the connection should be closed.
+export const MSG_BUCKET = { size: 30, perSecond: 10 }
+export const CLIP_COST = 4                // 7 clips at once (joining with a full set) still fit
+export const MAX_MSG_CHARS = MAX_CLIP_CHARS + 1000
+export class Limiter {
+  private size: number
+  private perSecond: number
+  private tokens: number
+  private at: number
+  constructor(size = MSG_BUCKET.size, perSecond = MSG_BUCKET.perSecond, now = 0) {
+    this.size = size
+    this.perSecond = perSecond
+    this.tokens = size
+    this.at = now
+  }
+  // 'ok', 'drop' (too fast), or 'close' (flooding)
+  take(cost: number, now: number): 'ok' | 'drop' | 'close' {
+    this.tokens = Math.min(this.size, this.tokens + ((now - this.at) / 1000) * this.perSecond)
+    this.at = now
+    this.tokens -= cost
+    if (this.tokens >= 0) return 'ok'
+    return this.tokens < -this.size ? 'close' : 'drop'
+  }
+}
+
 export function newRoom(code: string, rules: Rules): RoomState {
   return { code, hostId: null, seats: [null, null, null, null], rules, table: null, ready: [], wakeAt: null, pauseAfterClaim: false }
 }
@@ -141,7 +186,7 @@ export class RoomCore {
   // ---------- Messages from players ----------
 
   join(playerId: string, name: string, now: number, voices?: VoiceSync): Out[] {
-    name = name.trim().slice(0, 16) || 'Player'
+    name = (typeof name === 'string' ? name.trim().slice(0, 16) : '') || 'Player'
     let seat = this.seatOf(playerId)
     if (seat < 0) {
       // newcomers take a free seat: in the lobby, between games, or mid-game from the next hand
@@ -208,10 +253,12 @@ export class RoomCore {
     if (m.type === 'start') {
       if (playerId !== this.s.hostId) return [{ to: playerId, msg: { type: 'error', message: 'Only the host can start.' } }]
       if (t && !t.match.over) return [{ to: playerId, msg: { type: 'error', message: 'A game is already under way.' } }]
-      this.s.rules = m.rules
+      const rules = cleanRules(m.rules)
+      if (!rules) return [{ to: playerId, msg: { type: 'error', message: 'Those rules aren’t available.' } }]
+      this.s.rules = rules
       // a new game after one finished: anyone who left in the meantime gives up their seat
       if (t) this.s.seats = this.s.seats.map(x => (x?.connected ? x : null))
-      this.table = new Table(m.rules, this.s.seats.map(x => this.plays(x)))
+      this.table = new Table(rules, this.s.seats.map(x => this.plays(x)))
       this.newHand(now)
       return [...this.lobbyToAll(), ...this.statesToAll(now)]
     }
@@ -232,7 +279,8 @@ export class RoomCore {
       const tile = t.game.hands[seat].find(x => x.id === m.tile)
       ok = !!tile && (m.type === 'discard' ? t.discard(seat, tile) : t.kong(seat, tile))
     } else if (m.type === 'answer') {
-      ok = t.answer(seat, m.answer)
+      const answer = cleanAnswer(m.answer)
+      ok = !!answer && t.answer(seat, answer)
     } else if (m.type === 'ready') {
       if (t.phase.kind !== 'over' || t.match.over) return []
       if (!this.s.ready.includes(playerId)) this.s.ready.push(playerId)

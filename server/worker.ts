@@ -12,7 +12,12 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url)
     const m = url.pathname.match(ROOM_PATH)
-    if (m) return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(req)
+    if (m) {
+      // one address opening connections over and over (a script, not a person reconnecting): turned away
+      const ip = req.headers.get('cf-connecting-ip') ?? ''
+      if (env.CONNECTS && !(await env.CONNECTS.limit({ key: ip })).success) return new Response('Too many connections', { status: 429 })
+      return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(req)
+    }
     return new Response('Pong Pong Mahjong rooms', { headers: { 'content-type': 'text/plain' } })
   },
 } satisfies ExportedHandler<Env>

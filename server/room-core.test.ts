@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RoomCore, newRoom, type Out, type SeatView, INTRO_MS, TURN_MS, CLAIM_MS, NEXT_HAND_MS } from './room-core'
+import { RoomCore, newRoom, cleanRules, cleanAnswer, Limiter, MSG_BUCKET, type Out, type SeatView, INTRO_MS, TURN_MS, CLAIM_MS, NEXT_HAND_MS } from './room-core'
 
 const RULES = { rounds: 1, minFaan: 1, startPoints: 1000 }
 const lastState = (out: Out[], to: string): SeatView | undefined =>
@@ -339,5 +339,42 @@ describe('a room', () => {
     expect(room.s.table!.match.hand).toBe(hand)              // still waiting for Bob
     room.handle('b', { type: 'ready' }, now.t)
     if (!room.s.table!.match.over) expect(room.s.table!.match.hand).toBe(hand + 1)
+  })
+})
+
+describe('what players send is checked', () => {
+  it('the host can only pick rules the game offers', () => {
+    expect(cleanRules({ rounds: 4, minFaan: 3, startPoints: 5000, bots: 'hard' })).toEqual({ rounds: 4, minFaan: 3, startPoints: 5000, bots: 'hard' })
+    expect(cleanRules({ rounds: 1, minFaan: 0, startPoints: 1000, extra: 'x'.repeat(100) })).toEqual({ rounds: 1, minFaan: 0, startPoints: 1000 })
+    for (const bad of [null, 'x', { ...RULES, rounds: 1e9 }, { ...RULES, minFaan: 99 }, { ...RULES, startPoints: -5 }, { ...RULES, bots: 'evil' }])
+      expect(cleanRules(bad)).toBeNull()
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0)
+    const out = room.handle('a', { type: 'start', rules: { ...RULES, rounds: 1e9 } }, 0)
+    expect(out[0].msg.type).toBe('error')
+    expect(room.s.table).toBeNull()
+  })
+
+  it('answers must be one of the known kinds', () => {
+    expect(cleanAnswer({ kind: 'pass', junk: 1 })).toEqual({ kind: 'pass' })
+    expect(cleanAnswer({ kind: 'chow', run: [1, 2, 3] })).toEqual({ kind: 'chow', run: [1, 2, 3] })
+    for (const bad of [null, 5, { kind: 'steal' }, { kind: 'chow' }, { kind: 'chow', run: ['1,2', 3] }, { kind: 'chow', run: [1, 2] }])
+      expect(cleanAnswer(bad)).toBeNull()
+  })
+
+  it('a name that isn’t text becomes Player', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', { evil: true } as unknown as string, 0)
+    expect(room.s.seats[0]!.name).toBe('Player')
+  })
+
+  it('someone sending too fast is slowed, then cut off', () => {
+    const limit = new Limiter()
+    for (let i = 0; i < MSG_BUCKET.size; i++) expect(limit.take(1, 0)).toBe('ok')
+    expect(limit.take(1, 0)).toBe('drop')
+    expect(limit.take(1, 1000)).toBe('ok')                      // a second later there's room again
+    let verdict = 'ok'
+    for (let i = 0; i < 100 && verdict !== 'close'; i++) verdict = limit.take(1, 1000)
+    expect(verdict).toBe('close')
   })
 })
