@@ -4,6 +4,12 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+# The offline helper and app details must be checked on every visit, so updates are found.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+
 # The music never changes; let browsers keep it for a week.
 /music/*
   Cache-Control: public, max-age=604800

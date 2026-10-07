@@ -1171,6 +1171,9 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .menu-card.primary .mc-sub { opacity: 0.92; }
 /* Learn to play: a warm gold accent so beginners spot it */
 .menu-card.learn .mc-icon { background: #e0b53a; color: #1a1a1a; }
+.menu-card.install { background: rgba(0, 0, 0, 0.22); border-style: dashed; }
+.menu-card.install.how { border-style: solid; border-color: #ffd75e; }
+.menu-card.install.how .mc-sub { opacity: 1; color: #ffe9a8; font-weight: 700; }
 .menu-card.soon { opacity: 0.55; cursor: not-allowed; }
 .menu-card.soon .mc-tag { background: rgba(255, 255, 255, 0.85); }
 

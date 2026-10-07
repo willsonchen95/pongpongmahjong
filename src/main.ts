@@ -546,6 +546,45 @@ const startMusicOnce = () => {
 document.addEventListener('pointerdown', startMusicOnce)
 document.addEventListener('keydown', startMusicOnce)
 
+// ---------- Install as an app ----------
+// The offline helper (built into dist/sw.js) keeps the game on the device, so the home-screen app
+// opens instantly and plays against bots with no connection. Not on the dev server, where it
+// would hold on to old files.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => {}))
+}
+// Chrome / Edge / Android hand us the install prompt to show when the player asks for it.
+// iPhones and iPads have no prompt: the player adds it with Share → Add to Home Screen.
+let installPrompt: (Event & { prompt(): Promise<unknown> }) | null = null
+const installed = () => matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
+const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+let iosHowTo = false              // the menu's "Install" card is showing the Add to Home Screen steps
+addEventListener('beforeinstallprompt', e => {
+  e.preventDefault()
+  installPrompt = e as typeof installPrompt
+  if (inMenu && !app.querySelector('.menu-card.install')) renderMenu()
+})
+addEventListener('appinstalled', () => { installPrompt = null; if (inMenu) renderMenu() })
+
+// The menu card offering to install, when that's possible here (and it isn't installed already).
+function installMenuCard(): HTMLElement | null {
+  if (installed()) return null
+  if (installPrompt) {
+    const prompt = installPrompt
+    return menuCard(MENU_ICONS.install, 'Install the app', 'Put it on your home screen — opens full screen, plays offline', () => {
+      installPrompt = null              // a prompt can only be shown once
+      void prompt.prompt().finally(() => { if (inMenu) renderMenu() })
+    }, 'install')
+  }
+  if (isIos()) {
+    return menuCard(MENU_ICONS.install, 'Install the app', iosHowTo
+      ? 'Tap the Share button (square with an arrow), then “Add to Home Screen”'
+      : 'Put it on your home screen — opens full screen, plays offline',
+    () => { iosHowTo = !iosHowTo; renderMenu() }, 'install' + (iosHowTo ? ' how' : ''))
+  }
+  return null
+}
+
 // Show a tip (one or more steps) unless tips are off or it's been seen before.
 async function coach(id: string, steps: Steps): Promise<void> {
   if (online) return                                  // an online game can't stop for one player's tip
@@ -831,6 +870,7 @@ const MENU_ICONS = {
   resume: svgIcon('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10.5 9v6l4.5-3z" fill="currentColor"/>'),
   learn: svgIcon('<path d="M2.5 9.5 12 5l9.5 4.5L12 14z"/><path d="M6.5 11.5V16c1.5 1.5 3.5 2.2 5.5 2.2s4-.7 5.5-2.2v-4.5"/><path d="M21.5 9.5V15"/>'),
   book: ICONS.book,
+  install: svgIcon('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7.5M9 11.5l3 3 3-3"/><path d="M10.5 18.5h3"/>'),
   online: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
 }
 
@@ -872,6 +912,8 @@ function renderMenu() {
     menuCard(MENU_ICONS.book, 'How to play', 'The rules, the sets and how scoring works — with pictures', renderRulesPage),
     onlineMenuCard(),
   )
+  const install = installMenuCard()
+  if (install) cards.appendChild(install)
   // which version this is, and when it was built — at the very bottom of the menu
   // (a dev server started before vite.config.ts existed doesn't fill them in — say so rather than break)
   const version = typeof __APP_VERSION__ === 'string' ? `v${__APP_VERSION__}` : 'dev'
