@@ -824,6 +824,39 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 @keyframes mb-rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes mb-rays { from { transform: scale(0.4) rotate(0deg); opacity: 0; } 20% { opacity: 1; } to { transform: scale(1.1) rotate(45deg); opacity: 1; } }
 
+/* short notices at the top of the screen: someone left, came back or joined (fx.ts) */
+.notices {
+  position: fixed;
+  z-index: 70;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+}
+.notice {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 2px solid #e0b53a;
+  background: #2a0d0a;
+  color: #fff3d6;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  animation: notice-life 4.5s ease forwards;
+}
+@keyframes notice-life {
+  0% { opacity: 0; transform: translateY(-10px); }
+  8%, 85% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+
 /* the winner's tiles shine as they're shown, and the tile that won it is lit up */
 .rack-row.winner .box.up .face.top, .player-rack.winner .tile { animation: win-shine 1s ease-in-out 2; }
 .box.win-tile .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.12) #ffd75e, 0 0 calc(var(--u) * 0.7) rgba(255, 215, 94, 0.95); }

@@ -247,6 +247,26 @@ describe('a room', () => {
     expect(room.lobbyFor('b')).toMatchObject({ started: false, you: null })
   })
 
+  it('someone leaving while the others wait at Next hand doesn’t leave them stuck', () => {
+    const now = { t: 0 }
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0); room.join('c', 'Carol', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    for (let i = 0; i < 3000 && room.s.table!.phase.kind !== 'over'; i++) {
+      const w = room.s.wakeAt
+      if (w === null) break
+      now.t = w
+      room.tick(now.t)
+    }
+    if (room.s.table!.match.over) return                     // (a big hand ended the game: nothing to check)
+    for (const p of ['a', 'b', 'c']) room.handle(p, { type: 'back' }, now.t)   // (nobody acted, so all were marked away)
+    const hand = room.s.table!.match.hand
+    room.handle('a', { type: 'ready' }, now.t); room.handle('b', { type: 'ready' }, now.t)
+    expect(room.s.table!.match.hand).toBe(hand)              // waiting for Carol…
+    room.leave('c', now.t)                                   // …who leaves instead
+    expect(room.s.table!.match.hand).toBe(hand + 1)          // so the next hand is dealt
+  })
+
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))

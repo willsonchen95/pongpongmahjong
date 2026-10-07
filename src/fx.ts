@@ -1,5 +1,5 @@
 // Effects over the table: the glow that follows whose turn it is, the "Mahjong!" burst when
-// someone wins, and confetti when it's you.
+// someone wins, confetti when it's you, and short notices at the top of the screen.
 import { el } from './ui'
 
 // A soft gold light on the table in front of whoever's turn it is. Each seat has its own light,
@@ -48,4 +48,14 @@ export function confetti(): HTMLElement {
   }
   setTimeout(() => layer.remove(), 4500)
   return layer
+}
+
+// A short notice at the top of the screen (someone left the room, came back, joined), gone after a
+// few seconds. Several stack, newest at the bottom.
+export function notice(text: string) {
+  let stack = document.querySelector<HTMLElement>('.notices')
+  if (!stack) { stack = el('div', 'notices'); document.body.appendChild(stack) }
+  const n = el('div', 'notice', text)
+  n.addEventListener('animationend', e => { if (e.animationName === 'notice-life') n.remove() })
+  stack.appendChild(n)
 }

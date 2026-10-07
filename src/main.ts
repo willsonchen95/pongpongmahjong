@@ -8,14 +8,14 @@ import { tileName } from './tiles'
 import { rulesSections } from './rules-guide'
 import { resultCard, finalCard, standingsOf, wonByRobbingIn, type ResultContext } from './result-cards'
 import { TIPS, type CoachStep, type Steps } from './tips'
-import { confetti, mahjongBurst, turnGlow } from './fx'
+import { confetti, mahjongBurst, turnGlow, notice } from './fx'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
 import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points } from './ui'
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, type LocalView } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, type LocalView, type SeatInfo } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -218,7 +218,9 @@ function goOnline(code: string, name: string) {
   sync()
   const room = new OnlineRoom(code, name)
   online = room
+  let seatsBefore: SeatInfo[] | null = null
   room.onRoom = () => {
+    if (room.room) { announceSeatChanges(seatsBefore, room.room.seats, room.room.you, room.room.started); seatsBefore = room.room.seats }
     NAMES = room.names()
     if (!room.room?.started || !room.view) { if (lobbyShowing()) renderLobby() }
     else { sync(); refresh() }                         // someone left, came back or went away: their name on the table
@@ -236,6 +238,18 @@ function goOnline(code: string, name: string) {
   setTimeout(() => { if (online === room && !room.everConnected && lobbyShowing()) renderLobby() }, CANT_CONNECT_MS + 100)
 }
 const CANT_CONNECT_MS = 8000                    // how long "Connecting…" shows before the advice on why it might not
+
+// Online: tell everyone at the table when someone leaves, comes back or joins, and what happens next.
+function announceSeatChanges(before: SeatInfo[] | null, now: SeatInfo[], you: number | null, started: boolean) {
+  if (!before || !started) return                    // (in the room before the game, the player list shows it)
+  now.forEach((s, i) => {
+    const was = before[i]
+    if (i === you) return
+    if (was.person && was.connected && (!s.person || !s.connected)) notice(`${was.name} left — a bot plays their seat until they’re back`)
+    else if (s.person && s.connected && was.person && !was.connected && was.name === s.name) notice(`${s.name} is back`)
+    else if (s.person && !was.person) notice(s.joining ? `${s.name} joined — they play from the next hand` : `${s.name} joined`)
+  })
+}
 
 function leaveOnline() { leaveRoom(true) }
 // `tellRoom`: you pressed Leave (false: the room has already closed)

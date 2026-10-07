@@ -139,6 +139,7 @@ export class RoomCore {
     }
     if (this.s.hostId === playerId) this.s.hostId = this.connectedPeople()[0]?.playerId ?? null
     this.s.ready = this.s.ready.filter(id => id !== playerId)
+    this.nextHandIfAllReady(now)                             // everyone still here may have pressed "Next hand" already
     return [...this.lobbyToAll(), ...this.statesToAll(now)]
   }
 
@@ -189,7 +190,7 @@ export class RoomCore {
       person.away = false                                    // pressing it means they're back
       // (someone away isn't waited for: they'd hold up everyone)
       const joiners = this.people().some(x => x.joining)
-      if (this.connectedPeople().filter(x => !x.away).every(x => this.s.ready.includes(x.playerId))) this.newHand(now)
+      this.nextHandIfAllReady(now)
       const seatsChanged = wasAway || (joiners && !this.people().some(x => x.joining))   // (newcomers now play their seats)
       return [...(seatsChanged ? this.lobbyToAll() : []), ...this.statesToAll(now)]
     }
@@ -238,6 +239,15 @@ export class RoomCore {
     this.collect()
     this.schedule(now)
     return [...(wentAway ? this.lobbyToAll() : []), ...this.statesToAll(now)]
+  }
+
+  // Between hands: deal the next one once everyone at the table has pressed "Next hand". (Someone
+  // away isn't waited for: they'd hold up everyone. Nor is anyone who's left or dropped out.)
+  private nextHandIfAllReady(now: number) {
+    const t = this.table
+    if (!t || t.phase.kind !== 'over' || t.match.over) return
+    const here = this.connectedPeople().filter(x => !x.away)
+    if (here.length && here.every(x => this.s.ready.includes(x.playerId))) this.newHand(now)
   }
 
   // Whether a seat is played by its person right now (rather than a bot).
