@@ -1,13 +1,19 @@
 import './style.css'
 import {
-  type Tile, type GameState, type ClaimKind, type HaveItem, type CloseTo, SEATS, sortHand, makeTile, isWinningHand,
-  kongOptions, winningTiles, parse, seatWind, payout, handProgress, planToMinimum, type Plan, MAX_FAAN,
+  type Tile, type GameState, type ClaimKind, SEATS, sortHand, makeTile, isWinningHand,
+  kongOptions, winningTiles, parse, seatWind, handProgress, planToMinimum,
   claimEffects, progressInput, isConcealedKong, type BotLevel,
 } from './engine'
-import { tileSVG, tileName } from './tiles'
-import { sfx, music, isMuted, setMuted } from './sfx'
+import { tileName } from './tiles'
+import { rulesSections } from './rules-guide'
+import { resultCard, finalCard, standingsOf, wonByRobbingIn, type ResultContext } from './result-cards'
+import { TIPS, type CoachStep, type Steps } from './tips'
+import { faanCard, headlinePlan, planSummary } from './faan-card'
+import { initInstall, installButton } from './install'
+import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points } from './ui'
+import { sfx, music } from './sfx'
 import * as motion from './motion'
-import { Table, type Match, type HandResult, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
+import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
 import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, TURN_MS, newRoomCode, savedSession, type LocalView } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
@@ -18,9 +24,6 @@ const BOT_NAMES = ['You', 'Mei', 'Kai', 'Lin']
 let NAMES = BOT_NAMES                     // online: the room's players, turned round so you're first
 const WIND_CHARS = ['東', '南', '西', '北']
 const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
-const fmt = (n: number) => n.toLocaleString('en-US')
-const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
-const points = (n: number) => (n < 0 ? `−${fmt(-n)}` : fmt(n))      // a player's balance
 
 // ---------- The match ----------
 // The rules of play — the turn flow, claims, scoring, the match moving on — live in table.ts; this
@@ -147,7 +150,7 @@ async function drive() {
       playEvents()
       if (taker !== null && !game.over && table.phase.kind === 'next') {   // someone took the tile — let it register
         refresh()
-        if (taker !== HUMAN) await coach('bot-call', TIPS.botCall(taker))   // first time only
+        if (taker !== HUMAN) await coach('bot-call', TIPS.botCall(NAMES[taker]))   // first time only
         await sleep(CLAIM_PAUSE_MS)
         if (stale()) return
       }
@@ -411,15 +414,12 @@ function showStandings() {
 }
 
 // Players ordered by score, best first.
-const standings = () => [0, 1, 2, 3].sort((a, b) => match.scores[b] - match.scores[a])
+const standings = () => standingsOf(match)
 
 // ---------- Beginner tips (coachmarks) ----------
 // The first time each situation comes up, the game pauses, dims the screen around the part that
 // matters, and explains it in a small card. Each tip shows once (remembered across visits); the
 // "Learn to play" menu entry resets them for a fully guided game.
-
-interface CoachStep { target?: string; title: string; body: (string | Node)[] }
-type Steps = CoachStep[] | (() => CoachStep[])
 const TIPS_SEEN_KEY = 'mahjong-tips-seen'
 let tipsSeen = new Set<string>((() => {
   try { return JSON.parse(localStorage.getItem(TIPS_SEEN_KEY) ?? '[]') as string[] } catch { return [] }
@@ -545,40 +545,8 @@ const startMusicOnce = () => {
 }
 document.addEventListener('pointerdown', startMusicOnce)
 document.addEventListener('keydown', startMusicOnce)
+initInstall(() => { if (inMenu) renderMenu() })
 
-// ---------- Install as an app ----------
-// The offline helper (built into dist/sw.js) keeps the game on the device, so the home-screen app
-// opens instantly and plays against bots with no connection. Not on the dev server, where it
-// would hold on to old files.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => {}))
-}
-// Chrome / Edge / Android hand us the install prompt to show when the player asks for it.
-// iPhones and iPads have no prompt: the player adds it with Share → Add to Home Screen.
-let installPrompt: (Event & { prompt(): Promise<unknown> }) | null = null
-const installed = () => matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
-const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-let iosHowTo = false              // the menu's "Install" card is showing the Add to Home Screen steps
-addEventListener('beforeinstallprompt', e => {
-  e.preventDefault()
-  installPrompt = e as typeof installPrompt
-  if (inMenu && !app.querySelector('.menu-extra.install')) renderMenu()
-})
-addEventListener('appinstalled', () => { installPrompt = null; if (inMenu) renderMenu() })
-
-// The small menu button offering to install, when that's possible here (and it isn't installed already).
-function installMenuCard(): HTMLElement | null {
-  if (installed() || (!installPrompt && !isIos())) return null
-  const b = el('button', 'menu-extra install' + (iosHowTo ? ' how' : ''))
-  b.innerHTML = MENU_ICONS.install
-  b.append(el('span', '', iosHowTo ? 'Tap Share, then “Add to Home Screen”' : 'Install the app'))
-  b.title = 'Put it on your home screen — opens full screen, plays offline'
-  const prompt = installPrompt
-  b.onclick = prompt
-    ? () => { installPrompt = null; void prompt.prompt().finally(() => { if (inMenu) renderMenu() }) }   // a prompt can only be shown once
-    : () => { iosHowTo = !iosHowTo; renderMenu() }       // iPhone / iPad: no prompt, so show the steps
-  return b
-}
 
 // Show a tip (one or more steps) unless tips are off or it's been seen before.
 async function coach(id: string, steps: Steps): Promise<void> {
@@ -665,82 +633,9 @@ function startGuidedGame() {
   startMatch('easy')
 }
 
-const TIPS = {
-  dice: (): CoachStep[] => [{
-    target: '.table-dice', title: 'Rolling the dice',
-    body: ['Every hand starts with the dealer rolling two dice. The total decides where the wall is opened.', 'You don’t need to do anything — just watch.'],
-  }],
-  deal: (): CoachStep[] => [{
-    target: '.player-rack', title: 'Your 13 tiles',
-    body: ['Everyone is dealt 13 tiles, four at a time. Yours are here at the bottom — the other players’ tiles stand face-down on their racks.'],
-  }],
-  flowers: (): CoachStep[] => [{
-    title: 'Flowers & seasons',
-    body: ['These are bonus tiles. They’re put aside face-up and replaced with a new tile automatically.',
-      'A flower or season showing your seat number (East 1, South 2…) scores +1 faan.'],
-  }],
-  firstTurn: (): CoachStep[] => {
-    const example = el('div', 'example-hand')
-    for (const spec of ['123m', '555p', '111z', '789s', '66z']) example.appendChild(exampleTiles(spec))
-    return [
-      { title: 'How to win', body: [para('Make ', el('strong', '', '4 sets and 1 pair'), ' — 14 tiles, like this:'), example,
-          'A set is three the same (a Pong) or three in a row of one suit (a Chi).'] },
-      { target: '.player-rack', title: 'Your turn',
-        body: ['You just drew a tile — it’s set apart on the right. Now you have one tile too many.', touchScreen.matches
-          ? 'Tap the tile you need least to lift it, then tap it again to throw it away.'
-          : 'Tap the tile you need least to throw it away.'] },
-      { target: '.hm-total', title: 'Your hand’s score',
-        body: ['This shows the faan (points) your hand already has.', 'Hover over it — or tap it — to see what you have and what to aim for next.'] },
-      { target: '.status-pill', title: 'What’s happening',
-        body: ['This tells you whose turn it is. It glows gold whenever it’s your move.'] },
-      { target: '.rules-chip', title: 'The rule book',
-        body: ['Stuck? Tap here any time to open the rule book — every set and every scoring pattern, with pictures.',
-          'Tap it again to close it and get back to the table.'] },
-    ]
-  },
-  claim: (): CoachStep[] => [{
-    target: '.claim-card', title: 'You can take this tile',
-    body: ['Someone threw away a tile you can use:',
-      para(el('strong', '', 'Pong'), ' — make three the same.  ', el('strong', '', 'Chi'), ' — make three in a row (only from Lin, on your left).'),
-      para(el('strong', '', 'Mahjong!'), ' — the tile finishes your hand: you win.'),
-      'Taking a tile lays that set face-up, and you lose the Concealed hand bonus. Not sure? Press Pass.'],
-  }],
-  botCall: (seat: number) => (): CoachStep[] => [{
-    title: `${NAMES[seat]} called!`,
-    body: [`${NAMES[seat]} took the tile that was just thrown away, to make a set. They lay it face-up on the table, then throw away a tile of their own.`,
-      'Play carries on from them — so a turn can be skipped.'],
-  }],
-  ready: (): CoachStep[] => [{
-    target: '.hm-ready', title: 'One tile from winning!',
-    body: ['Any of these tiles would finish your hand. If someone throws one away, a Mahjong! button appears.',
-      'Draw it from the wall yourself and you score +1 faan more.'],
-  }],
-  result: (): CoachStep[] => [{
-    target: '.result-cols', title: 'How the hand scored',
-    body: ['The winner scores faan for the patterns in their hand — more faan, more points.',
-      'Whoever threw the winning tile pays. If the winner drew it themselves, all three others pay.'],
-  }],
-}
 
 // ---------- Rendering ----------
 
-function el(tag: string, cls = '', text = ''): HTMLElement {
-  const e = document.createElement(tag)
-  if (cls) e.className = cls
-  if (text) e.textContent = text
-  return e
-}
-// A flat tile, for your rack and inline in text/buttons.
-// Every physical tile gets a lasting id, and on-table elements are tagged with it and with where the
-// tile lies, so motion.ts can glide it from its old place to its new one between renders.
-const tileIds = new WeakMap<Tile, number>()
-let nextTileId = 1
-function tag<T extends HTMLElement>(e: T, t: Tile, place: string): T {
-  if (!tileIds.has(t)) tileIds.set(t, nextTileId++)
-  e.dataset.key = t.id === undefined ? 'o' + tileIds.get(t) : String(t.id)   // a tile's own id stays the same across online updates
-  e.dataset.place = place
-  return e
-}
 
 // A tile-sized spot in the middle of a player's rack, on screen.
 function rackSpot(seat: number, w: number, h: number): DOMRect | null {
@@ -769,74 +664,8 @@ const motionHooks: motion.Hooks = {
   },
 }
 
-function tileEl(tile: Tile, cls = '', onClick?: () => void): HTMLElement {
-  const e = el('div', 'tile ' + cls)
-  e.innerHTML = tileSVG(tile.category, tile.value)
-  e.title = tileName(tile.category, tile.value)
-  if (onClick) { e.classList.add('clickable'); e.onclick = onClick }
-  return e
-}
-// Line icons for the top-bar chips (they take the chip's text colour).
-const svgIcon = (body: string) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
-const ICONS = {
-  menu: svgIcon('<path d="M4 7h16M4 12h16M4 17h16"/>'),
-  book: svgIcon('<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5v13"/>'),
-  soundOn: svgIcon('<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
-  soundOff: svgIcon('<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 10l5 5M21 10l-5 5"/>'),
-  musicOn: svgIcon('<path d="M9 17.5V5.5l10-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>'),
-  musicOff: svgIcon('<path d="M9 17.5V5.5l10-2v12"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/><path d="M3 3l18 18"/>'),
-}
 
-// The two sound buttons: music, and sound effects (tile clacks, calls). `redraw` repaints the screen they're on.
-function soundButtons(redraw: () => void): HTMLElement[] {
-  const m = chip(music.isOn() ? ICONS.musicOn : ICONS.musicOff, null, () => { music.toggle(); redraw() }, 'icon-only' + (music.isOn() ? '' : ' off'))
-  m.title = music.isOn() ? 'Music is on — tap to turn off' : 'Music is off — tap to turn on'
-  const s = chip(isMuted() ? ICONS.soundOff : ICONS.soundOn, null, () => { setMuted(!isMuted()); redraw() }, 'icon-only' + (isMuted() ? ' off' : ''))
-  s.title = isMuted() ? 'Sound effects are off — tap to turn on' : 'Sound effects are on — tap to turn off'
-  for (const b of [m, s]) b.setAttribute('aria-label', b.title)
-  return [m, s]
-}
 
-// A top-bar pill: a round icon badge, then an optional label. With no onClick it's a plain info chip.
-function chip(icon: string, label: string | null, onClick: (() => void) | null, cls = ''): HTMLElement {
-  const c = el(onClick ? 'button' : 'div', 'chip ' + cls)
-  const badge = el('span', 'chip-icon')
-  badge.innerHTML = icon
-  c.appendChild(badge)
-  if (label) c.appendChild(el('span', 'chip-label', label))
-  if (onClick) c.onclick = onClick
-  return c
-}
-
-// A small inline tile for status text and buttons.
-const mini = (t: Tile) => tileEl(t, 'mini')
-function button(label: string, onClick: () => void, cls = '', tiles: Tile[] = []): HTMLElement {
-  const b = el('button', cls, label)
-  for (const t of tiles) b.appendChild(mini(t))
-  b.onclick = onClick
-  return b
-}
-
-// A tile-shaped 3D box on the table: footprint w×d and height h, in table units (--u).
-// kind: 'up' = lying face-up (top shows `face`), 'down2'/'down1' = wall stack two/one tile high,
-// 'stand' = a row of concealed tiles standing on edge. The CSS colours each face to match.
-function box(kind: string, w: number, d: number, h: number, cls = '', face?: Tile): HTMLElement {
-  const b = el('div', `box ${kind} ${cls}`)
-  b.style.setProperty('--bw', String(w))
-  b.style.setProperty('--bd', String(d))
-  b.style.setProperty('--bh', String(h))
-  for (const side of ['front', 'back', 'left', 'right']) b.appendChild(el('div', 'face ' + side))
-  const top = el('div', 'face top')
-  if (face) { top.innerHTML = tileSVG(face.category, face.value); b.title = tileName(face.category, face.value) }
-  b.appendChild(top)
-  return b
-}
-// Phones draw the tiles players read — discards, sets, flowers, the others' hands — a size bigger
-// (the wall stays: its 18 stacks a side have to fit along the table's edge).
-const phoneScreen = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
-const tileScale = () => (phoneScreen.matches ? 1.16 : 1)
-const lyingTile = (t: Tile, cls = '') => box('up', 1.15 * tileScale(), 1.54 * tileScale(), 0.8, cls, t)
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -860,14 +689,6 @@ function menuCard(icon: string, title: string, sub: string, onClick: (() => void
   return b
 }
 
-const MENU_ICONS = {
-  play: svgIcon('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>'),
-  resume: svgIcon('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10.5 9v6l4.5-3z" fill="currentColor"/>'),
-  learn: svgIcon('<path d="M2.5 9.5 12 5l9.5 4.5L12 14z"/><path d="M6.5 11.5V16c1.5 1.5 3.5 2.2 5.5 2.2s4-.7 5.5-2.2v-4.5"/><path d="M21.5 9.5V15"/>'),
-  book: ICONS.book,
-  install: svgIcon('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7.5M9 11.5l3 3 3-3"/><path d="M10.5 18.5h3"/>'),
-  online: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
-}
 
 // The title area: a fan of tiles over the name, with 麻雀 (the game's Cantonese name) beneath.
 function menuHero(): HTMLElement {
@@ -921,7 +742,7 @@ function renderMenu() {
   rules.append(el('span', '', 'How to play'))
   rules.onclick = renderRulesPage
   extras.appendChild(rules)
-  const install = installMenuCard()
+  const install = installButton()
   if (install) extras.appendChild(install)
   // which version this is, at the very bottom of the menu
   // (a dev server started before vite.config.ts existed doesn't fill it in — say so rather than break)
@@ -964,7 +785,7 @@ function renderRulesPage() {
     para('On your turn you take a tile from the wall, then throw one away. The first to complete a winning hand calls ', el('strong', '', 'Mahjong!')),
   )
   const body = el('div', 'rules-body help')
-  body.append(intro, ...rulesSections(false))
+  body.append(intro, ...rulesSections(null))
   const foot = el('div', 'rules-foot')
   foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
   const credit = el('p', 'credit', 'Music: “Chinese Harmony” by LunarBoomMusic, from Pixabay.')
@@ -1159,7 +980,7 @@ function renderLobby() {
 }
 
 // The hand just won was won by robbing a kong (the tile came from a pong being made a kong).
-const wonByRobbing = () => !!match.result?.items.some(i => i.name === 'Robbing a kong')
+const wonByRobbing = () => wonByRobbingIn(match)
 
 // One sentence describing how the hand ended.
 function resultLine(): string {
@@ -1452,97 +1273,6 @@ const continueButton = () => {
 }
 let pressedNext = 0                       // online: the hand after which you pressed "Next hand"
 
-// Why each pattern you already hold scores — in plain words for the hover card.
-const HAVE_WHY: [string, string][] = [
-  ['Concealed hand', 'You haven’t taken anyone’s tile. Avoid Pong / Chi to keep it.'],
-  ['No flowers', 'You have no flower or season tiles.'],
-  ['Own flower', 'A flower or season showing your seat number.'],
-  ['Flower set', 'All four flowers, or all four seasons.'],
-  ['All eight flowers', 'Every flower and season — a limit hand!'],
-  ['Dragon pong', 'Three of the same dragon.'],
-  ['Seat wind pong', 'Three of your seat’s wind.'],
-  ['Round wind pong', 'Three of this round’s wind.'],
-  ['Mixed one suit', 'Only one suit, plus winds and dragons.'],
-  ['Pure one suit', 'Every tile from one suit.'],
-  ['All honours', 'Only winds and dragons.'],
-  ['Small three dragons', 'Pongs of two dragons and a pair of the third.'],
-  ['Big three dragons', 'Pongs of all three dragons.'],
-]
-const whyOf = (name: string) => HAVE_WHY.find(([n]) => name.startsWith(n))?.[1] ?? ''
-
-// The card behind the score pill: every faan you already have and why, then the combinations
-// your current tiles can reach — with the exact tiles to collect or throw away.
-// The plan to lead with: the easiest one that doesn't rely only on luck, if there is one.
-const headlinePlan = (plans: Plan[]) => plans.find(p => p.items.length > 0) ?? plans[0]
-
-// One line naming a plan: "Mixed one suit", "Dragon pong + self-drawn", ...
-function planSummary(p: Plan): string {
-  if (!p.items.length) return 'Win by drawing the winning tile yourself'
-  return p.items.map(i => i.name).join(' + ') + (p.selfDrawn ? ' + self-drawn' : '')
-}
-
-// One pattern to aim for, with its explanation and the exact tiles involved.
-function goalRow(c: CloseTo, cls: string): HTMLElement {
-  const row = el('div', 'hm-row ' + cls)
-  const tiles = el('div', 'hm-row-tiles')
-  tiles.appendChild(el('span', 'hm-tiles-label', c.action === 'need' ? 'Need:' : 'Throw away:'))
-  for (const t of c.tiles) tiles.appendChild(mini(t))
-  row.append(el('div', 'hm-row-name', c.name), el('div', 'hm-row-faan', `+${c.faan}`), el('div', 'hm-row-why', c.how), tiles)
-  return row
-}
-
-// "How to reach 3 faan": each plan as a numbered card listing what to complete.
-function plansSection(plans: Plan[], total: number): HTMLElement {
-  const s = el('div', 'hm-plans')
-  s.appendChild(el('h4', '', `How to reach ${match.minFaan} faan`))
-  s.appendChild(el('p', 'hm-plans-intro', `You have ${total}. This game needs ${match.minFaan} to win — here’s how your tiles could get there:`))
-  if (!plans.length) {
-    s.appendChild(el('p', 'hm-empty', 'No quick route from these tiles yet. Try keeping just one suit (plus winds and dragons) — that alone is +3.'))
-  }
-  plans.forEach((p, i) => {
-    const box = el('div', 'hm-plan')
-    const head = el('div', 'hm-plan-head')
-    const effort = p.off === 0 ? 'nothing to change' : `about ${p.off} tile${p.off > 1 ? 's' : ''} to change`
-    head.append(el('span', 'hm-plan-num', `Plan ${i + 1}`), el('span', 'hm-plan-effort', effort), el('span', 'hm-plan-total', `→ ${p.total} faan`))
-    box.appendChild(head)
-    for (const item of p.items) box.appendChild(goalRow(item, 'plan-step'))
-    if (p.selfDrawn) {
-      const luck = el('div', 'hm-row plan-step luck')
-      luck.append(el('div', 'hm-row-name', 'Self-drawn'), el('div', 'hm-row-faan', '+1'),
-        el('div', 'hm-row-why', 'Then win by drawing the winning tile from the wall yourself — not on someone’s throw.'))
-      box.appendChild(luck)
-    }
-    s.appendChild(box)
-  })
-  return s
-}
-
-function faanCard(have: HaveItem[], close: CloseTo[], total: number, plans: Plan[]): HTMLElement {
-  const card = el('div', 'hm-card')
-  card.appendChild(el('div', 'hm-card-title', `Your hand: ${total} faan so far`))
-  if (total < match.minFaan) card.appendChild(plansSection(plans, total))
-
-  card.appendChild(el('h4', '', 'What you have'))
-  if (!have.length) card.appendChild(el('p', 'hm-empty', 'Nothing yet — every finished hand still wins if it reaches the minimum.'))
-  for (const item of have) {
-    const row = el('div', 'hm-row')
-    const name = el('div', 'hm-row-name', item.name)
-    if (item.tile) name.appendChild(mini(item.tile))
-    row.append(name, el('div', 'hm-row-faan', `+${item.faan}`), el('div', 'hm-row-why', whyOf(item.name)))
-    card.appendChild(row)
-  }
-
-  card.appendChild(el('h4', '', 'Go for next'))
-  if (!close.length) card.appendChild(el('p', 'hm-empty', 'Nothing close yet — keep building sets of three and a pair.'))
-  for (const c of close) card.appendChild(goalRow(c, 'next'))
-  const tip = el('div', 'hm-row next')
-  tip.append(el('div', 'hm-row-name', 'Self-drawn'), el('div', 'hm-row-faan', '+1'),
-    el('div', 'hm-row-why', 'Any time: win by drawing the winning tile yourself.'))
-  card.appendChild(tip)
-
-  card.appendChild(el('div', 'hm-card-foot', `This game needs at least ${match.minFaan} faan to win. Faan count once your hand is finished (4 sets + 1 pair).`))
-  return card
-}
 
 // The live "Your hand" meter: faan you've already secured (vs. the minimum to win), patterns
 // you're close to, and — when one tile from winning — which tiles win and what each would score.
@@ -1563,7 +1293,7 @@ function handMeter(): HTMLElement {
     el('span', 'hm-more', 'ⓘ'))
   head.setAttribute('aria-label', 'Your hand score — show details')
   head.onclick = () => { faanCardOpen = !faanCardOpen; render() }
-  const card = faanCard(have, close, total, plans)
+  const card = faanCard(have, close, total, plans, match.minFaan)
   card.onclick = () => { if (faanCardOpen) { faanCardOpen = false; render() } }   // tap the card to put it away
   wrap.append(head, card)
   m.appendChild(wrap)
@@ -1726,15 +1456,6 @@ function playerRack(): HTMLElement {
 
 // ---------- Help panel ----------
 
-const exampleTiles = (spec: string, cls = 'ex') => {
-  const row = el('span', 'tiles-row')
-  for (const t of parse(spec)) row.appendChild(tileEl(t, cls))
-  return row
-}
-function uniqueTiles(tiles: Tile[]): Tile[] {
-  return tiles.filter((t, i) => tiles.findIndex(o => o.category === t.category && o.value === t.value) === i)
-}
-function para(...parts: (string | Node)[]): HTMLElement { const p = el('p'); p.append(...parts); return p }
 
 // Tiles that would let you declare a win with these concealed tiles — complete AND reaching the
 // minimum (counting a self-draw, since you might draw it yourself).
@@ -1805,109 +1526,10 @@ function helpPanel(): HTMLElement {
   const p = el('aside', 'help')
   const head = el('div', 'help-head')
   head.append(el('h2', '', 'How to play'), button('✕', toggleHelp, 'close-btn'))
-  p.append(head, nowSection(), ...rulesSections(true))
+  p.append(head, nowSection(), ...rulesSections(match))
   return p
 }
 
-// The rules guide — shared by the in-game panel and the "How to play" page in the menu.
-// `inGame` adds the reminder of this game's minimum faan.
-function rulesSections(inGame: boolean): HTMLElement[] {
-  const win = el('section')
-  win.append(el('h3', '', 'How to win'),
-    para('Collect ', el('strong', '', '4 sets and 1 pair'), ' — 14 tiles. For example:'))
-  const hand = el('div', 'example-hand')
-  for (const spec of ['123m', '555p', '111z', '789s', '66z']) hand.appendChild(exampleTiles(spec))
-  win.appendChild(hand)
-
-  const sets = el('section')
-  sets.appendChild(el('h3', '', 'The sets'))
-  const grid = el('div', 'set-grid')
-  const row = (name: string, spec: string, what: string) => grid.append(el('strong', '', name), exampleTiles(spec), el('span', 'set-what', what))
-  row('Pong', '555p', 'three the same')
-  row('Kong', '7777s', 'four the same')
-  row('Chi', '345m', 'three in a row, same suit (numbers only)')
-  row('Pair', '66z', 'two the same — you need one')
-  sets.appendChild(grid)
-
-  const take = el('section')
-  take.append(el('h3', '', 'Taking a thrown-away tile'),
-    para('When someone throws away a tile you can use, a box pops up:'),
-    para(el('strong', '', 'Pong / Kong'), ' — from anyone, if you hold 2 / 3 of that tile.'),
-    para(el('strong', '', 'Chi'), ' — only from Lin, the player on your left (just before you).'),
-    para(el('strong', '', 'Mahjong!'), ' — from anyone, if it finishes your hand.'),
-    para('Taken sets are laid face-up on the table; then you throw away a tile.'))
-
-  const kinds = el('section')
-  kinds.append(el('h3', '', 'The tiles'))
-  const kgrid = el('div', 'set-grid')
-  const kind = (name: string, spec: string) => kgrid.append(el('strong', '', name), exampleTiles(spec), el('span'))
-  kind('Characters', '159m'); kind('Circles', '159p'); kind('Bamboo', '159s'); kind('Winds', '1234z'); kind('Dragons', '567z')
-  kinds.append(kgrid, para('Flowers and seasons are bonus tiles — they’re put aside for you automatically.'))
-
-  return [win, sets, take, scoringSection(inGame), kinds]
-}
-
-// "How to earn points": each scoring pattern as a card with its faan, a plain explanation and
-// example tiles (groups separated by spaces, in parse() notation), then what the faan are worth.
-const PATTERNS: { name: string; faan: string; what: string; tiles?: string; bonus?: Tile[] }[] = [
-  { name: 'Self-drawn', faan: '+1', what: 'You draw the winning tile from the wall yourself.' },
-  { name: 'Concealed hand', faan: '+1', what: 'You win without taking anyone’s tile for a set — no Pong, Chi or Kong from a thrown-away tile. A kong of four from your own hand is fine.' },
-  { name: 'No flowers', faan: '+1', what: 'You have no flower or season tiles.' },
-  { name: 'Own flower', faan: '+1 each', what: 'A flower or season showing your seat number: East 1, South 2, West 3, North 4.', bonus: [makeTile('flower', 0), makeTile('season', 0)] },
-  { name: 'Flower set', faan: '+2', what: 'All four flowers, or all four seasons (instead of the own-flower faan for that set).', bonus: [0, 1, 2, 3].map(v => makeTile('flower', v)) },
-  { name: 'Last tile', faan: '+1', what: 'You win with the very last tile of the wall — or the tile thrown away after it.' },
-  { name: 'Win on a kong', faan: '+2', what: 'After a kong you draw a replacement tile — and it completes your hand.' },
-  { name: 'Robbing a kong', faan: '+2', what: 'Someone adds a fourth tile to their pong, and that tile completes your hand: take it and win. They pay.' },
-  { name: 'All chi', faan: '+1', what: 'Every set is a run of three.', tiles: '123m 456p 789s 234s 55m' },
-  { name: 'Dragon pong', faan: '+1 each', what: 'Three of the same dragon.', tiles: '555z' },
-  { name: 'Wind pong', faan: '+1', what: 'Three of your seat’s wind, or of the round’s wind (+2 if it’s both).', tiles: '111z' },
-  { name: 'All pongs', faan: '+3', what: 'Every set is three of a kind.', tiles: '111m 555p 999s 222z 66z' },
-  { name: 'Mixed one suit', faan: '+3', what: 'Only one suit, plus winds or dragons.', tiles: '123p 456p 999p 111z 55z' },
-  { name: 'Small three dragons', faan: '+5', what: 'Pongs of two dragons and a pair of the third.', tiles: '555z 666z 77z' },
-  { name: 'Pure one suit', faan: '+7', what: 'Every tile from one suit — no winds or dragons.', tiles: '123s 345s 678s 999s 22s' },
-  { name: 'Big three dragons', faan: '+8', what: 'Pongs of all three dragons.', tiles: '555z 666z 777z' },
-  { name: 'Small four winds', faan: '+8', what: 'Pongs of three winds and a pair of the fourth.', tiles: '111z 222z 333z 44z' },
-  { name: 'Big four winds', faan: `${MAX_FAAN} (limit)`, what: 'Pongs of all four winds.', tiles: '111z 222z 333z 444z 66z' },
-  { name: 'All honours', faan: `${MAX_FAAN} (limit)`, what: 'Only winds and dragons.', tiles: '222z 333z 555z 777z 11z' },
-  { name: 'Thirteen orphans', faan: `${MAX_FAAN} (limit)`, what: 'One of every 1, 9, wind and dragon — plus a second of any one. No sets needed!', tiles: '19m 19p 19s 1234z 5677z' },
-  { name: 'All eight flowers', faan: `${MAX_FAAN} (limit)`, what: 'Win holding every flower and season.' },
-]
-
-function scoringSection(inGame: boolean): HTMLElement {
-  const s = el('section')
-  s.append(el('h3', '', 'How to earn points'),
-    para('Every winning hand scores ', el('strong', '', 'faan'), ' for the patterns in it. Add them up — more faan, more points.'),
-    para(el('strong', 'min-note', inGame
-      ? `This game: you need at least ${match.minFaan} faan to win.`
-      : 'Before a game you choose the minimum faan needed to win (0, 1 or 3).')))
-
-  for (const pt of PATTERNS) {
-    const card = el('div', 'pattern-card')
-    const head = el('div', 'pattern-head')
-    const badge = pt.faan.includes('limit') ? pt.faan
-      : pt.faan.includes('each') ? `${pt.faan.replace(' each', '')} faan each` : `${pt.faan} faan`
-    head.append(el('strong', '', pt.name), el('span', 'faan-badge', badge))
-    card.append(head, el('div', 'pattern-what', pt.what))
-    if (pt.tiles || pt.bonus) {
-      const row = el('div', 'pattern-tiles')
-      for (const spec of pt.tiles?.split(' ') ?? []) row.appendChild(exampleTiles(spec, 'ex sm'))
-      if (pt.bonus) { const g = el('span', 'tiles-row'); for (const t of pt.bonus) g.appendChild(tileEl(t, 'ex sm')); row.appendChild(g) }
-      card.appendChild(row)
-    }
-    s.appendChild(card)
-  }
-
-  // what the faan are worth
-  const table = el('div', 'payout-table')
-  for (let f = 0; f <= MAX_FAAN; f++) table.append(el('span', 'pf', `${f}`), el('span', 'pp', fmt(payout(f))))
-  s.append(el('h3', 'sub-h', 'What faan are worth'), table,
-    para('If you win on someone’s thrown-away tile, ', el('strong', '', 'they pay'), ' the full amount. If you draw it yourself, ',
-      el('strong', '', 'all three pay half'), ' each.'),
-    para('Everyone starts with the same points (',
-      el('strong', '', inGame ? fmt(match.startPoints) : '1,000, 2,000 or 5,000'),
-      '). If anyone drops below zero, the game ends early. The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'))
-  return s
-}
 
 function toggleHelp() {
   helpOpen = !helpOpen
@@ -2029,7 +1651,7 @@ function renderTable() {
   const o = offer
   if (online?.away) extras.push(part('away', 'away', awayCard))
   else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
-  if (game.over && !resultClosed) extras.push(showFinal ? finalCard() : resultCard())
+  if (game.over && !resultClosed) extras.push(showFinal ? finalCard(resultContext(), finalButtons()) : resultCard(resultContext(), handOverButtons()))
   for (const x of sh.extras) if (!extras.includes(x)) x.remove()
   for (const x of extras) if (x.parentElement !== sh.main) sh.main.append(x)
   sh.extras = extras
@@ -2110,149 +1732,25 @@ function showBanner(b: Banner, over: HTMLElement) {
   document.body.appendChild(banner)
 }
 
-// Everyone's score change for the hand and their new total, best first.
-function scoreTable(deltas: number[]): HTMLElement {
-  const t = el('div', 'score-table')
-  t.append(el('span', 'st-head'), el('span', 'st-head', 'This hand'), el('span', 'st-head', 'Total'))
-  for (const p of standings()) {
-    const d = deltas[p]
-    t.append(
-      el('span', 'st-name' + (p === HUMAN ? ' you' : ''), NAMES[p]),
-      el('span', 'st-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '—' : signed(d)),
-      el('span', 'st-total' + (match.scores[p] < 0 ? ' bust' : ''), points(match.scores[p])),
-    )
-  }
-  return t
-}
 
-// "Who pays, and why": the payment rule that applied this hand in one sentence, then each player's
-// share with the reason — so a minus score never comes as a surprise.
-function paymentBox(r: HandResult, w: number): HTMLElement {
-  const who = (p: number) => (p === HUMAN ? 'You' : NAMES[p])
-  const pays = (p: number) => (p === HUMAN ? 'you pay' : `${NAMES[p]} pays`)
-  const points = payout(r.faan)
-  const worth = `${r.faan} faan is worth ${fmt(points)} points.`
-  let rule: string
-  if (r.from === null) {
-    rule = `${worth} ${who(w)} drew the winning tile from the wall, so nobody gave it away — the other three share the cost and each pay half (${fmt(points / 2)}).`
-  } else if (wonByRobbing()) {
-    rule = `${worth} ${who(w)} robbed ${possessive(r.from)} kong: the tile added to the pong finished the hand. That counts like throwing away the winning tile, so ${pays(r.from)} the full ${fmt(points)} and the others pay nothing.`
-  } else {
-    rule = `${worth} ${who(r.from)} threw away the winning tile, so ${pays(r.from)} the full ${fmt(points)} — the others pay nothing.`
-  }
-
-  const box = el('div', 'pay-box')
-  box.append(el('h4', '', 'Who pays, and why'), el('p', 'pay-rule', rule))
-  const rows = el('div', 'pay-rows')
-  for (const p of [w, ...[1, 2, 3].map(k => (w + k) % 4)]) {
-    const d = r.deltas[p]
-    let why: string
-    const lower = (q: number) => (q === HUMAN ? 'you' : NAMES[q])
-    if (p === w) why = r.from === null ? 'won — collected half from each of the other three' : `won — collected it all from ${lower(r.from)}`
-    else if (r.from === null) why = `paid half to ${lower(w)}`
-    else if (p === r.from) why = wonByRobbing() ? 'paid it all — the kong was robbed' : 'paid it all — threw away the winning tile'
-    else why = 'paid nothing — didn’t throw the winning tile'
-    rows.append(
-      el('span', 'pay-name' + (p === HUMAN ? ' you' : ''), who(p)),
-      el('span', 'pay-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '0' : signed(d)),
-      el('span', 'pay-why', why),
-    )
-  }
-  box.appendChild(rows)
-  return box
-}
-
-// The end-of-hand card: who won (or a draw), the winning hand, its faan, and who paid whom.
-function resultCard(): HTMLElement {
-  const r = match.result!
-  const w = r.winner
-  const card = el('div', 'result-card' + (w === HUMAN ? ' you' : ''))
-  if (w === null) {
-    card.append(el('div', 'result-title', 'Draw'), el('div', 'result-sub', 'The wall ran out — nobody pays.'))
-  } else {
-    if (w === HUMAN) card.append(el('div', 'result-title', '🎉 Congratulations! 🎉'), el('div', 'result-sub', 'You win — Mahjong!'))
-    else card.append(el('div', 'result-title', 'Mahjong!'), el('div', 'result-sub', `${NAMES[w]} wins this hand`))
-    card.appendChild(el('div', 'result-how', r.from === null
-      ? (w === HUMAN ? 'You drew the winning tile yourself' : `${NAMES[w]} drew the winning tile`)
-      : wonByRobbing() ? `Robbed ${possessive(r.from)} kong — the tile they added completed the hand`
-      : `Won with ${possessive(r.from)} thrown-away tile`))
-
-    // the winning hand: exposed sets first, then the rest sorted; the winning tile is raised
-    const hand = el('div', 'result-hand')
-    for (const meld of game.melds[w]) {
-      const g = el('div', 'rh-group')
-      for (const t of meld) g.appendChild(tileEl(t, 'rh'))
-      hand.appendChild(g)
-    }
-    const g = el('div', 'rh-group')
-    for (const t of sortHand(game.hands[w])) g.appendChild(tileEl(t, 'rh' + (t === winTile ? ' win-tile' : '')))
-    hand.appendChild(g)
-    card.appendChild(hand)
-  }
-
-  const cols = el('div', 'result-cols')
-  if (w !== null) {
-    const faan = el('div', 'faan-list')
-    faan.appendChild(el('h4', '', 'Faan'))
-    if (r.items.length === 0) faan.append(el('span', '', 'No special patterns'), el('strong', '', '0'))
-    for (const item of r.items) faan.append(el('span', '', item.name), el('strong', '', `+${item.faan}`))
-    faan.append(el('span', 'total', r.limit ? 'Total (limit hand)' : 'Total'), el('strong', 'total', `${r.faan} faan`))
-    faan.appendChild(el('div', 'paid', `${r.faan} faan = ${fmt(payout(r.faan))} points`))
-    cols.appendChild(faan)
-  }
-  const scores = el('div', 'score-box')
-  scores.append(el('h4', '', 'Scores'), scoreTable(r.deltas))
-  cols.appendChild(scores)
-  card.appendChild(cols)
-  if (w !== null) card.appendChild(paymentBox(r, w))
-
-  // what happens next
-  let next: string
-  if (match.bust !== null) next = `${match.bust === HUMAN ? 'You have' : `${NAMES[match.bust]} has`} run out of points — the game ends here.`
-  else if (match.over) next = 'That was the last hand of the game.'
-  else if (r.dealerStays) next = `${NAMES[game.dealer]} ${game.dealer === HUMAN ? 'stay' : 'stays'} dealer for the next hand.`
-  else next = `Next hand: ${NAMES[match.dealer]} ${match.dealer === HUMAN ? 'deal' : 'deals'}${match.roundWind !== game.roundWind ? ` — the ${SEATS[match.roundWind]} round begins` : ''}.`
-  card.appendChild(el('div', 'result-next', next))
-
-  const actions = el('div', 'result-actions')
-  actions.append(continueButton(), button('See the table', () => { resultClosed = true; render() }, 'act'))
-  card.appendChild(actions)
-  return card
-}
-
-// The final standings once the last hand is played.
-function finalCard(): HTMLElement {
-  const order = standings()
-  const youFirst = order[0] === HUMAN
-  const card = el('div', 'result-card final' + (youFirst ? ' you' : ''))
-  card.append(
-    el('div', 'result-title', youFirst ? '🏆 You win the game! 🏆' : 'Game over'),
-    el('div', 'result-sub', youFirst ? 'Congratulations — top score!' : `${NAMES[order[0]]} wins the game`),
-  )
-  const list = el('div', 'standings')
-  const places = ['1st', '2nd', '3rd', '4th']
-  order.forEach((p, i) => {
-    const row = el('div', 'standing' + (p === HUMAN ? ' you' : '') + (i === 0 ? ' first' : ''))
-    const gain = match.scores[p] - match.startPoints
-    row.append(el('span', 'place', places[i]), el('span', 'who', NAMES[p]),
-      el('span', 'pts', `${points(match.scores[p])} pts`), el('span', 'gain ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), `(${signed(gain)})`))
-    list.appendChild(row)
-  })
-  const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} ran out of points, so the game ended early`
-  card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
-  const actions = el('div', 'result-actions')
+// ---------- End of a hand, end of the game ----------
+// The cards themselves are in result-cards.ts; these are what they show and the buttons they carry.
+const resultContext = (): ResultContext => ({ match, game, names: NAMES, winTile })
+const seeTable = () => button('See the table', () => { resultClosed = true; render() }, 'act')
+const handOverButtons = () => [continueButton(), seeTable()]
+function finalButtons(): HTMLElement[] {
+  const actions: HTMLElement[] = []
   if (online) {                                        // the host starts the next game; everyone else waits
     const room = online.room, host = room?.seats[online.seat ?? -1]?.host
     const hostName = room?.seats.find(s => s.host)?.name
-    if (host && room) actions.append(button('Play again', () => online?.start(room.rules), 'act primary'))   // same rules as this game
-    else actions.append(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
-    actions.append(button('Leave room', leaveOnline, 'act'))
+    if (host && room) actions.push(button('Play again', () => online?.start(room.rules), 'act primary'))   // same rules as this game
+    else actions.push(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
+    actions.push(button('Leave room', leaveOnline, 'act'))
   } else {
-    actions.append(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
+    actions.push(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
   }
-  actions.append(button('See the table', () => { resultClosed = true; render() }, 'act'))
-  card.appendChild(actions)
-  return card
+  actions.push(seeTable())
+  return actions
 }
 
 // Confetti falling over the table when you win.
