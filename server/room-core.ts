@@ -7,7 +7,8 @@
 // Empty seats are played by bots. Someone arriving mid-game takes a bot's seat (and its points) from
 // the next hand; until then the bot plays on. When someone drops out mid-game a bot plays their seat
 // until they come back. The room runs the game at a steady pace (bots pause before moving) and never waits for
-// ever: a person who doesn't act in time has a tile thrown for them, or passes.
+// ever: a person who doesn't act in time has a tile thrown for them, or passes, and the next hand
+// is dealt NEXT_HAND_MS after the last one ends.
 
 import { Table, type Rules, type Answer, type Phase, type TableData, type TableEvent, type Match } from '../src/table'
 import type { GameState, Tile } from '../src/engine'
@@ -18,6 +19,7 @@ export const BOT_MS = 900              // a bot's pause before it moves, so peop
 export const CLAIM_PAUSE_MS = 1100     // extra pause after someone takes a tile
 export const TURN_MS = 15000           // a person's time to throw a tile
 export const CLAIM_MS = 12000          // a person's time to decide on a tile they could take
+export const NEXT_HAND_MS = 30000      // after a hand: the next is dealt by then, even if not everyone pressed "Next hand"
 
 export const AWAY_AFTER = 2            // timeouts in a row before a bot takes over the seat
 // away: timed out AWAY_AFTER times in a row, so a bot plays for them until they say they're back
@@ -79,6 +81,7 @@ export interface SeatView {
   readyCount: number
   deadline: number | null              // when the room plays for you, if it's waiting on you
   turnDeadline: number | null          // when the person whose turn it is runs out of time (everyone sees it)
+  nextHandAt: number | null            // between hands: when the next one is dealt anyway
 }
 
 export interface Out { to: string; msg: ServerMsg }
@@ -222,6 +225,12 @@ export class RoomCore {
     this.s.pauseAfterClaim = false
     const p = t.phase
     let wentAway = false
+    if (p.kind === 'over') {                                 // time's up between hands: deal the next one
+      if (t.match.over) return []
+      const joiners = this.people().some(x => x.joining)
+      this.newHand(now)
+      return [...(joiners ? this.lobbyToAll() : []), ...this.statesToAll(now)]
+    }
     if (p.kind === 'dealing') t.begin()
     else if (p.kind === 'turn' && !t.humans[p.seat]) t.botMove()
     else {
@@ -293,6 +302,7 @@ export class RoomCore {
     }
     if (p.kind === 'turn' && t.humans[p.seat]) return keep(`turn:${p.seat}:${t.pool.length}:${t.game.wall.length}`, TURN_MS + pause)
     if (p.kind === 'claims') return keep(`claims:${p.from}:${p.tile.id}:${p.robbing}:${t.pool.length}`, CLAIM_MS)
+    if (p.kind === 'over' && !t.match.over) return keep(`over:${t.match.hand}`, NEXT_HAND_MS)
     this.s.waitKey = null
     if (p.kind === 'dealing') this.s.wakeAt ??= now + INTRO_MS
     else if (p.kind === 'turn') this.s.wakeAt = now + BOT_MS + pause
@@ -346,6 +356,7 @@ export class RoomCore {
       readyCount: this.s.ready.length,
       deadline: waiting ? this.s.wakeAt : null,
       turnDeadline: phase.kind === 'turn' && t.humans[phase.seat] ? this.s.wakeAt : null,
+      nextHandAt: phase.kind === 'over' && !t.match.over ? this.s.wakeAt : null,
     }
   }
 }

@@ -62,6 +62,7 @@ export interface LocalView {
   readyCount: number
   deadline: number | null              // on this device's clock: when the room plays for you
   turnDeadline: number | null          // on this device's clock: when whoever's turn it is runs out of time
+  nextHandAt: number | null            // on this device's clock: between hands, when the next is dealt anyway
 }
 
 const rot = <T>(a: T[], me: number): T[] => [0, 1, 2, 3].map(i => a[(i + me) % 4])
@@ -96,6 +97,7 @@ export function turnView(v: SeatView, serverNow: number): LocalView {
     winTileId: v.winTileId, handCounts: rot(v.handCounts, me), readyCount: v.readyCount,
     deadline: v.deadline === null ? null : v.deadline - serverNow + Date.now(),
     turnDeadline: v.turnDeadline == null ? null : v.turnDeadline - serverNow + Date.now(),
+    nextHandAt: v.nextHandAt == null ? null : v.nextHandAt - serverNow + Date.now(),   // (an older room server doesn't send it)
   }
 }
 

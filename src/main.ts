@@ -1117,6 +1117,7 @@ function statusEl(): HTMLElement {
 }
 
 // Online, the room plays for you when your time is up: count it down beside the hint.
+const updateNextSecs = (s: HTMLElement) => { s.textContent = `${Math.max(0, Math.ceil((Number(s.dataset.deadline) - Date.now()) / 1000))}s` }
 function showCountdown(hintEl: HTMLElement) {
   const deadline = online?.view?.deadline
   if (!deadline || !hintEl.dataset.base) return
@@ -1132,6 +1133,7 @@ setInterval(() => {
     s.textContent = String(secs)
     s.classList.toggle('hurry', secs <= 5)
   }
+  document.querySelectorAll<HTMLElement>('.next-secs[data-deadline]').forEach(updateNextSecs)
   // your hand's border flashes for your last few seconds
   const mine = online?.view?.deadline
   document.querySelector('.player-rack')?.classList.toggle('hurry', !!mine && !online?.away && mine - Date.now() <= 5000)
@@ -1348,6 +1350,9 @@ const continueButton = () => {
     refresh()
   }, 'act primary')
   if (pressed) (b as HTMLButtonElement).disabled = true
+  // the next hand is dealt by this time anyway, so nobody waits for ever on someone who's gone quiet
+  const at = online.view?.nextHandAt
+  if (at) { const s = el('span', 'next-secs'); s.dataset.deadline = String(at); b.append(' · ', s); updateNextSecs(s) }
   return b
 }
 let pressedNext = 0                       // online: the hand after which you pressed "Next hand"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RoomCore, newRoom, type Out, type SeatView, INTRO_MS, TURN_MS, CLAIM_MS } from './room-core'
+import { RoomCore, newRoom, type Out, type SeatView, INTRO_MS, TURN_MS, CLAIM_MS, NEXT_HAND_MS } from './room-core'
 
 const RULES = { rounds: 1, minFaan: 1, startPoints: 1000 }
 const lastState = (out: Out[], to: string): SeatView | undefined =>
@@ -13,7 +13,7 @@ function runClock(room: RoomCore, now: { t: number }): Out[] {
     if (w === null) break
     const p = room.s.table!.phase
     const waitingOnPerson = (p.kind === 'turn' && room.s.table!.humans[p.seat]) || p.kind === 'claims'
-    if (waitingOnPerson) break
+    if (waitingOnPerson || p.kind === 'over') break         // (over: the clock would deal the next hand)
     now.t = w
     all.push(...room.tick(now.t))
   }
@@ -108,7 +108,7 @@ describe('a room', () => {
     expect(room.s.wakeAt).toBe(INTRO_MS)
     for (let i = 0; i < 300; i++) {                       // let the clock run, never acting ourselves
       const w = room.s.wakeAt
-      if (w === null) break
+      if (w === null || room.s.table!.phase.kind === 'over') break
       const p = room.s.table!.phase
       if (p.kind === 'turn' && p.seat === 0 && room.s.table!.humans[0]) expect(w - now.t).toBe(TURN_MS)
       if (p.kind === 'claims') expect(w - now.t).toBe(CLAIM_MS)
@@ -265,6 +265,27 @@ describe('a room', () => {
     expect(room.s.table!.match.hand).toBe(hand)              // waiting for Carol…
     room.leave('c', now.t)                                   // …who leaves instead
     expect(room.s.table!.match.hand).toBe(hand + 1)          // so the next hand is dealt
+  })
+
+  it('deals the next hand anyway if someone never presses Next hand', () => {
+    const now = { t: 0 }
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    for (let i = 0; i < 3000 && room.s.table!.phase.kind !== 'over'; i++) {
+      const w = room.s.wakeAt
+      if (w === null) break
+      now.t = w
+      room.tick(now.t)
+    }
+    if (room.s.table!.match.over) return                     // (a big hand ended the game: nothing to check)
+    const ended = now.t, hand = room.s.table!.match.hand
+    room.handle('a', { type: 'back' }, ended); room.handle('b', { type: 'back' }, ended)
+    const out = room.handle('a', { type: 'ready' }, ended + 1000)   // Alice presses; Bob has gone quiet
+    expect(lastState(out, 'a')?.nextHandAt).toBe(ended + NEXT_HAND_MS)   // everyone sees when it'll be dealt
+    expect(room.tick(ended + NEXT_HAND_MS - 1)).toEqual([])
+    room.tick(ended + NEXT_HAND_MS)
+    expect(room.s.table!.match.hand).toBe(hand + 1)
   })
 
   it('waits for everyone to press Next hand', () => {
