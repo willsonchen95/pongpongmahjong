@@ -759,7 +759,7 @@ function renderMenu() {
   // buttons under the logo; elsewhere it melts away and the buttons come after the choices
   const side = el('div', 'menu-side')
   side.append(menuHero(), extras)
-  page.append(side, sound, cards, el('p', 'menu-version', `${version} · © 2026 Wilson. All rights reserved.`))
+  page.append(side, sound, cards, el('p', 'menu-version', `${version} · © 2026 Wilson Chen. All rights reserved.`))
   app.appendChild(page)
 }
 
