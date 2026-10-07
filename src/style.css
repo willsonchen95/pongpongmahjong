@@ -746,6 +746,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   transform: rotate(var(--turn-angle, 0deg));
   opacity: 0;
   transition: opacity 0.45s ease;
+  will-change: opacity;                                  /* fades on the graphics chip, without redrawing */
 }
 .tg-light.on { opacity: 1; }
 .tg-light::before {
@@ -811,6 +812,14 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .box.win-tile .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.12) #ffd75e, 0 0 calc(var(--u) * 0.7) rgba(255, 215, 94, 0.95); }
 .player-rack .tile.win-tile { transform: translateY(-10px); box-shadow: 0 0 0 3px #ffd75e, 0 0 18px rgba(255, 215, 94, 0.85), 0 4px 0 var(--navy); }
 @keyframes win-shine { 50% { filter: brightness(1.22); } }
+
+/* phones and tablets (the flat table): keep it light — a steady glow instead of a pulsing one,
+   no rays behind the burst, and the winner's tiles lit without the shine (each of those repaints
+   every frame, which a phone feels) */
+.lite3d .tg-light.on::before, .lite3d .rack-row.winner .box.up .face.top, .lite3d .player-rack.winner .tile { animation: none; }
+.lite3d .tg-light::before { opacity: 0.85; }
+.lite3d .mb-rays { display: none; }
+.lite3d .mb-word { text-shadow: 0 5px 0 #8a3b00, 0 0 14px rgba(255, 200, 80, 0.7); }
 
 @media (prefers-reduced-motion: reduce) {
   .tg-light.on::before, .rack-row.winner .box.up .face.top, .player-rack.winner .tile { animation: none; }
