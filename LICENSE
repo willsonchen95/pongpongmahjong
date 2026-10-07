@@ -1,0 +1,19 @@
+Pong Pong Mahjong!
+Copyright (c) 2026 Wilson. All rights reserved.
+
+This software and its associated files (the code, artwork, tile designs, text
+and game design) are the property of Wilson. No part of it may be copied,
+modified, published, distributed, sublicensed or sold, in whole or in part,
+without prior written permission from the copyright holder.
+
+Playing the game at its official address is permitted.
+
+Third-party material included or loaded by the game remains the property of
+its owners and is used under its own licence:
+
+- Music: "Chinese Harmony" by LunarBoomMusic, from Pixabay
+  (Pixabay Content License).
+- Fonts: Lilita One and Noto Serif TC, served by Google Fonts
+  (SIL Open Font License 1.1).
+- Open-source tools used to build it (Vite, TypeScript and others) are under
+  their own licences, listed in package.json and node_modules.
