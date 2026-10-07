@@ -233,6 +233,20 @@ describe('a room', () => {
     expect(room.lobbyFor('a')).toMatchObject({ seats: [{ name: 'Alice' }, { name: 'Carol', joining: false }, {}, {}] })
   })
 
+  it('the host pressing Leave closes the room and sends everyone back; anyone else leaving keeps it going', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0); room.join('c', 'Carol', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    room.handle('c', { type: 'leave' }, 0)                   // not the host: a bot takes Carol's seat
+    expect(room.s.table).not.toBeNull()
+    expect(room.s.table!.humans).toEqual([true, true, false, false])
+    const out = room.handle('a', { type: 'leave' }, 0)       // the host
+    expect(out).toEqual([{ to: 'b', msg: { type: 'closed', host: 'Alice' } }])
+    expect(room.s.table).toBeNull()
+    expect(room.s.seats).toEqual([null, null, null, null])
+    expect(room.lobbyFor('b')).toMatchObject({ started: false, you: null })
+  })
+
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }
     const room = new RoomCore(newRoom('ABCD', RULES))

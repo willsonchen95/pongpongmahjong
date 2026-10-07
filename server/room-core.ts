@@ -47,6 +47,7 @@ export type ClientMsg =
   | { type: 'ready' }                                    // ready for the next hand
   | { type: 'react'; emoji: string }                     // one of REACTIONS or PHRASES, shown to everyone
   | { type: 'back' }                                     // back after being away: take your seat from the bot
+  | { type: 'leave' }                                    // pressed Leave (not just a dropped connection): the host leaving closes the room
 
 // Quick reactions and chat phrases people can send during a game (only these, at most one a second each).
 export const REACTIONS = ['👍', '😂', '😮', '😭', '😡', '🎉']
@@ -60,6 +61,7 @@ export type ServerMsg =
   | { type: 'state'; view: SeatView; events: TableEvent[]; now: number }   // now: the room's clock, for countdowns
   | { type: 'error'; message: string }
   | { type: 'react'; seat: number; emoji: string }
+  | { type: 'closed'; host: string }                     // the host left, so the room closed: back to the menu
 
 // A player's view of the table: everything on the table, but only their own hand (everyone's is
 // shown once the hand is over) and none of the wall.
@@ -143,7 +145,8 @@ export class RoomCore {
   handle(playerId: string, m: ClientMsg, now: number): Out[] {
     if (m.type === 'join') return this.join(playerId, m.name, now)
     const seat = this.seatOf(playerId)
-    if (seat < 0) return [{ to: playerId, msg: { type: 'error', message: 'Join the room first.' } }]
+    if (seat < 0) return m.type === 'leave' ? [] : [{ to: playerId, msg: { type: 'error', message: 'Join the room first.' } }]
+    if (m.type === 'leave') return playerId === this.s.hostId ? this.close(playerId) : this.leave(playerId, now)
     if (m.type === 'react') {                                // everyone sees it float up from that seat
       const reacted = (this.s.reactedAt ??= {})
       if (![...REACTIONS, ...PHRASES].includes(m.emoji) || now - (reacted[playerId] ?? -Infinity) < REACT_GAP_MS) return []
@@ -194,6 +197,17 @@ export class RoomCore {
     this.collect()
     this.schedule(now)
     return this.statesToAll(now)
+  }
+
+  // The host left for good: everyone else is sent back to the menu, and the room starts over empty
+  // (its code works again for a brand-new room).
+  private close(hostId: string): Out[] {
+    const host = this.s.seats[this.seatOf(hostId)]?.name ?? 'The host'
+    const others = this.connectedPeople().filter(p => p.playerId !== hostId)
+    this.s = newRoom(this.s.code, this.s.rules)
+    this.table = null
+    this.pendingEvents = []
+    return others.map(p => ({ to: p.playerId, msg: { type: 'closed', host } }))
   }
 
   // ---------- The room running the game ----------

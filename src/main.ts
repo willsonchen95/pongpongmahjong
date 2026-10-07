@@ -227,12 +227,20 @@ function goOnline(code: string, name: string) {
   room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
   room.onConnection = () => { if (lobbyShowing()) renderLobby(); else refresh() }
   room.onReact = (seat, emoji) => { if (!lobbyShowing()) showReaction(seat, emoji) }
+  room.onClosed = host => {                           // the host left: back to the menu, saying why
+    leaveRoom(false)
+    void dialog('The room has closed', `${host} (the host) left the room, so the game has ended.`, [{ label: 'OK', value: true, cls: 'primary' }])
+  }
   room.connect()
   renderLobby()
+  setTimeout(() => { if (online === room && !room.everConnected && lobbyShowing()) renderLobby() }, CANT_CONNECT_MS + 100)
 }
+const CANT_CONNECT_MS = 8000                    // how long "Connecting…" shows before the advice on why it might not
 
-function leaveOnline() {
-  online?.leave()
+function leaveOnline() { leaveRoom(true) }
+// `tellRoom`: you pressed Leave (false: the room has already closed)
+function leaveRoom(tellRoom: boolean) {
+  online?.leave(tellRoom)
   online = null
   NAMES = BOT_NAMES
   onlineDeal = ''
@@ -509,8 +517,10 @@ const gameInProgress = () => started && !match.over
 async function openPause() {
   if (paused || coachOpen) return
   if (online) {                                        // an online game can't pause for everyone
-    const choice = await dialog('Leave the room?',
-      `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.`, [
+    const youHost = !!online.room?.seats[online.seat ?? -1]?.host
+    const choice = await dialog('Leave the room?', youHost
+      ? 'You’re the host: leaving closes the room, and everyone goes back to the main menu.'
+      : `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.`, [
         { label: 'Stay', value: 'stay', cls: 'primary' },
         { label: 'Leave room', value: 'leave', cls: 'danger' },
       ])
@@ -977,6 +987,10 @@ function renderLobby() {
   card.appendChild(codeBox)
 
   if (!room.connected) card.appendChild(el('p', 'form-message', r ? 'Connection lost — reconnecting…' : 'Connecting…'))
+  // never got through after a while: most often the network (or a blocker) doesn't let it reach the server
+  if (!room.everConnected && Date.now() - room.since > CANT_CONNECT_MS) {
+    card.appendChild(el('p', 'setup-help cant-connect', 'Still can’t reach the game server. Check your internet connection. Some Wi-Fi networks, mobile data plans, ad blockers and “Private DNS” settings block it — try switching between Wi-Fi and mobile data, or turn the blocker off for this site.'))
+  }
   if (onlineError) card.appendChild(el('p', 'form-message', onlineError))
 
   if (r) {
@@ -1191,13 +1205,13 @@ function sideLabel(seat: number): HTMLElement {
   else if (!game.over && seat === game.current) labelCls += ' active'
   const label = el('div', labelCls)
   const w = seatWind(game, seat)
-  label.append(
-    el('div', 'wl-name', `${NAMES[seat]} · ${points(match.scores[seat])}`),
-    el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`),
-  )
+  const name = el('div', 'wl-name', `${NAMES[seat]} · ${points(match.scores[seat])}`)
+  label.append(name, el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`))
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
+  // online, the time left on their turn: beside the name, not under it — the others' labels are turned
+  // round, so "under" would reach into the discards in the middle
   const deadline = turnDeadlineOf(seat)
-  if (deadline) label.appendChild(turnTimer(deadline))
+  if (deadline) name.appendChild(turnTimer(deadline))
   return label
 }
 

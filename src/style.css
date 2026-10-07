@@ -146,9 +146,9 @@ button { font: inherit; cursor: pointer; border: 0; }
 }
 .wl-name { font-size: calc(var(--u) * 0.95); font-weight: 800; color: #f1d7a8; }
 /* Online: the time left on this player's turn, shrinking away (red for the last 5 seconds) */
-.turn-timer-row { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 0.35); margin-top: calc(var(--u) * 0.3); }
+.turn-timer-row { display: inline-flex; align-items: center; gap: calc(var(--u) * 0.3); margin-left: calc(var(--u) * 0.45); vertical-align: middle; }   /* beside the name */
 .turn-timer {
-  width: calc(var(--u) * 7.5);
+  width: calc(var(--u) * 4.5);
   height: calc(var(--u) * 0.6);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
@@ -1387,6 +1387,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .join-row { display: flex; gap: 10px; }
 .code-input { flex: 1; text-transform: uppercase; letter-spacing: 0.3em; font-weight: 800; text-align: center; }
 .online-home .act.primary.big { width: 100%; }
+.cant-connect { margin: 8px 0 0; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); border-left: 4px solid #e0b53a; }
 .form-message { margin: 12px 0 0; color: #ffb4a8; font-weight: 600; }
 .form-message:empty { display: none; }
 

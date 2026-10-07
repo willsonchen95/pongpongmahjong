@@ -116,6 +116,8 @@ export class OnlineRoom {
   room: Extract<ServerMsg, { type: 'room' }> | null = null
   view: LocalView | null = null
   connected = false
+  everConnected = false                // reached the room server at least once
+  readonly since = Date.now()          // when we started trying
   private ws: WebSocket | null = null
   private closing = false
   private retry = 0
@@ -125,6 +127,7 @@ export class OnlineRoom {
   onError: (message: string) => void = () => {}
   onConnection: () => void = () => {}
   onReact: (seat: number, emoji: string) => void = () => {}   // seat as on screen (you = 0)
+  onClosed: (host: string) => void = () => {}               // the host left, so the room closed
 
   constructor(code: string, name: string) {
     this.code = code
@@ -163,6 +166,7 @@ export class OnlineRoom {
     this.ws = ws
     ws.onopen = () => {
       this.connected = true
+      this.everConnected = true
       this.retry = 0
       this.send({ type: 'join', playerId: this.playerId, name: this.name })
       this.onConnection()
@@ -175,7 +179,8 @@ export class OnlineRoom {
         this.onState(this.view, turnEvents(m.events, m.view.seat))
       } else if (m.type === 'react') {
         if (this.seat !== null) this.onReact(seat(m.seat, this.seat), m.emoji)
-      } else if (m.type === 'error') this.onError(m.message)
+      } else if (m.type === 'closed') this.onClosed(m.host)
+      else if (m.type === 'error') this.onError(m.message)
     }
     ws.onclose = () => {
       if (this.ws !== ws) return
@@ -196,8 +201,10 @@ export class OnlineRoom {
   react(emoji: string) { this.send({ type: 'react', emoji }) }
   back() { this.send({ type: 'back' }) }
 
-  // Leave the room for good (a bot takes your seat; you can still come back with the code).
-  leave() {
+  // Leave the room for good (a bot takes your seat; you can still come back with the code). Telling
+  // the room — rather than just dropping the connection — matters for the host: their leaving closes it.
+  leave(tellRoom = true) {
+    if (tellRoom) this.send({ type: 'leave' })
     this.closing = true
     saveSession(null)
     this.ws?.close()
