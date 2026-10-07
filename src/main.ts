@@ -15,7 +15,7 @@ import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, b
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, type LocalView, type SeatInfo } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -525,13 +525,14 @@ function wakeWaiters() {
 
 // A small dialog over everything; resolves with the value of the button pressed.
 // Esc picks the first ("stay") option.
-function dialog<T>(title: string, text: string, options: { label: string; value: T; cls: string }[]): Promise<T> {
+// `onEscape`: what the Escape key chooses (the first option, unless given)
+function dialog<T>(title: string, text: string, options: { label: string; value: T; cls: string }[], onEscape: T = options[0].value): Promise<T> {
   return new Promise(resolve => {
     const layer = el('div', 'coach-layer dim dialog-layer')
     const card = el('div', 'dialog-card')
     const actions = el('div', 'dialog-actions')
     const close = (v: T) => { document.removeEventListener('keydown', onKey); layer.remove(); resolve(v) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close(options[0].value) } }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close(onEscape) } }
     for (const o of options) actions.appendChild(button(o.label, () => close(o.value), 'act ' + o.cls))
     card.append(el('div', 'dialog-title', title), el('p', 'dialog-text', text), actions)
     layer.appendChild(card)
@@ -837,10 +838,19 @@ function onlineMenuCard(): HTMLElement {
       if (room.room?.started && room.view) { inMenu = false; render() } else renderLobby()
     }, 'primary')
   }
+  // still in a room from before (closed the tab, or left to the menu): rejoin it, or leave it and start fresh
   const session = savedSession()
   if (session) {
-    return menuCard(MENU_ICONS.online, `Rejoin room ${session.code}`, `Back to your online game as ${session.name}`,
-      () => goOnline(session.code, session.name), '', 'Online')
+    return menuCard(MENU_ICONS.online, 'Play online', `You’re still in room ${session.code} — rejoin it, or start fresh`, async () => {
+      const choice = await dialog(`You’re still in room ${session.code}`,
+        `You left a game there as ${session.name}. Go back to it, or leave that room and start a new online game?`, [
+          { label: `Rejoin room ${session.code}`, value: 'rejoin', cls: 'primary' },
+          { label: 'Leave it and start fresh', value: 'fresh', cls: 'danger' },
+          { label: 'Cancel', value: 'cancel', cls: '' },
+        ], 'cancel')
+      if (choice === 'rejoin') goOnline(session.code, session.name)
+      else if (choice === 'fresh') { leaveSavedRoom(session.code); renderOnlineHome() }
+    }, '', 'In a room')
   }
   return menuCard(MENU_ICONS.online, 'Play online', 'Play with friends — create a room or join one with a code', renderOnlineHome)
 }

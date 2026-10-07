@@ -47,6 +47,17 @@ function saveSession(s: Session | null) {
   try { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY) } catch { /* fine */ }
 }
 
+// Leave a room you're no longer connected to (the one the menu offers to rejoin), without rejoining it
+// first: just tell it you've gone — the same as pressing Leave inside (a host leaving closes it).
+export function leaveSavedRoom(code: string) {
+  saveSession(null)
+  try {
+    const ws = new WebSocket(`${ROOM_SERVER}/rooms/${code}/ws?player=${encodeURIComponent(playerId())}`)
+    ws.onopen = () => { ws.send(JSON.stringify({ type: 'leave' } satisfies ClientMsg)); ws.close() }
+    setTimeout(() => ws.close(), 5000)                 // (unreachable: forget it — the room plays on with a bot)
+  } catch { /* offline: the room plays on with a bot in your seat */ }
+}
+
 // ---------- Turning the table round so you're at the bottom ----------
 
 // What the screen needs, from your seat's point of view (you = seat 0).
