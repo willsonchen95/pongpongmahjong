@@ -19,16 +19,26 @@
       // wide (less on a stubbier phone, so the page stays under 600 tall and gets the sideways
       // layout in style.css). Tablets and computers are shown at their natural size.
       (function () {
+        var last = null
         function fit() {
           var short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height)
-          var sideways = matchMedia('(orientation: landscape)').matches
-          var real = sideways ? long : short
+          // the space the page really gets, in real pixels: the visible area times the current zoom.
+          // (Not the screen size: sideways, some phones keep a strip by the camera free, and right
+          // after turning, the page's own size still belongs to the old layout.)
+          var vv = window.visualViewport
+          var w = vv ? vv.width * vv.scale : innerWidth, h = vv ? vv.height * vv.scale : innerHeight
+          var sideways = vv ? w > h : matchMedia('(orientation: landscape)').matches
+          var real = vv ? Math.round(w) : (sideways ? long : short)
           var design = sideways ? Math.min(1120, Math.floor(590 * long / short)) : 480
           // the zoom is pinned (min = max), because after turning the phone Chrome keeps the old
           // zoom and the new layout would hang off the side of the screen
           var content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0'
           if (short <= 500 && real < design) {
             var scale = (real / design).toFixed(3)
+            // measuring after a change can come out a pixel different: keep the zoom we have then,
+            // rather than nudging it back and forth
+            if (last && last.design === design && Math.abs(last.scale - scale) / scale < 0.01) scale = last.scale
+            last = { design: design, scale: scale }
             content = 'width=' + design + ', initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale
           }
           var meta = document.getElementById('viewport')
@@ -37,6 +47,7 @@
         fit()
         addEventListener('orientationchange', function () { setTimeout(fit, 150) })
         addEventListener('resize', fit)
+        if (window.visualViewport) visualViewport.addEventListener('resize', fit)   // also once the new zoom settles
       })()
     </script>
     <script>
