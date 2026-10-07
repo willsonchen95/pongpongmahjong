@@ -15,7 +15,7 @@ import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, b
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, TURN_MS, newRoomCode, savedSession, type LocalView } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, newRoomCode, savedSession, type LocalView } from './online'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -108,7 +108,7 @@ function sync() {
   winFrom = table.winFrom
   winTile = table.winTile
   const p = table.phase
-  const away = !!online?.away                         // (online, away: a bot is playing your seat)
+  const away = !!online?.away || !!online?.joining     // (online, away or just arrived: a bot is playing your seat)
   mustDiscard = p.kind === 'turn' && p.seat === HUMAN && !away
   offer = p.kind === 'claims' && !p.answers[HUMAN] && !away ? p.offers[HUMAN] : null
 }
@@ -272,10 +272,35 @@ function applyOnline(view: LocalView, events: TableEvent[]) {
   // doesn't wait, so drop the rest of the deal and show the table as it is now
   if (intro && view.phase.kind !== 'dealing') { gen++; intro = null }
   playEvents(events)
+  buzzIfWaitingOnYou()
   if (game.over && !resultClosed && events.some(e => e.type === 'win' || e.type === 'exhausted')) showFinal = false
   if (inMenu && !intro) { inMenu = false; render() }
   else if (!intro) refresh()
 }
+
+// Online, the table waiting on you (your turn, or a tile you could take): a short buzz on phones
+// that can, and — if you're on another tab — the tab's title flashes until you come back. Once per
+// thing you're asked to do.
+let buzzedFor = ''
+function buzzIfWaitingOnYou() {
+  const key = mustDiscard ? `turn:${game.wall.length}:${pool.length}` : offer ? `offer:${offer.tile.id}:${pool.length}` : ''
+  if (key === buzzedFor) return
+  buzzedFor = key
+  if (!key) return
+  try { navigator.vibrate?.(mustDiscard ? 120 : [70, 60, 70]) } catch { /* not allowed here */ }
+  if (document.hidden) flashTitle(mustDiscard ? '🀄 Your turn!' : '🀄 Take this tile?')
+}
+const GAME_TITLE = document.title
+let titleTimer = 0
+function flashTitle(text: string) {
+  clearInterval(titleTimer)
+  let on = false
+  titleTimer = window.setInterval(() => { on = !on; document.title = on ? text : GAME_TITLE }, 1000)
+  document.title = text
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { clearInterval(titleTimer); document.title = GAME_TITLE }
+})
 
 // `bots`: how well they play; the guided game always has easy ones, whatever's chosen for New game.
 function startMatch(bots: BotLevel = settings.bots) {
@@ -553,7 +578,7 @@ const startMusicOnce = () => {
 }
 document.addEventListener('pointerdown', startMusicOnce)
 document.addEventListener('keydown', startMusicOnce)
-initInstall(() => { if (inMenu) renderMenu() })
+initInstall(() => { if (app.querySelector('.menu-page')) renderMenu() })   // only the main menu itself (not the invite or setup screens)
 
 
 // Show a tip (one or more steps) unless tips are off or it's been seen before.
@@ -1015,6 +1040,8 @@ function statusEl(): HTMLElement {
     mood = 'done'; badge = '–'; title.textContent = 'Draw'; hint = 'The wall ran out'
   } else if (online?.away) {
     badge = '🤖'; title.textContent = 'A bot is playing for you'; hint = 'Tap “I’m back” to play again'
+  } else if (online?.joining) {
+    badge = '👋'; title.textContent = 'You’re in!'; hint = 'Watch this hand — you play from the next one'
   } else if (offer) {
     mood = 'mine'; badge = windChar(offer.from)
     title.append(`${NAMES[offer.from]} ${offer.robbing ? 'adds to a pong' : 'threw away'}`, mini(offer.tile))
@@ -1708,17 +1735,18 @@ function toggleReactions(from: HTMLElement) {
   const open = document.querySelector('.react-tray')
   if (open) return void open.remove()
   const tray = el('div', 'react-tray')
-  const r = from.getBoundingClientRect()
-  tray.style.left = `${r.left}px`
-  tray.style.top = `${r.bottom + 8}px`
   const close = () => { tray.remove(); document.removeEventListener('pointerdown', outside, true) }
   const outside = (e: Event) => { if (!tray.contains(e.target as Node) && !from.contains(e.target as Node)) close() }
-  for (const emoji of REACTIONS) {
-    const b = el('button', 'react-pick', emoji)
-    b.onclick = () => { online?.react(emoji); close() }
-    tray.appendChild(b)
-  }
+  const send = (what: string) => () => { online?.react(what); close() }
+  const emojis = el('div', 'react-row'), phrases = el('div', 'phrase-grid')   // the emoji, then a few short phrases
+  for (const emoji of REACTIONS) { const b = el('button', 'react-pick', emoji); b.onclick = send(emoji); emojis.appendChild(b) }
+  for (const text of PHRASES) { const b = el('button', 'phrase-pick', text); b.onclick = send(text); phrases.appendChild(b) }
+  tray.append(emojis, phrases)
   document.body.appendChild(tray)
+  // under the button, kept on screen
+  const r = from.getBoundingClientRect()
+  tray.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tray.offsetWidth - 8))}px`
+  tray.style.top = `${r.bottom + 8}px`
   document.addEventListener('pointerdown', outside, true)
 }
 
@@ -1727,7 +1755,7 @@ function showReaction(seat: number, emoji: string) {
   if (!scene || !document.contains(scene)) return
   const r = scene.getBoundingClientRect()
   const [fx, fy] = BANNER_SPOT[String(seat)]
-  const bubble = el('div', 'reaction', emoji)
+  const bubble = el('div', 'reaction' + (PHRASES.includes(emoji) ? ' phrase' : ''), emoji)   // a phrase comes in a speech bubble
   bubble.style.left = `${r.left + r.width * Math.min(0.88, Math.max(0.12, fx))}px`   // (kept clear of the screen's edges)
   bubble.style.top = `${r.top + r.height * fy}px`
   bubble.addEventListener('animationend', () => bubble.remove())

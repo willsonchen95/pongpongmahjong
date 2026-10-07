@@ -130,7 +130,8 @@ describe('a room', () => {
     const out = room.join('b', 'Bob', now.t)
     expect(room.s.table!.humans).toEqual([true, true, false, false])
     expect(lastState(out, 'b')?.seat).toBe(1)
-    expect(room.join('c', 'Carol', now.t)[0].msg).toMatchObject({ type: 'error' })   // the game's under way
+    room.join('c', 'Carol', now.t)                           // arriving mid-game: a bot's seat, from the next hand
+    expect(room.s.table!.humans).toEqual([true, true, false, false])
   })
 
   it('after a game: newcomers can join, and Play again frees the seats of anyone who left', () => {
@@ -156,7 +157,7 @@ describe('a room', () => {
     expect(room.s.table!.humans).toEqual([true, false, true, false])
   })
 
-  it('passes reactions to everyone, only known ones, at most one a second each', () => {
+  it('passes reactions and chat phrases to everyone, only known ones, at most one a second each', () => {
     const room = new RoomCore(newRoom('ABCD', RULES))
     room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
     const out = room.handle('b', { type: 'react', emoji: '😂' }, 5000)
@@ -165,6 +166,8 @@ describe('a room', () => {
     expect(room.handle('b', { type: 'react', emoji: '👍' }, 5500)).toEqual([])         // too soon
     expect(room.handle('b', { type: 'react', emoji: '👍' }, 6000)).toHaveLength(2)
     expect(room.handle('a', { type: 'react', emoji: '<b>hi</b>' }, 9000)).toEqual([])  // not one of the reactions
+    expect(room.handle('a', { type: 'react', emoji: 'Good game!' }, 10000)[0].msg).toEqual({ type: 'react', seat: 0, emoji: 'Good game!' })   // a chat phrase
+    expect(room.handle('b', { type: 'react', emoji: 'Hello there' }, 10000)).toEqual([])   // only the set phrases
   })
 
   it('out of time on your turn: throws the tile you just drew; twice in a row and a bot takes over until you’re back', () => {
@@ -200,6 +203,35 @@ describe('a room', () => {
     room.handle('a', { type: 'back' }, now.t)
     expect(room.s.table!.humans[0]).toBe(true)
     expect(room.lobbyFor('b')).toMatchObject({ seats: [{ away: false }, {}, {}, {}] })  })
+
+  it('someone arriving mid-game takes a bot’s seat, and its points, from the next hand', () => {
+    const now = { t: 0 }
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    now.t = INTRO_MS
+    room.tick(now.t)                                         // the deal is done; the hand is under way
+    const joined = room.join('c', 'Carol', now.t)
+    expect(joined.find(o => o.to === 'c')?.msg.type).toBe('room')   // in, not turned away
+    expect(room.lobbyFor('c')).toMatchObject({ you: 1, seats: [{ name: 'Alice' }, { name: 'Carol', person: true, joining: true }, {}, {}] })
+    expect(room.s.table!.humans[1]).toBe(false)              // the bot finishes this hand for her
+    const hand = room.s.table!.game.hands[1]
+    expect(room.handle('c', { type: 'discard', tile: hand[0].id! }, now.t)).toEqual([])   // her moves wait for the next hand
+    // Alice plays the hand out (throwing her newest tile, never claiming)
+    for (let i = 0; i < 5000 && room.s.table!.phase.kind !== 'over'; i++) {
+      const t = room.s.table!, p = t.phase
+      if (p.kind === 'turn' && p.seat === 0) { const h = t.game.hands[0]; room.handle('a', { type: 'discard', tile: h[h.length - 1].id! }, now.t); continue }
+      if (p.kind === 'claims' && p.offers[0] && !p.answers[0]) { room.handle('a', { type: 'answer', answer: { kind: 'pass' } }, now.t); continue }
+      now.t = room.s.wakeAt ?? now.t
+      room.tick(now.t)
+    }
+    if (room.s.table!.match.over) return                     // (a big hand ended the game: nothing more to check)
+    room.handle('a', { type: 'back' }, now.t); room.handle('a', { type: 'ready' }, now.t)
+    const out = room.handle('c', { type: 'ready' }, now.t)
+    expect(room.s.table!.humans).toEqual([true, true, false, false])   // her seat from this hand on
+    expect(out.find(o => o.to === 'c' && o.msg.type === 'room')?.msg).toMatchObject({ seats: [{}, { joining: false }, {}, {}] })   // and she's told
+    expect(room.lobbyFor('a')).toMatchObject({ seats: [{ name: 'Alice' }, { name: 'Carol', joining: false }, {}, {}] })
+  })
 
   it('waits for everyone to press Next hand', () => {
     const now = { t: 0 }

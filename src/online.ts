@@ -7,7 +7,7 @@ import type { Rules, Phase, Match, TableEvent } from './table'
 import { makeTile, type GameState, type Tile } from './engine'
 
 export type { SeatInfo }
-export { REACTIONS, TURN_MS } from '../server/room-core'
+export { REACTIONS, PHRASES, TURN_MS } from '../server/room-core'
 
 // Where the room server is: while developing on this computer or its home network, the local
 // `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`).
@@ -139,13 +139,21 @@ export class OnlineRoom {
     const r = this.room
     if (!r || r.you === null) return ['You', 'Mei', 'Kai', 'Lin']
     // someone who's dropped out is played by a bot until they're back
-    return rot(r.seats, r.you).map((s, i) => (i === 0 ? 'You' : s.person && (!s.connected || s.away) ? `${s.name} (away)` : s.name))
+    // (and someone who arrived mid-game is played by one until the next hand)
+    return rot(r.seats, r.you).map((s, i) => (i === 0 ? 'You' : s.person && (!s.connected || s.away) ? `${s.name} (away)`
+      : s.joining ? `${s.name} (next hand)` : s.name))
   }
 
   // Whether you timed out too often and a bot is playing your seat until you say you're back.
   get away(): boolean {
     const r = this.room
     return !!r && r.you !== null && r.seats[r.you].away
+  }
+
+  // Whether you arrived mid-game: you watch while a bot finishes this hand, and play from the next.
+  get joining(): boolean {
+    const r = this.room
+    return !!r && r.you !== null && r.seats[r.you].joining
   }
 
   connect() {
