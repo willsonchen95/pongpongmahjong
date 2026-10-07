@@ -185,9 +185,10 @@ describe('a room', () => {
           room.tick(now.t)
           return { drawn }
         }
-        if (p.kind === 'claims') for (const [s, id] of [[0, 'a'], [1, 'b']] as const) if (p.offers[s] && !p.answers[s]) room.handle(id, { type: 'answer', answer: { kind: 'pass' } }, now.t)
+        // (Alice never acts — answering would count as being here and reset her timeouts — so a tile
+        // offered to her waits out its time; Bob passes straight away)
+        if (p.kind === 'claims' && p.offers[1] && !p.answers[1]) { room.handle('b', { type: 'answer', answer: { kind: 'pass' } }, now.t); continue }
         if (p.kind === 'turn' && p.seat === 1 && t.humans[1]) { const h = t.game.hands[1]; room.handle('b', { type: 'discard', tile: h[h.length - 1].id! }, now.t); continue }
-        if (room.s.table!.phase.kind === 'claims') continue
         now.t = room.s.wakeAt ?? now.t
         room.tick(now.t)
       }
@@ -195,7 +196,8 @@ describe('a room', () => {
     }
     const first = timeOut()
     if (!first) return                                        // (the hand ended first: nothing to check)
-    if (first.drawn) expect(room.s.table!.pool.some(t => t.id === first.drawn!.id)).toBe(true)   // the drawn tile went
+    // the drawn tile went (it's on the table — or in the set of whoever took it at once)
+    if (first.drawn) expect([...room.s.table!.pool, ...room.s.table!.game.melds.flat(2)].some(t => t.id === first.drawn!.id)).toBe(true)
     expect(room.lobbyFor('b')).toMatchObject({ seats: [{ away: false }, {}, {}, {}] })
     if (!timeOut()) return
     expect(room.lobbyFor('b')).toMatchObject({ seats: [{ name: 'Alice', away: true }, {}, {}, {}] })
