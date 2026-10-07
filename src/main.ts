@@ -860,8 +860,7 @@ function renderRulesPage() {
   inMenu = true
   app.innerHTML = ''
   const page = el('div', 'rules-page')
-  const head = el('div', 'rules-head')
-  head.append(button('‹ Back', renderMenu, 'act'), el('h1', '', 'How to play'))
+  const head = pageTitle('How to play', renderMenu, 'Back to the menu')
   const intro = el('section', 'rules-intro')
   intro.append(
     para('Mahjong is played by four players with 144 tiles. You sit at the bottom of the table; play goes round counter-clockwise — you, then Mei, Kai and Lin.'),
@@ -875,6 +874,17 @@ function renderRulesPage() {
   page.append(head, body, foot, credit)
   app.appendChild(page)
   window.scrollTo(0, 0)
+}
+
+// A page's title with a round back button before it, so going back never means scrolling down to the
+// button at the bottom. `onBack` does what that bottom button does.
+function pageTitle(title: string, onBack: () => void, backLabel: string): HTMLElement {
+  const row = el('div', 'page-title-row')
+  const back = button('‹', onBack, 'page-back')
+  back.title = backLabel
+  back.setAttribute('aria-label', backLabel)
+  row.append(back, el('h1', 'setup-title', title))
+  return row
 }
 
 // A row of big choice buttons; the chosen one is lit. `onPick` gets the chosen value.
@@ -894,7 +904,7 @@ function renderSetup() {
   inMenu = true
   app.innerHTML = ''
   const card = el('div', 'setup')
-  card.append(el('h1', 'setup-title', 'New game'), el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
+  card.append(pageTitle('New game', renderMenu, 'Back to the menu'), el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
 
   ruleChoices(card, renderSetup, true)
   const actions = el('div', 'setup-actions')
@@ -958,7 +968,7 @@ function renderOnlineHome() {
   inMenu = true
   app.innerHTML = ''
   const card = el('div', 'setup online-home')
-  card.append(el('h1', 'setup-title', 'Play online'),
+  card.append(pageTitle('Play online', renderMenu, 'Back to the menu'),
     el('p', 'setup-intro', 'Play with friends: one of you creates a room and shares its code. Bots fill any empty seats.'))
 
   const nameInput = el('input', 'text-input') as HTMLInputElement
@@ -1012,7 +1022,7 @@ function renderLobby() {
   app.innerHTML = ''
   const card = el('div', 'setup lobby')
   const r = room.room
-  card.append(el('h1', 'setup-title', 'Your room'))
+  card.append(pageTitle('Your room', leaveOnline, 'Leave the room'))
 
   const codeBox = el('div', 'room-code')
   codeBox.append(el('span', 'room-code-label', 'Room code'), el('span', 'room-code-value', room.code))

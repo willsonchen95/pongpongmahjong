@@ -1356,8 +1356,6 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 
 /* ---------- How to play page ---------- */
 .rules-page { width: min(860px, 100%); margin: 3vh auto 4vh; }
-.rules-head { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
-.rules-head h1 { margin: 0; font-size: 2.4rem; color: #fff6d6; }
 .help.rules-body { position: static; max-height: none; overflow: visible; width: auto; padding: 24px 30px 28px; font-size: 1.18rem; }
 .rules-body section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .rules-body .tile.ex { width: 42px; height: 57px; border-radius: 6px; }
@@ -1377,6 +1375,27 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   counter-reset: setup-step;
 }
 .setup-title { margin: 0; font-size: 2.4rem; color: #fff6d6; }
+/* a page's title, with the round back button before it (top left, always in reach) */
+.page-title-row { display: flex; align-items: center; gap: 14px; }
+.rules-page > .page-title-row { margin-bottom: 14px; }
+.page-back {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 215, 94, 0.45);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff6d6;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.page-back:hover { border-color: #ffd75e; background: rgba(0, 0, 0, 0.4); }
+.page-back:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .setup-intro { margin: 4px 0 8px; font-size: 1.12rem; opacity: 0.85; }
 .setup-q { display: flex; align-items: center; gap: 10px; margin: 24px 0 4px; font-size: 1.35rem; color: #ffd75e; }
 .setup-q::before {
@@ -1830,8 +1849,6 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 
   /* the How to play page */
   .rules-page { margin: 12px auto; }
-  .rules-head { gap: 12px; margin-bottom: 10px; }
-  .rules-head h1 { font-size: 1.6rem; }
   .help.rules-body { padding: 14px 16px 18px; font-size: 0.9rem; }
   .rules-body .tile.ex { width: 28px; height: 38px; }
   .rules-body .tile.ex.sm { width: 20px; height: 27px; }
@@ -1839,6 +1856,8 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   /* the New game screen */
   .setup { margin: 12px auto; padding: 16px 18px 18px; border-radius: 16px; }
   .setup-title { font-size: 1.6rem; }
+  .page-title-row { gap: 10px; }
+  .page-back { width: 40px; height: 40px; font-size: 1.7rem; }
   .setup-intro { font-size: 0.9rem; }
   .setup-q { margin: 14px 0 4px; font-size: 1.05rem; }
   .setup-help { font-size: 0.82rem; }
