@@ -736,6 +736,88 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   @keyframes turn-banner-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
 }
 
+/* ---------- Whose turn, and a win ---------- */
+/* A soft gold light on the cloth in front of whoever's turn it is: one per seat (fx.ts), each
+   turned to face its side; the one whose turn it is fades in as the last one fades out. */
+.turn-glow { position: absolute; inset: 0; pointer-events: none; }
+.tg-light {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--turn-angle, 0deg));
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.tg-light.on { opacity: 1; }
+.tg-light::before {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: 9%;                                            /* on the cloth in front of the player's wall */
+  height: 30%;
+  background: radial-gradient(ellipse 50% 70% at 50% 100%, rgba(255, 220, 110, 0.6), rgba(255, 215, 94, 0.2) 55%, transparent 80%);
+}
+.tg-light.on::before { animation: turn-pulse 1.8s ease-in-out infinite; }
+@keyframes turn-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+/* "Mahjong!" bursting over the table (fx.ts), before the result card */
+.mahjong-burst {
+  position: fixed;
+  z-index: 60;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+  animation: mb-life 2.1s ease forwards;
+}
+.mb-word {
+  font-family: 'Lilita One', system-ui, sans-serif;
+  font-size: clamp(3rem, 8vw, 6rem);
+  line-height: 1;
+  color: #ffd75e;
+  text-shadow: 0 5px 0 #8a3b00, 0 0 32px rgba(255, 200, 80, 0.85);
+  animation: mb-pop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.mahjong-burst.you .mb-word { color: #fff3a8; }
+.mb-sub {
+  margin-top: 6px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff6d6;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: mb-rise 0.5s 0.25s both;
+}
+.mb-rays {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 40%;
+  width: 520px;
+  height: 520px;
+  margin: -260px 0 0 -260px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 215, 94, 0.3) 0 9deg, transparent 9deg 18deg);
+  -webkit-mask: radial-gradient(circle, #000 15%, transparent 68%);
+  mask: radial-gradient(circle, #000 15%, transparent 68%);
+  animation: mb-rays 2.1s linear both;
+}
+@keyframes mb-life { 0%, 78% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes mb-pop { from { transform: scale(0.3) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes mb-rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes mb-rays { from { transform: scale(0.4) rotate(0deg); opacity: 0; } 20% { opacity: 1; } to { transform: scale(1.1) rotate(45deg); opacity: 1; } }
+
+/* the winner's tiles shine as they're shown, and the tile that won it is lit up */
+.rack-row.winner .box.up .face.top, .player-rack.winner .tile { animation: win-shine 1s ease-in-out 2; }
+.box.win-tile .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.12) #ffd75e, 0 0 calc(var(--u) * 0.7) rgba(255, 215, 94, 0.95); }
+.player-rack .tile.win-tile { transform: translateY(-10px); box-shadow: 0 0 0 3px #ffd75e, 0 0 18px rgba(255, 215, 94, 0.85), 0 4px 0 var(--navy); }
+@keyframes win-shine { 50% { filter: brightness(1.22); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-light.on::before, .rack-row.winner .box.up .face.top, .player-rack.winner .tile { animation: none; }
+  .mb-rays { display: none; }
+  .mb-word, .mb-sub { animation: none; }
+}
+
 /* ---------- The opening: dice and dealing ---------- */
 /* Two dice in the middle of the felt — 3D cubes (see box() in main.ts), the result on their tops. */
 .table-dice {

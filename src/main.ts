@@ -8,6 +8,7 @@ import { tileName } from './tiles'
 import { rulesSections } from './rules-guide'
 import { resultCard, finalCard, standingsOf, wonByRobbingIn, type ResultContext } from './result-cards'
 import { TIPS, type CoachStep, type Steps } from './tips'
+import { confetti, mahjongBurst, turnGlow } from './fx'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
 import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points } from './ui'
@@ -66,6 +67,13 @@ let winTile: Tile | null = null   // the tile that completed the winning hand (r
 let resultClosed = false          // the end-of-hand card was dismissed to look at the table
 let showFinal = false             // the match is over and the final standings are showing
 let celebrate = false             // confetti pending — shown once, not on every re-render
+// A win is revealed before the result card: a "Mahjong!" burst, the winner's tiles lit up on the
+// table, then (REVEAL_MS later) the card.
+const REVEAL_MS = 2200
+let revealUntil = 0               // performance.now() until which the result card waits
+let burst: number | null = null   // a winner whose burst is still to be shown
+let revealTimer = 0
+const revealing = () => game.over && performance.now() < revealUntil
 let faanCardOpen = false          // the "Your hand" details card, tapped open (it also opens on hover)
 // a tap anywhere else puts the "Your hand" card away (the pill and "Way to" chip toggle it themselves)
 document.addEventListener('pointerdown', e => {
@@ -113,7 +121,7 @@ function playEvents(events: TableEvent[] = table.takeEvents()) {
     else if (e.type === 'discard') sfx.discard()
     else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
     else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn() }
-    else if (e.type === 'win') { celebrate = e.seat === HUMAN; sfx.win() }
+    else if (e.type === 'win') { celebrate = e.seat === HUMAN; burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sfx.win() }
   }
   sync()
 }
@@ -618,7 +626,7 @@ function showCoachStep(step: CoachStep, i: number, n: number): Promise<'next' | 
 // Look at what's on screen now and explain it if it's new to the player.
 async function coachForState() {
   if (!settings.tips || coachOpen || inMenu) return
-  if (game.over && !resultClosed && !showFinal) return coach('result', TIPS.result)
+  if (game.over && !resultClosed && !showFinal) return revealing() ? undefined : coach('result', TIPS.result)   // (after the reveal)
   if (offer) return coach('claim', TIPS.claim)
   if (mustDiscard) return coach('first-turn', TIPS.firstTurn)
   if (document.querySelector('.hm-ready')) return coach('ready', TIPS.ready)
@@ -1196,7 +1204,7 @@ function sideRack(seat: number): HTMLElement {
     const hand = sortHand(game.hands[seat])
     if (game.over) {                                   // at the end of the hand it's laid down face-up
       const g = el('div', 'group')
-      for (const t of hand) g.appendChild(lyingTile(t))
+      for (const t of hand) g.appendChild(lyingTile(t, t === winTile ? 'win-tile' : ''))   // the tile that won it, lit up
       rack.appendChild(g)
     } else {                                           // otherwise it stands on edge, backs toward the table
       const n = handCount(seat)
@@ -1450,7 +1458,7 @@ function playerRack(): HTMLElement {
     if (canDiscard) { e.classList.add('clickable'); e.onclick = () => tapTile(t, e) }
     return e
   })
-  placeAll(rack, [...tiles.map(t => tile(t)), ...(drawn ? [tile(drawn, 'drawn')] : [])])
+  placeAll(rack, [...tiles.map(t => tile(t, game.over && t === winTile ? 'win-tile' : '')), ...(drawn ? [tile(drawn, 'drawn')] : [])])
   return rack
 }
 
@@ -1559,6 +1567,7 @@ const stage = (name: string, since: number) => { if (import.meta.env.DEV) stageT
 interface Shell {
   layout: HTMLElement; main: HTMLElement; scene: HTMLElement; table: HTMLElement
   sides: HTMLElement[]; pool: HTMLElement           // the four sides of the table, and the discards in the middle
+  glow: ReturnType<typeof turnGlow>                 // the light in front of whoever's turn it is
   top: HTMLElement | null; bar: HTMLElement | null; rack: HTMLElement | null; extras: HTMLElement[]; help: HTMLElement | null
 }
 let shell: Shell | null = null
@@ -1586,12 +1595,13 @@ function renderTable() {
     const sides = [0, 1, 2, 3].map(sideLayer), poolEl = el('div', 'pool')
     poolEl.title = 'See all the discards up close'
     poolEl.onclick = showDiscards
-    table.append(...sides, poolEl)
+    const glow = turnGlow()
+    table.append(glow.el, ...sides, poolEl)
     scene.appendChild(table)
     main.appendChild(scene)
     layout.appendChild(main)
     app.appendChild(layout)
-    shell = { layout, main, scene, table, sides, pool: poolEl, top: null, bar: null, rack: null, extras: [], help: null }
+    shell = { layout, main, scene, table, sides, pool: poolEl, glow, top: null, bar: null, rack: null, extras: [], help: null }
     partsBefore = new Map()                           // nothing drawn before is on screen any more
   }
   const sh = shell
@@ -1630,7 +1640,8 @@ function renderTable() {
   const diceKey = it && it.phase !== 'flowers' ? `${it.rolling}:${it.phase}:${it.dice}` : ''
   sh.sides.forEach((side, seat) => placeAll(side, sideParts(seat)))
   placeAll(sh.pool, poolTiles())
-  placeAll(sh.table, [...sh.sides, sh.pool, ...(it && diceKey ? [part('dice', diceKey, () => tableDice(it))] : [])])
+  placeAll(sh.table, [sh.glow.el, ...sh.sides, sh.pool, ...(it && diceKey ? [part('dice', diceKey, () => tableDice(it))] : [])])
+  sh.glow.point(it || game.over ? null : game.current)
 
   // under the table: the action bar (small, rebuilt) and your hand (swapped if it changed)
   const bar = actionBar()
@@ -1651,7 +1662,8 @@ function renderTable() {
   const o = offer
   if (online?.away) extras.push(part('away', 'away', awayCard))
   else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
-  if (game.over && !resultClosed) extras.push(showFinal ? finalCard(resultContext(), finalButtons()) : resultCard(resultContext(), handOverButtons()))
+  if (game.over && !resultClosed && !revealing()) extras.push(showFinal ? finalCard(resultContext(), finalButtons()) : resultCard(resultContext(), handOverButtons()))
+  if (revealing() && !revealTimer) revealTimer = window.setTimeout(() => { revealTimer = 0; refresh() }, revealUntil - performance.now() + 20)
   for (const x of sh.extras) if (!extras.includes(x)) x.remove()
   for (const x of extras) if (x.parentElement !== sh.main) sh.main.append(x)
   sh.extras = extras
@@ -1669,6 +1681,10 @@ function renderTable() {
   stage('play', t)
   music.start()                                      // carries on (or resumes, e.g. via Continue game)
   if (!coachOpen && !paused) music.duck(game.over && !resultClosed)   // quieter while the result card is showing
+  if (burst !== null) {
+    mahjongBurst(scene, burst === HUMAN ? 'You win!' : `${NAMES[burst]} wins`, burst === HUMAN)
+    burst = null
+  }
   if (celebrate) { celebrate = false; main.appendChild(confetti()) }
   for (const b of banners) showBanner(b, scene)
   banners = []
@@ -1753,23 +1769,6 @@ function finalButtons(): HTMLElement[] {
   return actions
 }
 
-// Confetti falling over the table when you win.
-function confetti(): HTMLElement {
-  const layer = el('div', 'confetti')
-  const colours = ['#e0b53a', '#d0282b', '#1d7a3a', '#2f80d0', '#ffffff', '#ff8fb1']
-  for (let i = 0; i < 70; i++) {
-    const piece = el('i')
-    piece.style.left = `${Math.random() * 100}%`
-    piece.style.background = colours[i % colours.length]
-    piece.style.animationDelay = `${Math.random() * 0.8}s`
-    piece.style.animationDuration = `${2.2 + Math.random() * 1.6}s`
-    piece.style.setProperty('--spin', `${(Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540)}deg`)
-    piece.style.setProperty('--drift', `${(Math.random() - 0.5) * 160}px`)
-    layer.appendChild(piece)
-  }
-  setTimeout(() => layer.remove(), 4500)
-  return layer
-}
 
 // ---------- Saving the match ----------
 // After every redraw the match is saved in this browser, so a refresh or a closed tab doesn't lose
