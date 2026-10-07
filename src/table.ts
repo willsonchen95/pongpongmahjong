@@ -298,7 +298,7 @@ export class Table {
       this.game.drawn = null
       this.throwTile(seat, hand.splice(i, 1)[0])
     } else if (p.kind === 'claims' && p.offers[seat] && !p.answers[seat]) {
-      this.answer(seat, { kind: 'pass' })
+      this.answer(seat, { kind: p.offers[seat]!.win ? 'win' : 'pass' })   // a win is never thrown away by running out of time
     }
   }
 

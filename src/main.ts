@@ -1,7 +1,7 @@
 import './style.css'
 import {
   type Tile, type GameState, type ClaimKind, SEATS, sortHand, makeTile, isWinningHand,
-  kongOptions, winningTiles, parse, seatWind, handProgress, planToMinimum,
+  kongOptions, winningTiles, parse, seatWind, handProgress, planToMinimum, canWinOn, payout,
   claimEffects, progressInput, isConcealedKong, type BotLevel,
 } from './engine'
 import { tileName } from './tiles'
@@ -11,7 +11,7 @@ import { TIPS, type CoachStep, type Steps } from './tips'
 import { confetti, mahjongBurst, turnGlow, notice } from './fx'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
-import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points } from './ui'
+import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points, fmt } from './ui'
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
@@ -118,12 +118,28 @@ function playEvents(events: TableEvent[] = table.takeEvents()) {
   for (const e of events) {
     if (e.type === 'draw') sfx.draw(e.seat !== HUMAN)
     else if (e.type === 'flowers') announceFlowers(e.seat, e.tiles)
-    else if (e.type === 'discard') sfx.discard()
+    else if (e.type === 'discard') { sfx.discard(); if (e.seat !== HUMAN) explainShortWin(e.tile) }
     else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
-    else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn() }
+    else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn(); explainShortWin(null) }
     else if (e.type === 'win') { celebrate = e.seat === HUMAN; burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sfx.win() }
   }
   sync()
+}
+
+// A finished hand that doesn't reach the game's minimum faan can't be declared — say so, rather than
+// leave the player wondering why there's no Mahjong! button. `tile`: someone's discard (null: the
+// tile you just drew). Once per hand for each tile.
+let explained = ''
+function explainShortWin(tile: Tile | null) {
+  const g = table.game, min = table.match.minFaan, hand = g.hands[HUMAN]
+  const complete = tile ? canWinOn(g, HUMAN, tile) : isWinningHand(hand, g.melds[HUMAN].length)
+  if (!complete || g.over) return
+  const faan = table.faanOf(HUMAN, tile ? [...hand, tile] : hand, !tile)
+  const key = `${gen}:${match.hand}:${tile ? tile.category + tile.value : 'own'}`
+  if (faan >= min || explained.includes(key)) return
+  explained += key + ';'
+  const what = tile ? `That ${tileName(tile.category, tile.value)} would finish your hand` : 'Your hand is complete'
+  notice(`${what}, but it only scores ${faan} faan — this game needs ${min} to win. Keep going for a bigger hand!`)
 }
 
 // The scoring helpers the hints use, for the current table.
@@ -1456,13 +1472,11 @@ function awayCard(): HTMLElement {
 
 // The pop-up when another player's discard is yours to take.
 function claimCard(o: Offer): HTMLElement {
+  if (o.win) return winCard(o)
   const card = el('div', 'claim-card')
   const head = el('div', 'claim-head')
   head.append(el('span', '', `${NAMES[o.from]} ${o.robbing ? 'is adding to a pong to make a kong:' : 'threw away'}`), tileEl(o.tile, 'claim-tile'))
   const opts = el('div', 'claim-options')
-  if (o.win) opts.appendChild(claimButton('Mahjong!', o.robbing
-    ? 'Rob the kong — this tile completes your hand, you win!'
-    : 'This tile completes your hand — you win!', () => humanClaim('win'), 'win'))
   // taking a tile exposes a set, which can cost patterns you have or are building — say which
   if (o.kong) opts.appendChild(claimButton('Kong', 'Take it: four of a kind', () => humanClaim('kong'), '', [o.tile],
     claimEffectsEl('kong', o.tile)))
@@ -1475,6 +1489,26 @@ function claimCard(o: Offer): HTMLElement {
   }
   opts.appendChild(claimButton('Pass', o.robbing ? 'Let them make the kong' : "Don't take it", humanPass, 'pass'))
   card.append(head, opts)
+  return card
+}
+
+// When the tile wins it for you: a pop-up just for that, so it can't be missed among Pong and Chi —
+// one big Mahjong! button with what the win is worth. Passing is possible, but asks first.
+function winCard(o: Offer): HTMLElement {
+  const card = el('div', 'claim-card win-card')
+  const faan = table.faanOf(HUMAN, [...game.hands[HUMAN], o.tile], false, true, !!o.robbing)
+  const head = el('div', 'claim-head')
+  head.append(el('span', '', o.robbing ? `${NAMES[o.from]} is adding this to a pong — it finishes your hand:` : `${NAMES[o.from]} threw away the tile you need:`),
+    tileEl(o.tile, 'claim-tile'))
+  const win = claimButton('Mahjong!', `Win now — ${faan} faan, ${fmt(payout(faan))} points`, () => humanClaim('win'), 'win big-win')
+  const pass = button('Not now', async () => {
+    const choice = await dialog('Give up the win?', 'If you pass, this tile goes on and you keep playing for a later win. Most players take it.', [
+      { label: 'Take the win', value: 'win', cls: 'primary' },
+      { label: 'Pass', value: 'pass', cls: 'danger' },
+    ])
+    if (choice === 'pass') humanPass(); else humanClaim('win')
+  }, 'win-pass')
+  card.append(el('div', 'win-card-title', 'You can win!'), head, win, pass)
   return card
 }
 

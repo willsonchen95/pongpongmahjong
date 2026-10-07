@@ -94,6 +94,14 @@ describe('a person at the table', () => {
     expect(t.match.result?.deltas[2]).toBeLessThan(0)                 // the thrower pays
   })
 
+  it('running out of time on a tile that wins it takes the win, not a pass', () => {
+    const t = setUp([true, false, false, false], ['123m 456m 789m 46p 11s', JUNK, JUNK, JUNK])
+    threw(t, 2, '5p')
+    t.afterDiscard()
+    t.autoPlay(0)                                                    // (online: the room acting for someone out of time)
+    expect(t.game.winner).toBe(0)
+  })
+
   it('may rob a bot’s kong, and wins with the robbed tile', () => {
     const t = setUp([true, false, false, false], ['123m 456m 789m 46p 11s', '5p 19m 19s 1234z 56z', JUNK, JUNK],
       [[], [parse('555p')], [], []])
