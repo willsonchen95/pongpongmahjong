@@ -2,7 +2,7 @@ import './style.css'
 import {
   type Tile, type GameState, type ClaimKind, type HaveItem, type CloseTo, SEATS, sortHand, makeTile, isWinningHand,
   kongOptions, winningTiles, parse, seatWind, payout, handProgress, planToMinimum, type Plan, MAX_FAAN,
-  claimEffects, progressInput, isConcealedKong,
+  claimEffects, progressInput, isConcealedKong, type BotLevel,
 } from './engine'
 import { tileSVG, tileName } from './tiles'
 import { sfx, music, isMuted, setMuted } from './sfx'
@@ -14,7 +14,6 @@ import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, TURN_MS, newRoomCode, sa
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
 const HUMAN = 0
 declare const __APP_VERSION__: string        // filled in at build time (vite.config.ts)
-declare const __BUILD_DATE__: string
 const BOT_NAMES = ['You', 'Mei', 'Kai', 'Lin']
 let NAMES = BOT_NAMES                     // online: the room's players, turned round so you're first
 const WIND_CHARS = ['東', '南', '西', '北']
@@ -28,10 +27,10 @@ const points = (n: number) => (n < 0 ? `−${fmt(-n)}` : fmt(n))      // a playe
 // file shows the table and plays the bots' moves at a pace you can follow.
 
 // What the players agree before a game; remembered for next time.
-interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number }
+interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number; bots: BotLevel }
 const SETTINGS_KEY = 'mahjong-settings'
 let settings: Settings = (() => {
-  const fallback = { rounds: 1, minFaan: 1, tips: true, startPoints: 1000 }
+  const fallback: Settings = { rounds: 1, minFaan: 1, tips: true, startPoints: 1000, bots: 'normal' }
   try { return { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') } } catch { return fallback }
 })()
 function saveSettings() {
@@ -267,11 +266,12 @@ function applyOnline(view: LocalView, events: TableEvent[]) {
   else if (!intro) refresh()
 }
 
-function startMatch() {
+// `bots`: how well they play; the guided game always has easy ones, whatever's chosen for New game.
+function startMatch(bots: BotLevel = settings.bots) {
   if (online) { online.leave(); online = null; NAMES = BOT_NAMES }   // a game against the bots instead
   music.start()                                       // the Start click is the gesture browsers want before playing audio
   saveSettings()
-  table = new Table(settings, SEAT_IS_PERSON)
+  table = new Table({ ...settings, bots }, SEAT_IS_PERSON)
   started = true
   nextHand()
 }
@@ -562,27 +562,22 @@ let iosHowTo = false              // the menu's "Install" card is showing the Ad
 addEventListener('beforeinstallprompt', e => {
   e.preventDefault()
   installPrompt = e as typeof installPrompt
-  if (inMenu && !app.querySelector('.menu-card.install')) renderMenu()
+  if (inMenu && !app.querySelector('.menu-extra.install')) renderMenu()
 })
 addEventListener('appinstalled', () => { installPrompt = null; if (inMenu) renderMenu() })
 
-// The menu card offering to install, when that's possible here (and it isn't installed already).
+// The small menu button offering to install, when that's possible here (and it isn't installed already).
 function installMenuCard(): HTMLElement | null {
-  if (installed()) return null
-  if (installPrompt) {
-    const prompt = installPrompt
-    return menuCard(MENU_ICONS.install, 'Install the app', 'Put it on your home screen — opens full screen, plays offline', () => {
-      installPrompt = null              // a prompt can only be shown once
-      void prompt.prompt().finally(() => { if (inMenu) renderMenu() })
-    }, 'install')
-  }
-  if (isIos()) {
-    return menuCard(MENU_ICONS.install, 'Install the app', iosHowTo
-      ? 'Tap the Share button (square with an arrow), then “Add to Home Screen”'
-      : 'Put it on your home screen — opens full screen, plays offline',
-    () => { iosHowTo = !iosHowTo; renderMenu() }, 'install' + (iosHowTo ? ' how' : ''))
-  }
-  return null
+  if (installed() || (!installPrompt && !isIos())) return null
+  const b = el('button', 'menu-extra install' + (iosHowTo ? ' how' : ''))
+  b.innerHTML = MENU_ICONS.install
+  b.append(el('span', '', iosHowTo ? 'Tap Share, then “Add to Home Screen”' : 'Install the app'))
+  b.title = 'Put it on your home screen — opens full screen, plays offline'
+  const prompt = installPrompt
+  b.onclick = prompt
+    ? () => { installPrompt = null; void prompt.prompt().finally(() => { if (inMenu) renderMenu() }) }   // a prompt can only be shown once
+    : () => { iosHowTo = !iosHowTo; renderMenu() }       // iPhone / iPad: no prompt, so show the steps
+  return b
 }
 
 // Show a tip (one or more steps) unless tips are off or it's been seen before.
@@ -667,7 +662,7 @@ function startGuidedGame() {
   saveTipsSeen()
   helpOpen = false                                    // the table first; a coachmark shows where the rule book is
   settings = { ...settings, tips: true, rounds: 1 }
-  startMatch()
+  startMatch('easy')
 }
 
 const TIPS = {
@@ -899,27 +894,43 @@ function renderMenu() {
   const sound = el('div', 'menu-sound')
   sound.append(...soundButtons(renderMenu))
 
+  // two ways to play, each under its own heading: on your own against bots (works offline), or
+  // online with friends; then the rules and installing, as small buttons underneath
   const cards = el('div', 'menu-cards')
+  const heading = (title: string, sub: string) => {
+    const h = el('div', 'menu-section')
+    h.append(el('span', 'ms-title', title), el('span', 'ms-sub', sub))
+    return h
+  }
+  cards.appendChild(heading('Play against bots', 'On your own · works offline'))
   if (started && !match.over) {
     cards.appendChild(menuCard(MENU_ICONS.resume, 'Continue game',
       `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`, continueGame, 'primary'))
   }
   const fresh = !(started && !match.over)
   cards.append(
-    menuCard(MENU_ICONS.play, 'New game', 'Choose your house rules, then play', renderSetup, fresh ? 'primary' : ''),
+    menuCard(MENU_ICONS.play, 'New game', 'Choose your house rules and how good the bots are', renderSetup, fresh ? 'primary' : ''),
     menuCard(MENU_ICONS.learn, 'Learn to play', 'A guided game — friendly tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
-    menuCard(MENU_ICONS.book, 'How to play', 'The rules, the sets and how scoring works — with pictures', renderRulesPage),
+    heading('Play with friends', 'Online · share a room code'),
     onlineMenuCard(),
   )
+  const extras = el('div', 'menu-extras')
+  const rules = el('button', 'menu-extra')
+  rules.innerHTML = MENU_ICONS.book
+  rules.append(el('span', '', 'How to play'))
+  rules.onclick = renderRulesPage
+  extras.appendChild(rules)
   const install = installMenuCard()
-  if (install) cards.appendChild(install)
-  // which version this is, and when it was built — at the very bottom of the menu
-  // (a dev server started before vite.config.ts existed doesn't fill them in — say so rather than break)
+  if (install) extras.appendChild(install)
+  // which version this is, at the very bottom of the menu
+  // (a dev server started before vite.config.ts existed doesn't fill it in — say so rather than break)
   const version = typeof __APP_VERSION__ === 'string' ? `v${__APP_VERSION__}` : 'dev'
-  const built = typeof __BUILD_DATE__ === 'string'
-    ? ` · ${new Date(__BUILD_DATE__).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
-  page.append(menuHero(), sound, cards, el('p', 'menu-version', version + built))
+  // the logo and the small buttons share a box: on a sideways phone it's the left column, with the
+  // buttons under the logo; elsewhere it melts away and the buttons come after the choices
+  const side = el('div', 'menu-side')
+  side.append(menuHero(), extras)
+  page.append(side, sound, cards, el('p', 'menu-version', version))
   app.appendChild(page)
 }
 
@@ -983,7 +994,7 @@ function renderSetup() {
 
   ruleChoices(card, renderSetup, true)
   const actions = el('div', 'setup-actions')
-  actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(startMatch), 'act primary big'))
+  actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(() => startMatch()), 'act primary big'))
   card.appendChild(actions)
   app.appendChild(card)
 }
@@ -1000,6 +1011,14 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
       { value: 1, label: '1 faan', sub: 'Good for learning' },
       { value: 3, label: '3 faan', sub: 'Hong Kong standard' },
     ], settings.minFaan, v => pick({ minFaan: v })))
+
+  card.append(el('h2', 'setup-q', 'How good are the bots?'),
+    el('p', 'setup-help', withTips ? 'The three players at the table with you.' : 'They take any seats your friends leave empty.'),
+    choiceRow([
+      { value: 'easy', label: 'Easy', sub: 'Still learning · easy to beat' },
+      { value: 'normal', label: 'Normal', sub: 'Steady, but slip up now and then' },
+      { value: 'hard', label: 'Hard', sub: 'Sharp · big hands, safe throws' },
+    ] as { value: BotLevel; label: string; sub: string }[], settings.bots, v => pick({ bots: v })))
 
   card.append(el('h2', 'setup-q', 'How long to play'),
     choiceRow([
@@ -1122,7 +1141,7 @@ function renderLobby() {
       ruleChoices(card, renderLobby, false)
       const actions = el('div', 'setup-actions')
       actions.append(button('Leave', leaveOnline, 'act'),
-        button('Start game', () => room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints }), 'act primary big'))
+        button('Start game', () => room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints, bots: settings.bots }), 'act primary big'))
       card.appendChild(actions)
     } else {
       const host = r.seats.find(s => s.host)
@@ -2229,7 +2248,7 @@ function finalCard(): HTMLElement {
     else actions.append(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
     actions.append(button('Leave room', leaveOnline, 'act'))
   } else {
-    actions.append(button('Play again', startMatch, 'act primary'), button('Main menu', renderMenu, 'act'))
+    actions.append(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
   }
   actions.append(button('See the table', () => { resultClosed = true; render() }, 'act'))
   card.appendChild(actions)

@@ -780,7 +780,32 @@ function faanGap(input: ProgressInput, minFaan: number): number {
 
 interface HandValue { shanten: number; accept: number; gap: number }
 const SHANTEN_W = 300, GAP_W = 350, ACCEPT_W = 2, KONG_BONUS = 50
-const worth = (v: HandValue) => -SHANTEN_W * v.shanten - GAP_W * v.gap + ACCEPT_W * v.accept
+
+// How well bots play. Hard is the full player above. Normal is less careful against a player
+// close to winning and now and then throws a slightly worse tile. Easy plays like a beginner: rough
+// throws (sometimes a step backwards), no defence, and little thought for the minimum faan.
+export type BotLevel = 'easy' | 'normal' | 'hard'
+interface Style { noise: number; caution: number; faanCare: number }
+const STYLES: Record<BotLevel, Style> = {
+  hard: { noise: 0, caution: 1, faanCare: 1 },
+  normal: { noise: 480, caution: 0.2, faanCare: 0.6 },
+  easy: { noise: 700, caution: 0, faanCare: 0.2 },
+}
+const worth = (v: HandValue, s: Style = STYLES.hard) => -SHANTEN_W * v.shanten - GAP_W * s.faanCare * v.gap + ACCEPT_W * v.accept
+// A wobble added to each choice's worth: the bigger, the more often a worse choice wins. It's drawn
+// from the state of the hand rather than pure chance, so asking a bot the same question twice (the
+// table checks what bots would claim before asking the people) gets the same answer.
+function wobbler(game: GameState, seat: number, s: Style): () => number {
+  if (!s.noise) return () => 0
+  let x = (game.wall.length * 7919 + seat * 104729 + game.discards.flat().length * 31 + game.hands[seat].length * 613 +
+    game.dealer * 97 + game.roundWind * 389 + (game.wall[0] ? game.wall[0].value * 13 + game.wall[0].category.length * 7 : 0)) >>> 0   // (the tile at the far end varies it from hand to hand)
+  return () => {                                       // mulberry32
+    x = (x + 0x6d2b79f5) >>> 0
+    let t = Math.imul(x ^ (x >>> 15), 1 | x)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * s.noise
+  }
+}
 
 // Judge a hand waiting for its next tile. `accept` = unseen tiles that would bring it closer; once
 // ready, only winning tiles that reach the minimum count (a third as much if it must be self-drawn).
@@ -836,7 +861,8 @@ function danger(game: GameState, opp: number, k: number, unseen: number[]): numb
 }
 
 // Which tile a bot throws from its full hand (an index into it).
-export function botDiscard(game: GameState, seat: number, minFaan = 1): number {
+export function botDiscard(game: GameState, seat: number, minFaan = 1, level: BotLevel = 'hard'): number {
+  const style = STYLES[level], wobble = wobbler(game, seat, style)
   const hand = game.hands[seat]
   const unseen = unseenCounts(game, seat)
   const options = bestAfterDiscard(game, seat, hand, game.melds[seat], unseen, minFaan).map(({ i, value }) => {
@@ -846,16 +872,17 @@ export function botDiscard(game: GameState, seat: number, minFaan = 1): number {
   })
   // the further from ready, the more a bot plays safe
   const closest = Math.min(...options.map(o => o.value.shanten))
-  const caution = closest >= 2 ? 400 : closest === 1 ? 150 : 50
-  const score = (o: typeof options[number]) => worth(o.value) - caution * o.risk
-  return options.reduce((a, b) => (score(b) > score(a) ? b : a)).i
+  const caution = (closest >= 2 ? 400 : closest === 1 ? 150 : 50) * style.caution
+  const scored = options.map(o => ({ i: o.i, score: worth(o.value, style) - caution * o.risk + wobble() }))
+  return scored.reduce((a, b) => (b.score > a.score ? b : a)).i
 }
 
 export interface Claim { kind: ClaimKind; run?: number[] }
 
 // What a bot does with another seat's discard (wins are checked separately): claim only when the
 // hand comes out ahead — closer to ready, without drifting from the minimum faan.
-export function botClaim(game: GameState, seat: number, from: number, tile: Tile, minFaan = 1): Claim | null {
+export function botClaim(game: GameState, seat: number, from: number, tile: Tile, minFaan = 1, level: BotLevel = 'hard'): Claim | null {
+  const style = STYLES[level], wobble = wobbler(game, seat, style)
   const hand = game.hands[seat]
   const unseen = unseenCounts(game, seat)
   const options: Claim[] = []
@@ -864,14 +891,14 @@ export function botClaim(game: GameState, seat: number, from: number, tile: Tile
   if (seat === (from + 1) % 4) for (const run of chowOptions(hand, tile)) options.push({ kind: 'chow', run })
 
   let best: Claim | null = null
-  let bestWorth = worth(judge(game, seat, hand, game.melds[seat], unseen, minFaan))   // passing
+  let bestWorth = worth(judge(game, seat, hand, game.melds[seat], unseen, minFaan), style) + wobble()   // passing
   for (const o of options) {
     const { concealed, meld } = claimedHand(hand, o.kind, tile, o.run)
     const melds = [...game.melds[seat], meld]
     // a kong is judged as it stands (a replacement tile comes next, a free extra draw); others after their best discard
-    const w = o.kind === 'kong'
-      ? worth(judge(game, seat, concealed, melds, unseen, minFaan)) + KONG_BONUS
-      : Math.max(...bestAfterDiscard(game, seat, concealed, melds, unseen, minFaan).map(d => worth(d.value)))
+    const w = wobble() + (o.kind === 'kong'
+      ? worth(judge(game, seat, concealed, melds, unseen, minFaan), style) + KONG_BONUS
+      : Math.max(...bestAfterDiscard(game, seat, concealed, melds, unseen, minFaan).map(d => worth(d.value, style))))
     if (w > bestWorth) { best = o; bestWorth = w }
   }
   return best

@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { readFileSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 
-// The version shown at the bottom of the main menu: package.json's version, and the day it was built.
+// The version shown at the bottom of the main menu: package.json's version.
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // The offline helper (service worker), written at build time so it knows every file of this build.
@@ -28,7 +28,6 @@ function serviceWorker(): Plugin {
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
-    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
   },
   plugins: [serviceWorker()],
 })

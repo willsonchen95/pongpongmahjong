@@ -14,7 +14,7 @@
 // Bots decide instantly; only people are ever waited for.
 
 import {
-  type Tile, type GameState, type ClaimKind, type FaanItem, type ScoreInput,
+  type Tile, type GameState, type ClaimKind, type FaanItem, type ScoreInput, type BotLevel,
   deal, drawTile, isWinningHand, canPong, canKong, canWinOn, chowOptions, claimDiscard, kongOptions,
   declareKong, isAddedKong, sameTile, scoreHand, settle, progressInput, botDiscard, botWantsKong, botClaim,
 } from './engine'
@@ -28,6 +28,7 @@ export interface Rules {
   rounds: number                       // 1 = East round only, 4 = full game
   minFaan: number                      // the agreed minimum to declare a win
   startPoints: number                  // everyone's stack at the start
+  bots?: BotLevel                      // how well the bots play (older saves and rooms: normal)
 }
 
 export interface HandResult {
@@ -52,7 +53,7 @@ export interface Match extends Rules {
 }
 
 export const newMatch = (r: Rules): Match => ({
-  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, scores: [0, 0, 0, 0].map(() => r.startPoints),
+  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', scores: [0, 0, 0, 0].map(() => r.startPoints),
   bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
 })
 
@@ -227,7 +228,7 @@ export class Table {
       if (this.canDeclareSelfDrawn(seat)) return this.win(seat)
     }
     const hand = g.hands[seat]
-    this.throwTile(seat, hand.splice(botDiscard(g, seat, this.match.minFaan), 1)[0])
+    this.throwTile(seat, hand.splice(botDiscard(g, seat, this.match.minFaan, this.botLevel), 1)[0])
   }
 
   // A person throws a tile on their turn. Returns false if it isn't theirs to throw.
@@ -328,6 +329,10 @@ export class Table {
     this.phase = { kind: 'discarded', seat }
   }
 
+  // how well the bots play this match (a match saved before there was a choice, or anything
+  // unexpected sent to the room server: normal)
+  private get botLevel(): BotLevel { const b = this.match.bots; return b === 'easy' || b === 'hard' ? b : 'normal' }
+
   private topDiscard(seat: number): Tile {
     const pile = this.game.discards[seat]
     return pile[pile.length - 1]
@@ -340,7 +345,7 @@ export class Table {
     const order = after(d)
     const bots = order.filter(s => !this.humans[s])
     const botWinner = bots.find(s => this.canDeclareOn(s, tile))
-    const botPong = bots.some(s => { const c = botClaim(this.game, s, d, tile, this.match.minFaan); return c && c.kind !== 'chow' })
+    const botPong = bots.some(s => { const c = botClaim(this.game, s, d, tile, this.match.minFaan, this.botLevel); return c && c.kind !== 'chow' })
     const noBotWin = botWinner === undefined
     return [0, 1, 2, 3].map(s => {
       if (s === d || !this.humans[s]) return null
@@ -372,7 +377,7 @@ export class Table {
     }
     const claimOf = (s: number) => this.humans[s]
       ? (wants(s, 'pong', 'kong', 'chow') ? answers[s] as { kind: ClaimKind; run?: number[] } : null)
-      : botClaim(this.game, s, d, tile, this.match.minFaan)
+      : botClaim(this.game, s, d, tile, this.match.minFaan, this.botLevel)
     const claims = order.map(s => ({ seat: s, claim: claimOf(s) }))
     const c = claims.find(x => x.claim && x.claim.kind !== 'chow') ?? claims.find(x => x.claim?.kind === 'chow')
     if (c?.claim) {

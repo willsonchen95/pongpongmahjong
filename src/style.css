@@ -1038,7 +1038,9 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 }
 .menu-sound { position: fixed; top: 16px; right: 16px; z-index: 5; display: flex; gap: 10px; }
 /* the version: at the end of the menu (on phones, pinned to the bottom of the screen) */
-.menu-version { margin: 18px 0 0; text-align: center; font-size: 0.8rem; letter-spacing: 0.04em; opacity: 0.5; }
+.menu-side { display: contents; }
+.menu-extras { order: 1; }
+.menu-version { order: 2; margin: 18px 0 0; text-align: center; font-size: 0.8rem; letter-spacing: 0.04em; opacity: 0.5; }
 .credit { margin: 18px 0 0; text-align: center; font-size: 0.92rem; opacity: 0.7; }
 
 .menu-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -1171,9 +1173,33 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .menu-card.primary .mc-sub { opacity: 0.92; }
 /* Learn to play: a warm gold accent so beginners spot it */
 .menu-card.learn .mc-icon { background: #e0b53a; color: #1a1a1a; }
-.menu-card.install { background: rgba(0, 0, 0, 0.22); border-style: dashed; }
-.menu-card.install.how { border-style: solid; border-color: #ffd75e; }
-.menu-card.install.how .mc-sub { opacity: 1; color: #ffe9a8; font-weight: 700; }
+/* the headings over each way to play */
+.menu-section { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 6px 4px -4px; }
+.menu-section:first-child { margin-top: 0; }
+.ms-title { font-size: 0.95rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd75e; }
+.ms-sub { font-size: 0.85rem; opacity: 0.75; }
+/* How to play and Install: small buttons side by side under the two ways to play */
+.menu-extras { width: 100%; display: flex; gap: 10px; margin-top: 16px; }
+.menu-extra {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 215, 94, 0.22);
+  background: rgba(0, 0, 0, 0.22);
+  color: #f6efe2;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.menu-extra svg { flex: none; width: 20px; height: 20px; }
+.menu-extra:hover { border-color: rgba(255, 215, 94, 0.7); }
+.menu-extra:focus-visible { outline: 3px solid #ffd75e; outline-offset: 3px; }
+.menu-extra.install { border-style: dashed; }
+.menu-extra.install.how { border-style: solid; border-color: #ffd75e; color: #ffe9a8; font-size: 0.9rem; }
 .menu-card.soon { opacity: 0.55; cursor: not-allowed; }
 .menu-card.soon .mc-tag { background: rgba(255, 255, 255, 0.85); }
 
@@ -1549,6 +1575,14 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
   }
   .menu-hero { grid-area: hero; }
   .menu-cards { grid-area: cards; }
+  .menu-side { grid-area: hero; display: flex; flex-direction: column; align-items: center; }   /* the logo, the small buttons under it */
+  .menu-extras { margin-top: 14px; }
+  .menu-extra { padding: 7px 10px; font-size: 0.9rem; }
+  .mc-icon { width: 42px; height: 42px; }
+  .mc-icon svg { width: 22px; height: 22px; }
+  .menu-section { margin-top: 2px; }
+  .ms-title { font-size: 0.82rem; }
+  .ms-sub { font-size: 0.75rem; }
   /* the music and sound buttons in a row just above the choices */
   .menu-sound { grid-area: sound; position: static; justify-content: center; margin-bottom: 10px; }
   .menu-sound .chip { height: 40px; width: 40px; }
