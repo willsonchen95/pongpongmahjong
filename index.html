@@ -24,9 +24,12 @@
           var sideways = matchMedia('(orientation: landscape)').matches
           var real = sideways ? long : short
           var design = sideways ? Math.min(1120, Math.floor(590 * long / short)) : 480
-          var content = 'width=device-width, initial-scale=1.0'
+          // the zoom is pinned (min = max), because after turning the phone Chrome keeps the old
+          // zoom and the new layout would hang off the side of the screen
+          var content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0'
           if (short <= 500 && real < design) {
-            content = 'width=' + design + ', initial-scale=' + (real / design).toFixed(3)
+            var scale = (real / design).toFixed(3)
+            content = 'width=' + design + ', initial-scale=' + scale + ', minimum-scale=' + scale + ', maximum-scale=' + scale
           }
           var meta = document.getElementById('viewport')
           if (meta.getAttribute('content') !== content) meta.setAttribute('content', content)
