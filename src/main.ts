@@ -16,7 +16,7 @@ import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
 import { track } from './stats'
-import { renderFeedbackPage } from './feedback-page'
+import { renderFeedbackPage, quickRating } from './feedback-page'
 import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, BUILTIN_SOUNDS, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
 import { myClips, playClip, CALL_SLOTS, OWN_SLOTS, type VoiceSlot } from './voice'
 import { renderVoicePage, BUILTIN_LABELS, ownLabel } from './voice-page'
@@ -1820,7 +1820,7 @@ function renderTable() {
   const o = offer
   if (online?.away) extras.push(part('away', 'away', awayCard))
   else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
-  if (game.over && !resultClosed && !revealing()) extras.push(showFinal ? finalCard(resultContext(), finalButtons()) : resultCard(resultContext(), handOverButtons()))
+  if (game.over && !resultClosed && !revealing()) extras.push(showFinal ? finalCard(resultContext(), finalButtons(), quickRating(() => openFeedback(() => { inMenu = false; render() }, 'game-end'))) : resultCard(resultContext(), handOverButtons()))
   if (revealing() && !revealTimer) revealTimer = window.setTimeout(() => { revealTimer = 0; refresh() }, revealUntil - performance.now() + 20)
   for (const x of sh.extras) if (!extras.includes(x)) x.remove()
   for (const x of extras) if (x.parentElement !== sh.main) sh.main.append(x)
@@ -1946,7 +1946,7 @@ function finalButtons(): HTMLElement[] {
   } else {
     actions.push(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
   }
-  actions.push(seeTable(), button('Send feedback', () => openFeedback(() => { inMenu = false; render() }, 'game-end'), 'act'))
+  actions.push(seeTable())
   return actions
 }
 

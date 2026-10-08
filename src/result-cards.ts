@@ -128,7 +128,8 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[]): HTMLElem
 }
 
 // The final standings once the last hand is played.
-export function finalCard(ctx: ResultContext, buttons: HTMLElement[]): HTMLElement {
+// `rating`: the quick star rating (feedback-page.ts), when it's wanted.
+export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HTMLElement | null = null): HTMLElement {
   use(ctx)
   const order = standings()
   const youFirst = order[0] === HUMAN
@@ -148,6 +149,7 @@ export function finalCard(ctx: ResultContext, buttons: HTMLElement[]): HTMLEleme
   })
   const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} ran out of points, so the game ended early`
   card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
+  if (rating) card.appendChild(rating)
   const actions = el('div', 'result-actions')
   actions.append(...buttons)
   card.appendChild(actions)

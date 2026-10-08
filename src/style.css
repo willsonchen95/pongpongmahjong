@@ -1969,3 +1969,22 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 @media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
   .fb-star { width: 44px; height: 44px; font-size: 1.6rem; }
 }
+
+/* The quick star rating on the final results */
+.quick-rate { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 14px; margin: 0 auto 16px; padding: 10px 16px; max-width: 420px; border-radius: 14px; background: rgba(0, 0, 0, 0.05); }
+.qr-q { font-size: 1.15rem; font-weight: 700; }
+.qr-stars { display: flex; }
+.qr-star { padding: 0 3px; border: 0; background: none; color: rgba(138, 106, 30, 0.35); font-size: 2.1rem; line-height: 1; cursor: pointer; }
+.qr-star:focus-visible { outline: 3px solid #b8231f; outline-offset: 2px; border-radius: 6px; }
+@media (hover: hover) {
+  /* pointing at a star lights it and every star before it */
+  .qr-stars:hover .qr-star { color: #e0a800; }
+  .qr-stars .qr-star:hover ~ .qr-star { color: rgba(138, 106, 30, 0.35); }
+}
+.qr-thanks { font-size: 1.15rem; font-weight: 700; color: #8a6a1e; }
+.qr-more { padding: 4px 2px; border: 0; background: none; color: #b8231f; font: inherit; font-size: 1.05rem; font-weight: 700; text-decoration: underline; cursor: pointer; }
+@media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  .quick-rate { padding: 8px 12px; margin-bottom: 12px; }
+  .qr-q, .qr-thanks { font-size: 1rem; }
+  .qr-star { font-size: 1.8rem; }
+}
