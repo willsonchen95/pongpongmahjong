@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- The link-preview picture (public/og-image.jpg, 1200×630) that LinkedIn, WhatsApp and others show
-     for the game's address: the logo, and the real game on a laptop and a phone, mid-hand. To remake it, run
+     for the game's address: the logo, and the real game on a computer screen and a phone, mid-hand. To remake it, run
      `npm run dev` and then `node scripts/make-og-image.mjs`. -->
 <html lang="en">
   <head>
@@ -25,16 +25,12 @@
       .screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
       /* the laptop: the game at a computer's size (1280×800), shown at 0.4 */
       .laptop { position: absolute; left: 0; top: 30px; width: 540px; filter: drop-shadow(0 20px 18px rgba(0, 0, 0, 0.45)); }
-      /* a thin black bezel with a camera dot, on a slim metal base with the finger notch at the front */
-      .lid { position: relative; width: 540px; height: 344px; border-radius: 16px 16px 3px 3px; background: #0d0d0f;
+      /* a screen: a thin black bezel with a camera dot */
+      .lid { position: relative; width: 540px; height: 344px; border-radius: 16px; background: #0d0d0f;
              box-shadow: inset 0 0 0 1.5px #2e2e33, 0 -1px 0 1px rgba(255, 255, 255, 0.06); }
       .lid::before { content: ''; position: absolute; left: 50%; top: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #2a2d36; }
       .lid .screen { left: 14px; top: 14px; width: 512px; height: 320px; border-radius: 3px; }
       .lid iframe { width: 1280px; height: 800px; transform: scale(0.4); }
-      .base { position: relative; width: 616px; height: 13px; margin-left: -38px; border-radius: 2px 2px 14px 14px / 2px 2px 11px 11px;
-              background: linear-gradient(#f1f1f4, #c9c9cf 45%, #9a9aa2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
-      .base::before { content: ''; position: absolute; left: 50%; top: 0; width: 96px; height: 5px; margin-left: -48px;
-                      border-radius: 0 0 7px 7px; background: linear-gradient(#a8a8b0, #c4c4ca); }
       /* the phone in front: the game laid out at its phone width (480), shown at 0.4 */
       .phone { position: absolute; right: -6px; top: 92px; width: 208px; height: 432px; border-radius: 32px; background: #121212;
                box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #3a3a3a; rotate: 5deg; }
@@ -112,7 +108,7 @@
       }
       const laptop = el('div', 'laptop'), lid = el('div', 'lid'), phone = el('div', 'phone')
       lid.appendChild(game('/'))
-      laptop.append(lid, el('div', 'base'))
+      laptop.appendChild(lid)
       phone.appendChild(game('/?lite'))
       const devices = el('div', 'devices')
       devices.append(laptop, phone)
