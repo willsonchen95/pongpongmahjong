@@ -13,10 +13,12 @@
       .card { box-sizing: border-box; width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 0 36px; }
       .left { flex: none; width: 520px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
       .left .menu-hero { transform: scale(0.98); transform-origin: 50% 100%; }
-      .chips { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-      .chip { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; border: 2px solid rgba(255, 215, 94, 0.35);
-              background: rgba(0, 0, 0, 0.3); color: #fff6d6; font-size: 1.15rem; font-weight: 800; }
-      .url { color: #ffd75e; font-size: 1.3rem; font-weight: 800; letter-spacing: 0.02em; }
+      /* the words under the logo: quiet, in the logo's colours, no boxes */
+      .rule { width: 84px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, transparent, #ffd75e, transparent); }
+      .lede { margin: 0; max-width: 500px; text-align: center; text-wrap: balance; color: #fff6d6; font-size: 1.45rem; font-weight: 600; line-height: 1.4;
+              text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+      .lede b { color: #ffd75e; font-weight: 800; }
+      .url { color: rgba(255, 246, 214, 0.7); font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; }
       .devices { position: relative; flex: none; width: 580px; height: 520px; }
       .screen { position: absolute; overflow: hidden; background: #6e1210; }
       .screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
@@ -80,11 +82,10 @@
       title.append(top, big)
       hero.append(fan, title, el('div', 'menu-cn', '麻雀'))
 
-      const chips = el('div', 'chips')
-      for (const text of ['📱 💻 iPhone, Android & PC — no download needed', '👥 Play friends online, whatever device they have', '🤖 Or practise against smart bots, even offline'])
-        chips.appendChild(el('span', 'chip', text))
+      const lede = el('p', 'lede')
+      lede.append('Hong Kong mahjong for the web. Play friends on ', el('b', '', 'iPhone, Android or PC'), ' at the same table — or practise against smart bots.')
       const left = el('div', 'left')
-      left.append(hero, chips, el('div', 'url', 'pongpongmahjong.pages.dev'))
+      left.append(hero, el('div', 'rule'), lede, el('div', 'url', 'PONGPONGMAHJONG.PAGES.DEV'))
 
       // the real game, opened onto the saved table: `src` '/' is the computer's 3D table, '/?lite' a phone's
       function game(src) {
