@@ -18,16 +18,23 @@
       .lede { margin: 0; max-width: 500px; text-align: center; text-wrap: balance; color: #fff6d6; font-size: 1.45rem; font-weight: 600; line-height: 1.4;
               text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
       .lede b { color: #ffd75e; font-weight: 800; }
-      .url { color: rgba(255, 246, 214, 0.7); font-size: 1.05rem; font-weight: 700; letter-spacing: 0.08em; }
+      .url { color: rgba(255, 246, 214, 0.75); font-size: 1.2rem; font-weight: 600; }
+      .url b { color: #ffd75e; font-weight: 800; }
       .devices { position: relative; flex: none; width: 580px; height: 520px; }
       .screen { position: absolute; overflow: hidden; background: #6e1210; }
       .screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
       /* the laptop: the game at a computer's size (1280×800), shown at 0.4 */
-      .laptop { position: absolute; left: 0; top: 30px; width: 540px; }
-      .lid { position: relative; width: 540px; height: 344px; border-radius: 18px 18px 6px 6px; background: #161616; box-shadow: inset 0 0 0 2px #3a3a3a; }
-      .lid .screen { left: 14px; top: 14px; width: 512px; height: 320px; border-radius: 4px; }
+      .laptop { position: absolute; left: 0; top: 30px; width: 540px; filter: drop-shadow(0 20px 18px rgba(0, 0, 0, 0.45)); }
+      /* a thin black bezel with a camera dot, on a slim metal base with the finger notch at the front */
+      .lid { position: relative; width: 540px; height: 344px; border-radius: 16px 16px 3px 3px; background: #0d0d0f;
+             box-shadow: inset 0 0 0 1.5px #2e2e33, 0 -1px 0 1px rgba(255, 255, 255, 0.06); }
+      .lid::before { content: ''; position: absolute; left: 50%; top: 5px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: #2a2d36; }
+      .lid .screen { left: 14px; top: 14px; width: 512px; height: 320px; border-radius: 3px; }
       .lid iframe { width: 1280px; height: 800px; transform: scale(0.4); }
-      .base { width: 600px; height: 18px; margin-left: -30px; border-radius: 0 0 14px 14px; background: linear-gradient(#cfcfd4, #8d8d94); box-shadow: 0 18px 30px rgba(0, 0, 0, 0.45); }
+      .base { position: relative; width: 616px; height: 13px; margin-left: -38px; border-radius: 2px 2px 14px 14px / 2px 2px 11px 11px;
+              background: linear-gradient(#f1f1f4, #c9c9cf 45%, #9a9aa2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+      .base::before { content: ''; position: absolute; left: 50%; top: 0; width: 96px; height: 5px; margin-left: -48px;
+                      border-radius: 0 0 7px 7px; background: linear-gradient(#a8a8b0, #c4c4ca); }
       /* the phone in front: the game laid out at its phone width (480), shown at 0.4 */
       .phone { position: absolute; right: -6px; top: 92px; width: 208px; height: 432px; border-radius: 32px; background: #121212;
                box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #3a3a3a; rotate: 5deg; }
@@ -85,7 +92,9 @@
       const lede = el('p', 'lede')
       lede.append('Hong Kong mahjong for the web. Play friends on ', el('b', '', 'iPhone, Android or PC'), ' at the same table — or practise against smart bots.')
       const left = el('div', 'left')
-      left.append(hero, el('div', 'rule'), lede, el('div', 'url', 'PONGPONGMAHJONG.PAGES.DEV'))
+      const url = el('div', 'url')
+      url.append('Play it at ', el('b', '', 'pongpongmahjong.pages.dev'))
+      left.append(hero, el('div', 'rule'), lede, url)
 
       // the real game, opened onto the saved table: `src` '/' is the computer's 3D table, '/?lite' a phone's
       function game(src) {
