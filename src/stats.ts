@@ -16,12 +16,13 @@ export function track(type: EventType) {
 
 export interface FeedbackForm { rating: number | null; comment: string; email: string; where: string }
 
-// Send feedback: true once a server has it. (Sent as plain text, so no extra permission check is
-// needed while developing, when the server is on another port.)
+// Send feedback: true once a server has it. Each try gives up after 8 seconds, so a bad connection
+// ends in "couldn't be sent" rather than "Sending…" for ever. (Sent as plain text, so no extra
+// permission check is needed while developing, when the server is on another port.)
 export async function sendFeedback(f: FeedbackForm): Promise<boolean> {
   const body = JSON.stringify({ ...f, player: playerId(), version })
   for (const api of API_SERVERS) {
-    try { if ((await fetch(`${api}/feedback`, { method: 'POST', body })).ok) return true } catch { /* try the next */ }
+    try { if ((await fetch(`${api}/feedback`, { method: 'POST', body, signal: AbortSignal.timeout(8000) })).ok) return true } catch { /* try the next */ }
   }
   return false
 }

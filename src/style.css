@@ -1329,11 +1329,13 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .menu-section:first-child { margin-top: 0; }
 .ms-title { font-size: 0.95rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd75e; }
 .ms-sub { font-size: 0.85rem; opacity: 0.75; }
-/* How to play and Install: small buttons side by side under the two ways to play */
-.menu-extras { width: 100%; display: flex; gap: 10px; margin-top: 16px; }
+/* How to play, Feedback and Install: small buttons side by side under the two ways to play. Each
+   label stays on one line; when they don't all fit (phones), the last one takes a row of its own. */
+.menu-extras { width: 100%; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .menu-extra {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1350,7 +1352,7 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .menu-extra:hover { border-color: rgba(255, 215, 94, 0.7); }
 .menu-extra:focus-visible { outline: 3px solid #ffd75e; outline-offset: 3px; }
 .menu-extra.install { border-style: dashed; }
-.menu-extra.install.how { border-style: solid; border-color: #ffd75e; color: #ffe9a8; font-size: 0.9rem; }
+.menu-extra.install.how { flex-basis: 100%; white-space: normal; border-style: solid; border-color: #ffd75e; color: #ffe9a8; font-size: 0.9rem; }
 .menu-card.soon { opacity: 0.55; cursor: not-allowed; }
 .menu-card.soon .mc-tag { background: rgba(255, 255, 255, 0.85); }
 
@@ -1986,5 +1988,9 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 @media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
   .quick-rate { padding: 8px 12px; margin-bottom: 12px; }
   .qr-q, .qr-thanks { font-size: 1rem; }
-  .qr-star { font-size: 1.8rem; }
+  .qr-star { padding: 4px 6px; font-size: 2.3rem; }   /* (shown scaled down on phones: big enough for a thumb) */
+}
+/* sideways phones are short but wide: the question and stars on one line, so the card fits the height */
+@media (orientation: landscape) and (max-height: 600px) {
+  .quick-rate { max-width: 560px; }
 }
