@@ -85,6 +85,21 @@ document.addEventListener('pointerdown', e => {
   faanCardOpen = false
   document.querySelector('.hm-total-wrap.open')?.classList.remove('open')   // no redraw, so the tap itself still lands
 }, true)
+// With a mouse the card also opens on pointing at the pill — but only when the mouse really moves onto
+// it. When the page changes under a still pointer (the claim box closing after you press Pong), the
+// pill arrives under the pointer and must not pop its card open by itself.
+let faanPointed = false
+let lastPointer = ''
+document.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return
+  const at = `${e.clientX},${e.clientY}`
+  if (at === lastPointer) return                   // (the browser repeating a still pointer after a redraw)
+  lastPointer = at
+  const over = !!(e.target as Element).closest?.('.hm-total-wrap')
+  if (over === faanPointed) return
+  faanPointed = over
+  document.querySelector('.hm-total-wrap')?.classList.toggle('pointed', over)
+}, true)
 const HELP_KEY = 'mahjong-help-open'
 // The rule book never opens by itself — a coachmark in the tutorial points at the Rules button
 // instead. If the player opened it last time on a screen with room beside the table, it's open
@@ -1473,7 +1488,7 @@ function handMeter(): HTMLElement {
   const m = el('div', 'hand-meter')
 
   // the score pill; hover (or tap, on touch screens) opens the "what you have / go for next" card
-  const wrap = el('div', 'hm-total-wrap' + (faanCardOpen ? ' open' : ''))
+  const wrap = el('div', 'hm-total-wrap' + (faanCardOpen ? ' open' : '') + (faanPointed ? ' pointed' : ''))
   const head = el('button', 'hm-total' + (enough ? ' ok' : ''))
   head.append(el('span', 'hm-label', 'Your hand'), el('span', 'hm-faan', `${total} faan`),
     el('span', 'hm-need', enough ? `✓ minimum ${match.minFaan} reached` : `${match.minFaan - total} more to reach minimum ${match.minFaan}`),
@@ -2066,6 +2081,10 @@ function continueGame() {
   resumeSaved = null
   resume?.()
 }
+
+// While developing only (never in the live build): let a script see the table, to play your seat
+// for a demo recording.
+if (import.meta.env.DEV) Object.assign(window, { __table: () => table })
 
 loadMatch()
 track('open')
