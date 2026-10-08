@@ -161,4 +161,26 @@ describe('two people at the table', () => {
     t.answer(2, { kind: 'win' })
     expect(t.game.winner).toBe(2)
   })
+
+  it('ending the game early keeps the scores of the finished hands and drops the one under way', () => {
+    const deep = { ...RULES, startPoints: 1_000_000 }            // (so no unlucky deal ends it by bankruptcy)
+    const t = new Table(deep, [false, false, false, false])
+    t.newHand(); t.begin()
+    playOn(t)                                                    // bots only: the first hand plays out
+    expect(t.game.over).toBe(true)
+    const after1 = [...t.match.scores]
+    t.newHand(); t.begin()
+    t.startTurn()                                                // the second hand is under way
+    t.endMatch()
+    expect(t.match.over).toBe(true)
+    expect(t.match.endedAfter).toBe(1)
+    expect(t.match.scores).toEqual(after1)
+    expect(t.game.over).toBe(true)
+    expect(t.takeEvents().some(e => e.type === 'ended')).toBe(true)
+
+    const between = new Table(deep, [false, false, false, false])
+    between.newHand(); between.begin(); playOn(between)
+    between.endMatch()                                           // between hands: that hand counts
+    expect(between.match.endedAfter).toBe(1)
+  })
 })

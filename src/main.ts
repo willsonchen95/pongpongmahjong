@@ -6,7 +6,7 @@ import {
 } from './engine'
 import { tileName } from './tiles'
 import { rulesSections } from './rules-guide'
-import { resultCard, finalCard, standingsOf, wonByRobbingIn, type ResultContext } from './result-cards'
+import { resultCard, finalCard, soleLeader, wonByRobbingIn, type ResultContext } from './result-cards'
 import { TIPS, type CoachStep, type Steps } from './tips'
 import { confetti, mahjongBurst, turnGlow, notice } from './fx'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
@@ -330,6 +330,10 @@ function applyOnline(view: LocalView, events: TableEvent[]) {
   playEvents(events)
   buzzIfWaitingOnYou()
   if (game.over && !resultClosed && events.some(e => e.type === 'win' || e.type === 'exhausted')) showFinal = false
+  // the host ended the game: straight to the final scores (also when reconnecting afterwards)
+  if (view.match.endedAfter !== undefined && (!showFinal || events.some(e => e.type === 'ended'))) {
+    showFinal = true; resultClosed = false; banners = []; celebrate = soleLeader(match) === HUMAN
+  }
   if (inMenu && !intro) { inMenu = false; render() }
   else if (!intro) refresh()
 }
@@ -499,15 +503,12 @@ function tableDice(it: Intro): HTMLElement {
 
 let finishCounted = false                 // this game against the bots has been counted as played to the end
 function showStandings() {
-  if (!online && !finishCounted) { finishCounted = true; track('bot-game-done') }
+  if (!online && !finishCounted && match.endedAfter === undefined) { finishCounted = true; track('bot-game-done') }
   showFinal = true
   resultClosed = false
-  celebrate = standings()[0] === HUMAN
+  celebrate = soleLeader(match) === HUMAN
   render()
 }
-
-// Players ordered by score, best first.
-const standings = () => standingsOf(match)
 
 // ---------- Beginner tips (coachmarks) ----------
 // The first time each situation comes up, the game pauses, dims the screen around the part that
@@ -570,13 +571,23 @@ const gameInProgress = () => started && !match.over
 async function openPause() {
   if (paused || coachOpen) return
   if (online) {                                        // an online game can't pause for everyone
-    const youHost = !!online.room?.seats[online.seat ?? -1]?.host
-    const choice = await dialog('Leave the room?', youHost
-      ? 'You’re the host: leaving closes the room, and everyone goes back to the main menu.'
-      : `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.`, [
+    const room = online.room
+    const youHost = !!room?.seats[online.seat ?? -1]?.host
+    const hostName = room?.seats.find(s => s.host)?.name ?? 'The host'
+    const choice = youHost
+      ? await dialog('Finished playing?', match.over
+        ? 'Leaving closes the room, and everyone goes back to the main menu.'
+        : 'End the game now and everyone sees the final scores — the room stays open to play again. Leaving closes the room for everyone.', [
+        { label: 'Keep playing', value: 'stay', cls: 'primary' },
+        ...(match.over ? [] : [{ label: 'End game for everyone', value: 'end', cls: '' }]),
+        { label: 'Leave room', value: 'leave', cls: 'danger' },
+      ])
+      : await dialog('Leave the room?', `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.` +
+        (match.over ? '' : ` (Want to stop for everyone? ${hostName} can end the game from their menu.)`), [
         { label: 'Stay', value: 'stay', cls: 'primary' },
         { label: 'Leave room', value: 'leave', cls: 'danger' },
       ])
+    if (choice === 'end' && (await confirmEnd()) && !match.over) online?.endGame()
     if (choice === 'leave') leaveOnline()
     return
   }
@@ -586,20 +597,34 @@ async function openPause() {
   const choice = await dialog('Game paused', where, [
     { label: 'Keep playing', value: 'play', cls: 'primary' },
     { label: 'Main menu', value: 'menu', cls: '' },
-    { label: 'Quit this game', value: 'quit', cls: 'danger' },
+    { label: 'End game — see scores', value: 'end', cls: 'danger' },
   ])
-  if (choice === 'quit' && !(await confirmQuit())) return void resumeFromPause()
+  if (choice === 'end' && !(await confirmEnd())) return void resumeFromPause()
   paused = false
   if (choice === 'play') return void resumeFromPause()
-  if (choice === 'quit') endMatchEarly()
+  if (choice === 'end') return endGameNow()
   renderMenu()                                         // the game stays paused there until you continue
+}
+
+// Stop a game against the bots now and go straight to the final scores (the hand under way doesn't count).
+function endGameNow() {
+  gen++                                                // stops the bot loop / deal for good
+  intro = null
+  wakeWaiters()
+  document.querySelectorAll('.banner, .ghost-tile').forEach(e => e.remove())
+  table.endMatch()
+  table.takeEvents()
+  sync()
+  clearSave()
+  inMenu = false
+  showStandings()
 }
 function resumeFromPause() { paused = false; render() }
 
-function confirmQuit(): Promise<boolean> {
-  return dialog('Quit this game?', 'Your game and its scores will be lost. This can’t be undone.', [
-    { label: 'No, keep it', value: false, cls: 'primary' },
-    { label: 'Yes, quit', value: true, cls: 'danger' },
+function confirmEnd(): Promise<boolean> {
+  return dialog('End the game now?', 'The hand being played won’t count. The final scores are everyone’s points so far.', [
+    { label: 'No, keep playing', value: false, cls: 'primary' },
+    { label: 'Yes, end it', value: true, cls: 'danger' },
   ])
 }
 
@@ -1123,9 +1148,12 @@ function renderLobby() {
 // The hand just won was won by robbing a kong (the tile came from a pong being made a kong).
 const wonByRobbing = () => wonByRobbingIn(match)
 
+// The players ended the game while this hand was still being played (so nobody won it).
+const handStopped = () => match.endedAfter !== undefined && match.endedAfter < match.hand
+
 // One sentence describing how the hand ended.
 function resultLine(): string {
-  if (game.winner === null) return 'The wall ran out — nobody won this hand.'
+  if (game.winner === null) return handStopped() ? 'The game was ended during this hand — it doesn’t count.' : 'The wall ran out — nobody won this hand.'
   const who = game.winner === HUMAN ? 'You win' : `${NAMES[game.winner]} wins`
   const how = winFrom === null ? 'by drawing the winning tile'
     : wonByRobbing() ? `by robbing ${possessive(winFrom)} kong` : `with ${possessive(winFrom)} thrown-away tile`
@@ -1144,6 +1172,8 @@ function statusEl(): HTMLElement {
     mood = 'done'; badge = windChar(game.winner); title.textContent = `${NAMES[game.winner]} wins`
     hint = winFrom === null ? 'Drew the winning tile'
       : wonByRobbing() ? `Robbed ${possessive(winFrom)} kong` : `On ${possessive(winFrom)} thrown-away tile`
+  } else if (game.over && handStopped()) {
+    mood = 'done'; badge = '–'; title.textContent = 'Game ended'; hint = 'Stopped before this hand finished'
   } else if (game.over) {
     mood = 'done'; badge = '–'; title.textContent = 'Draw'; hint = 'The wall ran out'
   } else if (online?.away) {

@@ -47,6 +47,29 @@ describe('a room', () => {
     // (in the rare deal where it never happens, there's nothing to check)
   })
 
+  it('the host can end the game for everyone mid-hand; the scores stand and a new game can start', () => {
+    const room = new RoomCore(newRoom('ABCD', RULES))
+    room.join('a', 'Alice', 0); room.join('b', 'Bob', 0)
+    room.handle('a', { type: 'start', rules: RULES }, 0)
+    const now = { t: 0 }
+    runClock(room, now)                                      // into the first hand
+    expect(room.s.table!.game.over).toBe(false)
+    expect(room.handle('b', { type: 'end' }, now.t)[0].msg).toMatchObject({ type: 'error' })   // only the host
+    expect(room.s.table!.match.over).toBe(false)
+    const out = room.handle('a', { type: 'end' }, now.t)
+    for (const who of ['a', 'b']) {
+      const v = lastState(out, who)!
+      expect(v.match.over).toBe(true)
+      expect(v.match.endedAfter).toBe(0)                     // the hand under way doesn't count
+      expect(v.match.scores).toEqual([1000, 1000, 1000, 1000])
+      expect(out.some(o => o.to === who && o.msg.type === 'state' && o.msg.events.some(e => e.type === 'ended'))).toBe(true)
+    }
+    expect(room.s.wakeAt).toBeNull()                         // nothing more happens by itself
+    expect(room.handle('a', { type: 'end' }, now.t)).toEqual([])   // (already over)
+    room.handle('a', { type: 'start', rules: RULES }, now.t)
+    expect(room.s.table!.match.over).toBe(false)
+  })
+
   it('seats people in the order they join, with the first as host', () => {
     const room = new RoomCore(newRoom('ABCD', RULES))
     room.join('a', 'Alice', 0)

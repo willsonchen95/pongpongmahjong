@@ -50,6 +50,7 @@ export interface Match extends Rules {
   hand: number                         // hand number within the match, from 1
   result: HandResult | null            // the hand just finished
   over: boolean
+  endedAfter?: number                  // stopped early by the players (endMatch), after this many finished hands
 }
 
 export const newMatch = (r: Rules): Match => ({
@@ -83,6 +84,7 @@ export type TableEvent =
   | { type: 'yourTurn'; seat: number }                      // a person drew and must now throw a tile
   | { type: 'win'; seat: number; from: number | null; robbing: boolean }
   | { type: 'exhausted' }                                   // the wall ran out: a draw
+  | { type: 'ended' }                                       // the players stopped the game early (endMatch)
 
 // Everything needed to carry the table on later (saved in the browser, or kept by a server). Tiles
 // come back as copies, so the two that are "this very tile" are remembered by their place.
@@ -172,6 +174,19 @@ export class Table {
   }
   canDeclareOn(seat: number, tile: Tile, robbing = false): boolean {
     return canWinOn(this.game, seat, tile) && this.faanOf(seat, [...this.game.hands[seat], tile], false, true, robbing) >= this.match.minFaan
+  }
+
+  // Stop the game now — the players have had enough. A hand under way doesn't count (nobody wins or
+  // pays), so the scores stand as they were after the last finished hand.
+  endMatch() {
+    const m = this.match
+    if (m.over) return
+    const midHand = !this.game.over
+    m.endedAfter = midHand ? m.hand - 1 : m.hand
+    if (midHand) { this.game.over = true; this.game.drawn = null; this.winFrom = null; this.winTile = null }
+    this.phase = { kind: 'over' }
+    m.over = true
+    this.events.push({ type: 'ended' })
   }
 
   // ---------- A hand ----------

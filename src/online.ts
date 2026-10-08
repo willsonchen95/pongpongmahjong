@@ -132,7 +132,7 @@ export function turnView(v: SeatView, serverNow: number): LocalView {
 
 export function turnEvents(events: TableEvent[], me: number): TableEvent[] {
   return events.map(e => {
-    if (e.type === 'exhausted') return e
+    if (e.type === 'exhausted' || e.type === 'ended') return e
     if (e.type === 'win') return { ...e, seat: seat(e.seat, me), from: seatOrNull(e.from, me) }
     return { ...e, seat: seat(e.seat, me) }
   })
@@ -249,6 +249,7 @@ export class OnlineRoom {
   }
 
   start(rules: Rules) { this.send({ type: 'start', rules }) }
+  endGame() { this.send({ type: 'end' }) }                 // host only: everyone gets the final scores
   react(emoji: string) { this.send({ type: 'react', emoji }) }
   sound(slot: string) { this.send({ type: 'sound', slot }) }
 

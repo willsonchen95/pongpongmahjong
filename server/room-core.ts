@@ -63,6 +63,7 @@ export type ClientMsg =
   | { type: 'react'; emoji: string }                     // one of REACTIONS or PHRASES, shown to everyone
   | { type: 'back' }                                     // back after being away: take your seat from the bot
   | { type: 'leave' }                                    // pressed Leave (not just a dropped connection): the host leaving closes the room
+  | { type: 'end' }                                      // host only: stop the game now — everyone sees the final scores
   | { type: 'voice'; slot: VoiceSlot; clip: Clip | null }  // a clip of yours, new or changed (null: deleted)
   | { type: 'sound'; slot: string }                      // play a soundboard sound for everyone: one of BUILTIN_SOUNDS, or own1–3
 
@@ -261,6 +262,15 @@ export class RoomCore {
       this.table = new Table(rules, this.s.seats.map(x => this.plays(x)))
       this.newHand(now)
       return [...this.lobbyToAll(), ...this.statesToAll(now)]
+    }
+    if (m.type === 'end') {                                  // the host stops the game for everyone (the room stays open)
+      if (playerId !== this.s.hostId) return [{ to: playerId, msg: { type: 'error', message: 'Only the host can end the game.' } }]
+      if (!t || t.match.over) return []
+      t.endMatch()
+      this.s.ready = []
+      this.collect()
+      this.schedule(now)
+      return this.statesToAll(now)
     }
     if (!t) return [{ to: playerId, msg: { type: 'error', message: 'The game hasn’t started yet.' } }]
     const person = this.s.seats[seat]!

@@ -12,6 +12,11 @@ let match: Match, game: GameState, NAMES: string[], winTile: Tile | null
 function use(ctx: ResultContext) { ({ match, game, names: NAMES, winTile } = ctx) }
 const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
 export const standingsOf = (m: Match) => [0, 1, 2, 3].sort((a, b) => m.scores[b] - m.scores[a])
+// Who has the most points on their own — null when the top score is shared (a game ended early often is).
+export const soleLeader = (m: Match): number | null => {
+  const [first, second] = standingsOf(m)
+  return m.scores[first] > m.scores[second] ? first : null
+}
 const standings = () => standingsOf(match)
 export const wonByRobbingIn = (m: Match) => !!m.result?.items.some(i => i.name === 'Robbing a kong')
 const wonByRobbing = () => wonByRobbingIn(match)
@@ -132,12 +137,15 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[]): HTMLElem
 export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HTMLElement | null = null): HTMLElement {
   use(ctx)
   const order = standings()
-  const youFirst = order[0] === HUMAN
+  const leader = soleLeader(match)
+  const youFirst = leader === HUMAN
+  const top = order.filter(p => match.scores[p] === match.scores[order[0]])
+  const sub = youFirst ? 'Congratulations — top score!'
+    : leader !== null ? `${NAMES[leader]} wins the game`
+    : top.length === 4 ? 'All square — nobody won or lost any points'
+    : `It’s a tie: ${top.map(p => (p === HUMAN ? 'you' : NAMES[p])).join(top.length === 2 ? ' and ' : ', ')} share the top score`
   const card = el('div', 'result-card final' + (youFirst ? ' you' : ''))
-  card.append(
-    el('div', 'result-title', youFirst ? '🏆 You win the game! 🏆' : 'Game over'),
-    el('div', 'result-sub', youFirst ? 'Congratulations — top score!' : `${NAMES[order[0]]} wins the game`),
-  )
+  card.append(el('div', 'result-title', youFirst ? '🏆 You win the game! 🏆' : 'Game over'), el('div', 'result-sub', sub))
   const list = el('div', 'standings')
   const places = ['1st', '2nd', '3rd', '4th']
   order.forEach((p, i) => {
@@ -148,7 +156,10 @@ export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HT
     list.appendChild(row)
   })
   const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} ran out of points, so the game ended early`
-  card.append(list, el('div', 'result-next', `${match.hand} hands played${ended}. Everyone started with ${fmt(match.startPoints)}.`))
+  const n = match.endedAfter
+  const played = n === undefined ? `${match.hand} hands played${ended}`
+    : n === 0 ? 'Ended before the first hand finished' : `Ended early after ${n} hand${n === 1 ? '' : 's'}`
+  card.append(list, el('div', 'result-next', `${played}. Everyone started with ${fmt(match.startPoints)}.`))
   if (rating) card.appendChild(rating)
   const actions = el('div', 'result-actions')
   actions.append(...buttons)
