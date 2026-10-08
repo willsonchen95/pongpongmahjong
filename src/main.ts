@@ -918,8 +918,16 @@ function renderRulesPage() {
     para('Mahjong is played by four players with 144 tiles. You sit at the bottom of the table; play goes round counter-clockwise — you, then Mei, Kai and Lin.'),
     para('On your turn you take a tile from the wall, then throw one away. The first to complete a winning hand calls ', el('strong', '', 'Mahjong!')),
   )
+  // who made it and how — for the curious (and anyone who arrived from a portfolio link)
+  const about = el('section', 'rules-about')
+  about.append(el('h3', '', 'About this game'),
+    para('Pong Pong Mahjong! is made by Wilson Chen. It’s written from scratch in TypeScript — no game engine — and runs in any browser.'),
+    para(el('strong', '', 'Online rooms'), ' run on Cloudflare: each room is its own small server that deals the tiles and checks every move, so nobody can peek at another player’s hand.'),
+    para(el('strong', '', 'The bots'), ' work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.'),
+    para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'),
+    para('Found a bug or have an idea? Use ', el('strong', '', 'Feedback'), ' on the main menu — every message is read.'))
   const body = el('div', 'rules-body help')
-  body.append(intro, ...rulesSections(null))
+  body.append(intro, ...rulesSections(null), about)
   const foot = el('div', 'rules-foot')
   foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
   const credit = el('p', 'credit', 'Music: “Chinese Harmony” by LunarBoomMusic, from Pixabay.')

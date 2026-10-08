@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- The link-preview picture (public/og-image.png, 1200×630) that LinkedIn, WhatsApp and others show
+     for the game's address. Drawn from the game's own logo, tiles and colours. To remake it, run
+     `npm run dev` and then `node scripts/make-og-image.mjs`. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=block" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@900&text=%E9%BA%BB%E9%9B%80%E4%B8%AD%E7%99%BC%E6%9D%B1&display=block" />
+    <style>
+      html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .card { box-sizing: border-box; width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; gap: 70px; padding: 0 70px; }
+      .card .menu-hero { flex: none; transform: scale(1.25); }
+      .points { display: flex; flex-direction: column; gap: 16px; max-width: 430px; }
+      .point { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 18px; border: 2px solid rgba(255, 215, 94, 0.3);
+               background: rgba(0, 0, 0, 0.28); color: #fff6d6; font-size: 1.45rem; font-weight: 700; line-height: 1.25; }
+      .point b { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #ffd75e; color: #6e1210; font-size: 1.5rem; }
+      .url { margin-top: 6px; text-align: center; color: #ffd75e; font-size: 1.3rem; font-weight: 800; letter-spacing: 0.02em; }
+    </style>
+  </head>
+  <body>
+    <div id="card" class="card"></div>
+    <script type="module">
+      import '/src/style.css'
+      import { el, tileEl } from '/src/ui.ts'
+      import { parse } from '/src/engine.ts'
+
+      // the menu's title area (main.ts menuHero), without its entrance animation
+      const hero = el('div', 'menu-hero')
+      const fan = el('div', 'tile-fan')
+      for (const spec of ['1p', '5z', '6z', '1s', '1z']) fan.appendChild(tileEl(parse(spec)[0], 'fan-tile'))
+      const title = el('h1', 'menu-title')
+      const top = el('span', 'mt-line')
+      top.append(el('span', 'mt-word', 'Pong'), el('span', 'mt-word', 'Pong'))
+      const big = el('span', 'mt-line mt-big')
+      big.appendChild(el('span', 'mt-word', 'Mahjong!'))
+      title.append(top, big)
+      const tagline = el('p', 'menu-tagline')
+      tagline.append(el('span', 'mt-spark', '✦'), 'Pong until you can’t Pong anymore!', el('span', 'mt-spark', '✦'))
+      hero.append(fan, title, el('div', 'menu-cn', '麻雀'), tagline)
+
+      const points = el('div', 'points')
+      for (const [icon, text] of [['🀄', 'Hong Kong mahjong, free in your browser'], ['👥', 'Play friends online with a room code'], ['🤖', 'Or practise against smart bots — even offline']]) {
+        const p = el('div', 'point')
+        p.append(el('b', '', icon), el('span', '', text))
+        points.appendChild(p)
+      }
+      points.appendChild(el('div', 'url', 'pongpongmahjong.pages.dev'))
+      document.getElementById('card').append(hero, points)
+      document.fonts.ready.then(() => document.body.setAttribute('data-ready', ''))
+    </script>
+  </body>
+</html>
