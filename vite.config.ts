@@ -25,9 +25,23 @@ function serviceWorker(): Plugin {
   }
 }
 
+// Cloudflare Web Analytics (visitors, countries, where they came from; no cookies), added to the
+// built page only, so playing on this computer isn't counted. The token isn't a secret: it only
+// says which site the visits belong to.
+function webAnalytics(): Plugin {
+  return {
+    name: 'web-analytics',
+    apply: 'build',
+    transformIndexHtml: () => [{
+      tag: 'script', injectTo: 'body',
+      attrs: { defer: true, src: 'https://static.cloudflareinsights.com/beacon.min.js', 'data-cf-beacon': '{"token": "281aea6b9ed24e9dab514a9d1a42a19f"}' },
+    }],
+  }
+}
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
-  plugins: [serviceWorker()],
+  plugins: [serviceWorker(), webAnalytics()],
 })
