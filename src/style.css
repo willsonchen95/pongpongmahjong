@@ -779,11 +779,12 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 .tg-light::before {
   content: '';
   position: absolute;
-  left: 14%;
-  right: 14%;
-  bottom: 9%;                                            /* on the cloth in front of the player's wall */
-  height: 30%;
-  background: radial-gradient(ellipse 50% 70% at 50% 100%, rgba(255, 220, 110, 0.6), rgba(255, 215, 94, 0.2) 55%, transparent 80%);
+  left: 12%;
+  right: 12%;
+  bottom: 2%;                                            /* a pool of light on the cloth in front of the player */
+  height: 40%;
+  /* brightest in the middle and faded to nothing well before every edge, so it never shows a cut-off line */
+  background: radial-gradient(closest-side, rgba(255, 222, 120, 0.5), rgba(255, 215, 94, 0.22) 45%, rgba(255, 215, 94, 0.07) 75%, transparent);
 }
 .tg-light.on::before { animation: turn-pulse 1.8s ease-in-out infinite; }
 @keyframes turn-pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
