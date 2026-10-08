@@ -12,12 +12,26 @@ export type { SeatInfo }
 export { REACTIONS, PHRASES, TURN_MS, BUILTIN_SOUNDS } from '../server/room-core'
 
 // Where the room server is: while developing on this computer or its home network, the local
-// `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`).
-// VITE_ROOM_SERVER, set at build time, overrides both.
+// `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`),
+// reached first through the site's own address (functions/rooms passes it on), since some phones and
+// networks block workers.dev addresses — and straight at workers.dev if that doesn't answer.
+// VITE_ROOM_SERVER, set at build time, overrides them all.
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)$/
 const LIVE_ROOM_SERVER = 'wss://pongpongmahjong-rooms.willsonchen95.workers.dev'
-export const ROOM_SERVER: string = import.meta.env.VITE_ROOM_SERVER
-  || (LOCAL_HOST.test(location.hostname) ? `ws://${location.hostname}:8787` : LIVE_ROOM_SERVER)
+const ROOM_SERVERS: string[] = import.meta.env.VITE_ROOM_SERVER ? [import.meta.env.VITE_ROOM_SERVER]
+  : LOCAL_HOST.test(location.hostname) ? [`ws://${location.hostname}:8787`]
+  : [`wss://${location.host}`, LIVE_ROOM_SERVER]
+export const ROOM_SERVER: string = ROOM_SERVERS[0]
+// the one in use: moves on to the next whenever a connection fails before it ever opens
+let serverIndex = 0
+function openRoom(code: string, player: string): WebSocket {
+  const tried = serverIndex
+  const ws = new WebSocket(`${ROOM_SERVERS[tried]}/rooms/${code}/ws?player=${encodeURIComponent(player)}`)
+  let opened = false
+  ws.addEventListener('open', () => { opened = true })
+  ws.addEventListener('close', () => { if (!opened && serverIndex === tried) serverIndex = (tried + 1) % ROOM_SERVERS.length })
+  return ws
+}
 
 // Room codes: five letters/digits, leaving out ones easily mixed up (0/O, 1/I).
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -54,7 +68,7 @@ function saveSession(s: Session | null) {
 export function leaveSavedRoom(code: string) {
   saveSession(null)
   try {
-    const ws = new WebSocket(`${ROOM_SERVER}/rooms/${code}/ws?player=${encodeURIComponent(playerId())}`)
+    const ws = openRoom(code, playerId())
     ws.onopen = () => { ws.send(JSON.stringify({ type: 'leave' } satisfies ClientMsg)); ws.close() }
     setTimeout(() => ws.close(), 5000)                 // (unreachable: forget it — the room plays on with a bot)
   } catch { /* offline: the room plays on with a bot in your seat */ }
@@ -182,7 +196,7 @@ export class OnlineRoom {
   connect() {
     this.closing = false
     saveSession({ code: this.code, name: this.name })
-    const ws = new WebSocket(`${ROOM_SERVER}/rooms/${this.code}/ws?player=${encodeURIComponent(this.playerId)}`)
+    const ws = openRoom(this.code, this.playerId)
     this.ws = ws
     ws.onopen = () => {
       this.connected = true

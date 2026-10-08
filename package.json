@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "server:check": "tsc -p server",
+    "server:check": "tsc -p server && tsc -p functions",
     "server:dev": "wrangler dev --config server/wrangler.jsonc",
     "server:deploy": "wrangler deploy --config server/wrangler.jsonc"
   },
