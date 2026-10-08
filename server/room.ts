@@ -4,10 +4,19 @@
 // deal, someone's time running out). All the actual rules live in RoomCore.
 
 import { DurableObject } from 'cloudflare:workers'
+import type { Stats } from './stats'
 import { RoomCore, newRoom, Limiter, CLIP_COST, MAX_MSG_CHARS, type RoomState, type ClientMsg, type Out, type Voices, type Clip, type VoiceSlot } from './room-core'
 
-// CONNECTS: Cloudflare's rate limiter, so one address can't open rooms without end (see wrangler.jsonc)
-export interface Env { ROOMS: DurableObjectNamespace<Room>; CONNECTS?: RateLimit }
+// CONNECTS / API: Cloudflare's rate limiters, so one address can't open rooms or send stats without end
+// (see wrangler.jsonc). STATS: the play counts and feedback (stats.ts); ADMIN_KEY: the password for
+// the stats page, a secret set with `npx wrangler secret put ADMIN_KEY --config server/wrangler.jsonc`.
+export interface Env {
+  ROOMS: DurableObjectNamespace<Room>
+  STATS: DurableObjectNamespace<Stats>
+  CONNECTS?: RateLimit
+  API?: RateLimit
+  ADMIN_KEY?: string
+}
 
 const DEFAULT_RULES = { rounds: 1, minFaan: 1, startPoints: 1000 }
 const PLAYER_ID = /^[A-Za-z0-9-]{8,64}$/

@@ -15,6 +15,8 @@ import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, b
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
+import { track } from './stats'
+import { renderFeedbackPage } from './feedback-page'
 import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, BUILTIN_SOUNDS, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
 import { myClips, playClip, CALL_SLOTS, OWN_SLOTS, type VoiceSlot } from './voice'
 import { renderVoicePage, BUILTIN_LABELS, ownLabel } from './voice-page'
@@ -363,6 +365,8 @@ function startMatch(bots: BotLevel = settings.bots) {
   saveSettings()
   table = new Table({ ...settings, bots }, SEAT_IS_PERSON)
   started = true
+  finishCounted = false
+  track('bot-game')
   nextHand()
 }
 
@@ -493,7 +497,9 @@ function tableDice(it: Intro): HTMLElement {
   return wrap
 }
 
+let finishCounted = false                 // this game against the bots has been counted as played to the end
 function showStandings() {
+  if (!online && !finishCounted) { finishCounted = true; track('bot-game-done') }
   showFinal = true
   resultClosed = false
   celebrate = standings()[0] === HUMAN
@@ -832,7 +838,11 @@ function renderMenu() {
   rules.innerHTML = MENU_ICONS.book
   rules.append(el('span', '', 'How to play'))
   rules.onclick = renderRulesPage
-  extras.appendChild(rules)
+  const feedback = el('button', 'menu-extra')
+  feedback.innerHTML = MENU_ICONS.feedback
+  feedback.append(el('span', '', 'Feedback'))
+  feedback.onclick = () => openFeedback(renderMenu, 'menu')
+  extras.append(rules, feedback)
   const install = installButton()
   if (install) extras.appendChild(install)
   // which version this is, at the very bottom of the menu
@@ -963,6 +973,12 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
     ], settings.startPoints, v => pick({ startPoints: v })))
 }
 
+// The "Send feedback" page (feedback-page.ts); `back` redraws the screen it was opened from.
+function openFeedback(back: () => void, where: string) {
+  inMenu = true
+  renderFeedbackPage(app, back, where)
+}
+
 // ---------- Your voice ----------
 
 // The "Your voice" page (voice-page.ts); `back` redraws the page it was opened from. In a room, a clip
@@ -1020,10 +1036,11 @@ function renderOnlineHome() {
   }
   codeInput.oninput = () => { codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }
 
-  const create = button('Create a room', () => go(newRoomCode()), 'act primary big')
+  const create = button('Create a room', () => { track('room-create'); go(newRoomCode()) }, 'act primary big')
   const join = button('Join', () => {
     const code = codeInput.value.trim().toUpperCase()
     if (!ROOM_CODE.test(code)) { message.textContent = 'A room code is 5 letters and numbers, like K7Q2M.'; codeInput.focus(); return }
+    track('room-join')
     go(code)
   }, 'act')
   const joinRow = el('div', 'join-row')
@@ -1086,7 +1103,7 @@ function renderLobby() {
       ruleChoices(card, renderLobby, false)
       const actions = el('div', 'setup-actions')
       actions.append(button('Leave', leaveOnline, 'act'),
-        button('Start game', () => room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints, bots: settings.bots }), 'act primary big'))
+        button('Start game', () => { track('online-game'); room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints, bots: settings.bots }) }, 'act primary big'))
       card.appendChild(actions)
     } else {
       const host = r.seats.find(s => s.host)
@@ -1923,13 +1940,13 @@ function finalButtons(): HTMLElement[] {
   if (online) {                                        // the host starts the next game; everyone else waits
     const room = online.room, host = room?.seats[online.seat ?? -1]?.host
     const hostName = room?.seats.find(s => s.host)?.name
-    if (host && room) actions.push(button('Play again', () => online?.start(room.rules), 'act primary'))   // same rules as this game
+    if (host && room) actions.push(button('Play again', () => { track('online-game'); online?.start(room.rules) }, 'act primary'))   // same rules as this game
     else actions.push(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
     actions.push(button('Leave room', leaveOnline, 'act'))
   } else {
     actions.push(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
   }
-  actions.push(seeTable())
+  actions.push(seeTable(), button('Send feedback', () => openFeedback(() => { inMenu = false; render() }, 'game-end'), 'act'))
   return actions
 }
 
@@ -2012,6 +2029,7 @@ function continueGame() {
 }
 
 loadMatch()
+track('open')
 // opened from an invite link (…?room=K7Q2M): straight to joining that room
 const invited = new URLSearchParams(location.search).get('room')?.toUpperCase() ?? ''
 if (ROOM_SERVER && ROOM_CODE.test(invited)) {

@@ -22,6 +22,8 @@ const ROOM_SERVERS: string[] = import.meta.env.VITE_ROOM_SERVER ? [import.meta.e
   : LOCAL_HOST.test(location.hostname) ? [`ws://${location.hostname}:8787`]
   : [`wss://${location.host}`, LIVE_ROOM_SERVER]
 export const ROOM_SERVER: string = ROOM_SERVERS[0]
+// the same servers' play counts and feedback (stats.ts), over https
+export const API_SERVERS = ROOM_SERVERS.map(s => s.replace(/^ws/, 'http') + '/api')
 // the one in use: moves on to the next whenever a connection fails before it ever opens
 let serverIndex = 0
 function openRoom(code: string, player: string): WebSocket {

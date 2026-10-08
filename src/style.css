@@ -1953,3 +1953,19 @@ button.chip:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
 
 /* On touch screens a tap lifts a tile (tap it again to throw it), so one stray tap doesn't cost a tile. */
 .player-rack .tile.lifted { transform: translateY(-14%); box-shadow: 0 0 0 2px #ffd75e, 0 10px 14px rgba(0, 0, 0, 0.45); }
+
+/* ---------- Send feedback ---------- */
+.fb-stars { display: flex; gap: 6px; }
+.fb-star {
+  width: 52px; height: 52px; padding: 0; border-radius: 12px;
+  border: 2px solid rgba(255, 215, 94, 0.35); background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 246, 214, 0.3); font-size: 1.9rem; line-height: 1; cursor: pointer;
+}
+.fb-star.on { color: #ffd75e; border-color: #ffd75e; }
+.fb-star:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
+.fb-comment { resize: vertical; min-height: 120px; font-size: 1.05rem; }
+.feedback-page .act.big { margin-top: 14px; }
+.fb-privacy { margin: 18px 0 0; font-size: 0.85rem; opacity: 0.65; }
+@media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  .fb-star { width: 44px; height: 44px; font-size: 1.6rem; }
+}

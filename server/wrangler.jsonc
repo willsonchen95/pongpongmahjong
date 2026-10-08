@@ -5,10 +5,14 @@
   "main": "worker.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {
-    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }, { "name": "STATS", "class_name": "Stats" }]
   },
   // SQLite-backed Durable Objects: the kind the free plan allows
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-  // connections from one address: at most 30 a minute (a person reconnecting needs a handful)
-  "ratelimits": [{ "name": "CONNECTS", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }, { "tag": "v2", "new_sqlite_classes": ["Stats"] }],
+  "ratelimits": [
+    // connections from one address: at most 30 a minute (a person reconnecting needs a handful)
+    { "name": "CONNECTS", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } },
+    // play counts, feedback and the stats page from one address: at most 60 a minute
+    { "name": "API", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }
+  ]
 }

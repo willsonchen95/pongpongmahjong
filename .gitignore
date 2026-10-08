@@ -28,3 +28,6 @@ dist-ssr
 
 # screen recordings for testing
 screen record/
+
+# local secrets for wrangler dev
+.dev.vars
