@@ -922,6 +922,7 @@ function renderRulesPage() {
   const about = el('section', 'rules-about')
   about.append(el('h3', '', 'About this game'),
     para('Pong Pong Mahjong! is made by Wilson Chen. It’s written from scratch in TypeScript — no game engine — and runs in any browser.'),
+    para(el('strong', '', 'Any device, together:'), ' the same game runs on iPhone, Android and computers, and everyone at a table can be on a different one.'),
     para(el('strong', '', 'Online rooms'), ' run on Cloudflare: each room is its own small server that deals the tiles and checks every move, so nobody can peek at another player’s hand.'),
     para(el('strong', '', 'The bots'), ' work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.'),
     para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'),

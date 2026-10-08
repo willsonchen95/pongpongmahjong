@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- The link-preview picture (public/og-image.png, 1200×630) that LinkedIn, WhatsApp and others show
-     for the game's address. Drawn from the game's own logo, tiles and colours. To remake it, run
+<!-- The link-preview picture (public/og-image.jpg, 1200×630) that LinkedIn, WhatsApp and others show
+     for the game's address: the logo, and the real game on a laptop and a phone, mid-hand. To remake it, run
      `npm run dev` and then `node scripts/make-og-image.mjs`. -->
 <html lang="en">
   <head>
@@ -9,14 +9,28 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@900&text=%E9%BA%BB%E9%9B%80%E4%B8%AD%E7%99%BC%E6%9D%B1&display=block" />
     <style>
       html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
-      *, *::before, *::after { animation: none !important; transition: none !important; }
-      .card { box-sizing: border-box; width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; gap: 70px; padding: 0 70px; }
-      .card .menu-hero { flex: none; transform: scale(1.25); }
-      .points { display: flex; flex-direction: column; gap: 16px; max-width: 430px; }
-      .point { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 18px; border: 2px solid rgba(255, 215, 94, 0.3);
-               background: rgba(0, 0, 0, 0.28); color: #fff6d6; font-size: 1.45rem; font-weight: 700; line-height: 1.25; }
-      .point b { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #ffd75e; color: #6e1210; font-size: 1.5rem; }
-      .url { margin-top: 6px; text-align: center; color: #ffd75e; font-size: 1.3rem; font-weight: 800; letter-spacing: 0.02em; }
+      .card *, .card *::before, .card *::after { animation: none !important; transition: none !important; }
+      .card { box-sizing: border-box; width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 0 36px; }
+      .left { flex: none; width: 520px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+      .left .menu-hero { transform: scale(0.98); transform-origin: 50% 100%; }
+      .chips { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .chip { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; border: 2px solid rgba(255, 215, 94, 0.35);
+              background: rgba(0, 0, 0, 0.3); color: #fff6d6; font-size: 1.15rem; font-weight: 800; }
+      .url { color: #ffd75e; font-size: 1.3rem; font-weight: 800; letter-spacing: 0.02em; }
+      .devices { position: relative; flex: none; width: 580px; height: 520px; }
+      .screen { position: absolute; overflow: hidden; background: #6e1210; }
+      .screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
+      /* the laptop: the game at a computer's size (1280×800), shown at 0.4 */
+      .laptop { position: absolute; left: 0; top: 30px; width: 540px; }
+      .lid { position: relative; width: 540px; height: 344px; border-radius: 18px 18px 6px 6px; background: #161616; box-shadow: inset 0 0 0 2px #3a3a3a; }
+      .lid .screen { left: 14px; top: 14px; width: 512px; height: 320px; border-radius: 4px; }
+      .lid iframe { width: 1280px; height: 800px; transform: scale(0.4); }
+      .base { width: 600px; height: 18px; margin-left: -30px; border-radius: 0 0 14px 14px; background: linear-gradient(#cfcfd4, #8d8d94); box-shadow: 0 18px 30px rgba(0, 0, 0, 0.45); }
+      /* the phone in front: the game laid out at its phone width (480), shown at 0.4 */
+      .phone { position: absolute; right: -6px; top: 92px; width: 208px; height: 432px; border-radius: 32px; background: #121212;
+               box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #3a3a3a; rotate: 5deg; }
+      .phone .screen { left: 8px; top: 9px; width: 192px; height: 414px; border-radius: 25px; }
+      .phone iframe { width: 480px; height: 1035px; transform: scale(0.4); }
     </style>
   </head>
   <body>
@@ -25,6 +39,34 @@
       import '/src/style.css'
       import { el, tileEl } from '/src/ui.ts'
       import { parse } from '/src/engine.ts'
+      import { Table } from '/src/table.ts'
+
+      // A hand worth looking at: play it with four bots until it's halfway through, a few sets are
+      // down (one of them yours) and it's your turn — then hand your seat back to you and save it, so
+      // the game opens straight onto that table.
+      function stagedTable() {
+        for (let attempt = 0; attempt < 300; attempt++) {
+          const t = new Table({ rounds: 1, minFaan: 1, startPoints: 1000, bots: 'normal' }, [false, false, false, false])
+          t.newHand(); t.begin()
+          for (let i = 0; i < 4000; i++) {
+            const p = t.phase, g = t.game
+            if (p.kind === 'over') break
+            const melds = g.melds.filter(m => m.length).length
+            if (p.kind === 'turn' && p.seat === 0 && g.wall.length < 80 && g.melds[0].length && melds >= 2) {
+              t.humans[0] = true
+              return t
+            }
+            if (p.kind === 'next') t.startTurn()
+            else if (p.kind === 'discarded') t.afterDiscard()
+            else if (p.kind === 'turn') t.botMove()
+            else break
+          }
+        }
+        throw new Error('no good table found')
+      }
+      localStorage.clear()
+      localStorage.setItem('mahjong-settings', JSON.stringify({ tips: false, rounds: 1, minFaan: 1, bots: 'normal', startPoints: 1000 }))
+      localStorage.setItem('mahjong-save-v2', JSON.stringify({ table: stagedTable().toData(), wallBreak: 5, resultClosed: false, showFinal: false }))
 
       // the menu's title area (main.ts menuHero), without its entrance animation
       const hero = el('div', 'menu-hero')
@@ -36,19 +78,35 @@
       const big = el('span', 'mt-line mt-big')
       big.appendChild(el('span', 'mt-word', 'Mahjong!'))
       title.append(top, big)
-      const tagline = el('p', 'menu-tagline')
-      tagline.append(el('span', 'mt-spark', '✦'), 'Pong until you can’t Pong anymore!', el('span', 'mt-spark', '✦'))
-      hero.append(fan, title, el('div', 'menu-cn', '麻雀'), tagline)
+      hero.append(fan, title, el('div', 'menu-cn', '麻雀'))
 
-      const points = el('div', 'points')
-      for (const [icon, text] of [['🀄', 'Hong Kong mahjong, free in your browser'], ['👥', 'Play friends online with a room code'], ['🤖', 'Or practise against smart bots — even offline']]) {
-        const p = el('div', 'point')
-        p.append(el('b', '', icon), el('span', '', text))
-        points.appendChild(p)
+      const chips = el('div', 'chips')
+      for (const text of ['📱 💻 iPhone, Android & PC — no download needed', '👥 Play friends online, whatever device they have', '🤖 Or practise against smart bots, even offline'])
+        chips.appendChild(el('span', 'chip', text))
+      const left = el('div', 'left')
+      left.append(hero, chips, el('div', 'url', 'pongpongmahjong.pages.dev'))
+
+      // the real game, opened onto the saved table: `src` '/' is the computer's 3D table, '/?lite' a phone's
+      function game(src) {
+        const screen = el('div', 'screen'), frame = document.createElement('iframe')
+        frame.src = src
+        frame.onload = () => {
+          const go = () => {
+            const resume = [...frame.contentDocument.querySelectorAll('.menu-card')].find(b => b.textContent.includes('Continue game'))
+            if (resume) resume.click(); else setTimeout(go, 100)
+          }
+          go()
+        }
+        screen.appendChild(frame)
+        return screen
       }
-      points.appendChild(el('div', 'url', 'pongpongmahjong.pages.dev'))
-      document.getElementById('card').append(hero, points)
-      document.fonts.ready.then(() => document.body.setAttribute('data-ready', ''))
+      const laptop = el('div', 'laptop'), lid = el('div', 'lid'), phone = el('div', 'phone')
+      lid.appendChild(game('/'))
+      laptop.append(lid, el('div', 'base'))
+      phone.appendChild(game('/?lite'))
+      const devices = el('div', 'devices')
+      devices.append(laptop, phone)
+      document.getElementById('card').append(left, devices)
     </script>
   </body>
 </html>
