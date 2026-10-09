@@ -20,15 +20,21 @@ import {
 } from './engine'
 
 // ---------- The match ----------
-// Everyone starts with the same stack of points; each win moves points from the payers to the winner.
-// If anyone's points drop below zero they're bust and the game ends there. Before the game the table
-// agrees a minimum faan: a complete hand scoring less can't be declared.
+// Two styles. Hong Kong: everyone starts with the same stack of points; each win moves points from
+// the payers to the winner, and if anyone's points drop below zero they're bust and the game ends
+// there. Family: no points at all — a hand just has to reach the minimum faan to win, and the game
+// goes to whoever wins the most hands. Either way the table agrees a minimum faan before the game:
+// a complete hand scoring less can't be declared.
+
+// 'hk': minimum faan plus points; 'family': minimum faan only, counting hands won.
+export type Style = 'hk' | 'family'
 
 export interface Rules {
   rounds: number                       // 1 = East round only, 4 = full game
   minFaan: number                      // the agreed minimum to declare a win
-  startPoints: number                  // everyone's stack at the start
+  startPoints: number                  // the point limit: falling this far behind ends the game
   bots?: BotLevel                      // how well the bots play (older saves and rooms: normal)
+  style?: Style                        // older saves and rooms: Hong Kong
 }
 
 export interface HandResult {
@@ -42,7 +48,9 @@ export interface HandResult {
 }
 
 export interface Match extends Rules {
-  scores: number[]                     // each player's points now
+  scores: number[]                     // each player's points now (Family style: they stay at the start)
+  wins?: number[]                      // hands each player has won (older saves: missing — none counted)
+  faanWon?: number[]                   // the faan of those wins added up (Family style's tie-break)
   bust: number | null                  // who ran out of points, ending the game early
   roundWind: number                    // 0 = East round …
   dealer: number                       // who deals the next/current hand
@@ -54,7 +62,8 @@ export interface Match extends Rules {
 }
 
 export const newMatch = (r: Rules): Match => ({
-  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', scores: [0, 0, 0, 0].map(() => r.startPoints),
+  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', style: r.style ?? 'hk', scores: [0, 0, 0, 0].map(() => r.startPoints),
+  wins: [0, 0, 0, 0], faanWon: [0, 0, 0, 0],
   bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
 })
 
@@ -482,7 +491,11 @@ export class Table {
       result = { winner, from, faan: 0, limit: false, items: [], deltas: [0, 0, 0, 0], dealerStays }
     } else {
       const s = scoreHand(input)
-      result = { winner, from, ...s, deltas: settle(winner, from, s.faan), dealerStays }
+      // (Family style: nobody pays — the win is what counts)
+      result = { winner, from, ...s, deltas: m.style === 'family' ? [0, 0, 0, 0] : settle(winner, from, s.faan), dealerStays }
+      m.wins = m.wins ?? [0, 0, 0, 0]; m.faanWon = m.faanWon ?? [0, 0, 0, 0]
+      m.wins[winner]++
+      m.faanWon[winner] += s.faan
     }
     result.deltas.forEach((dlt, p) => { m.scores[p] += dlt })
     m.result = result

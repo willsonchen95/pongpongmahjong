@@ -7,7 +7,7 @@ import { music, isMuted, setMuted } from './sfx'
 
 export const fmt = (n: number) => n.toLocaleString('en-US')
 export const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
-export const points = (n: number) => (n < 0 ? `−${fmt(-n)}` : fmt(n))      // a player's balance
+export const score = (total: number, start: number) => signed(total - start)   // points won or lost: everyone starts at 0
 
 export function el(tag: string, cls = '', text = ''): HTMLElement {
   const e = document.createElement(tag)
@@ -98,12 +98,18 @@ export const lyingTile = (t: Tile, cls = '') => box('up', 1.15 * tileScale(), 1.
 
 // Icons on the main menu's cards and buttons.
 export const MENU_ICONS = {
-  play: svgIcon('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>'),
-  resume: svgIcon('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10.5 9v6l4.5-3z" fill="currentColor"/>'),
-  learn: svgIcon('<path d="M2.5 9.5 12 5l9.5 4.5L12 14z"/><path d="M6.5 11.5V16c1.5 1.5 3.5 2.2 5.5 2.2s4-.7 5.5-2.2v-4.5"/><path d="M21.5 9.5V15"/>'),
+  // a cup of tea: sit down for a game
+  play: svgIcon('<path d="M4 10h13v3a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6z"/><path d="M17 11.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8.5 3.5c-.8 1 .8 2 0 3M12.5 3.5c-.8 1 .8 2 0 3"/><path d="M3 21.5h16"/>'),
+  // an abacus: Hong Kong style, where the points are counted
+  points: svgIcon('<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 10h17"/><circle cx="8" cy="7" r="1.4" fill="currentColor"/><circle cx="12" cy="14" r="1.4" fill="currentColor"/><circle cx="16" cy="16.5" r="1.4" fill="currentColor"/><circle cx="8" cy="14" r="1.4" fill="currentColor"/>'),
+  // a bookmark: carry on where you left off
+  resume: svgIcon('<path d="M7 3.5h10v17l-5-3.6-5 3.6z"/>'),
+  // a calligraphy brush
+  learn: svgIcon('<path d="M20 4 11.5 12.5"/><path d="M11.5 12.5c-2-.6-4.2.4-4.8 2.5-.5 1.9-1.4 3.5-3.2 4 3.2 1.1 7.2.6 8.3-2.4.5-1.5.3-2.9-.3-4.1z"/>'),
   book: ICONS.book,
   install: svgIcon('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7.5M9 11.5l3 3 3-3"/><path d="M10.5 18.5h3"/>'),
-  online: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
+  // a square table with a seat on each side
+  online: svgIcon('<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3.5h4M10 20.5h4M3.5 10v4M20.5 10v4"/>'),
   feedback: svgIcon('<path d="M4 5.5h16v10H10l-4.5 4v-4H4z"/><path d="M12 8.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 10.3l2-.3z" fill="currentColor" stroke="none"/>'),
   voice: svgIcon('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
 }

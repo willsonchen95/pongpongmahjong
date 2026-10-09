@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 300 300">
+  <!-- The printed mat on the table (see .table in style.css): a plain sage field in the middle, where
+       the walls, the discards and the names are (a mid-tone, so ivory tiles stand out on it), and a
+       cream border. Each player's hand and sets lie on the border along their side, so the pictures
+       are kept to the corners, where no tiles go: a key-fret, two lotuses and a sprig of bamboo, the
+       same in every corner. A thin key-fret band runs along the very edge, outside the tiles. -->
+  <defs>
+    <!-- 回: a key-fret square -->
+    <g id="fret" fill="none" stroke="#9c8a68" stroke-width="1.3" stroke-linecap="square">
+      <rect x="0" y="0" width="24" height="24"/>
+      <path d="M5 19 V5 H19 V15 H10 V10 H14"/>
+    </g>
+    <!-- the key-fret band along the edge, one repeat every 10 -->
+    <pattern id="band" width="10" height="6" patternUnits="userSpaceOnUse">
+      <path d="M0 5.2 H2 V1 H8 V4 H5 V2.6" fill="none" stroke="#b5a37f" stroke-width="0.8"/>
+      <path d="M8 5.2 H10" stroke="#b5a37f" stroke-width="0.8"/>
+    </pattern>
+    <!-- a lotus on its pads -->
+    <g id="lotus">
+      <ellipse cx="-11" cy="5" rx="9.5" ry="3.6" fill="#a9c7b2"/>
+      <ellipse cx="11" cy="6" rx="8" ry="3.1" fill="#b9d2bf"/>
+      <path d="M-11 5 H-3 M11 6 H4" stroke="#86a993" stroke-width="0.6"/>
+      <g fill="#fbf8ef" stroke="#7a9f87" stroke-width="0.7" stroke-linejoin="round">
+        <path d="M0 -9 Q4.5 -3.5 0 2 Q-4.5 -3.5 0 -9Z" transform="rotate(-64 0 2)"/>
+        <path d="M0 -9 Q4.5 -3.5 0 2 Q-4.5 -3.5 0 -9Z" transform="rotate(64 0 2)"/>
+        <path d="M0 -10 Q5 -4 0 2 Q-5 -4 0 -10Z" transform="rotate(-32 0 2)"/>
+        <path d="M0 -10 Q5 -4 0 2 Q-5 -4 0 -10Z" transform="rotate(32 0 2)"/>
+        <path d="M0 -11 Q5 -4.5 0 2 Q-5 -4.5 0 -11Z"/>
+      </g>
+      <circle cx="0" cy="-2" r="1.2" fill="#d4b98c"/>
+    </g>
+    <!-- a sprig of bamboo -->
+    <g id="bamboo">
+      <g stroke="#7a9f87" stroke-width="1" stroke-linecap="round" fill="none">
+        <path d="M0 0 V-22 M4 0 V-16"/>
+        <path d="M-1.2 -8 H1.2 M-1.2 -16 H1.2 M2.8 -7 H5.2"/>
+      </g>
+      <g fill="#a9c7b2">
+        <path d="M0 -14 Q7 -16 12 -21 Q5 -20 0 -14Z"/>
+        <path d="M0 -19 Q-6 -22 -10 -27 Q-4 -25 0 -19Z"/>
+        <path d="M4 -10 Q10 -10 15 -13 Q9 -14 4 -10Z"/>
+      </g>
+    </g>
+    <!-- one corner (drawn as the top-left) and the edge band running from it along the top -->
+    <g id="corner">
+      <use xlink:href="#fret" x="9" y="9"/>
+      <use xlink:href="#lotus" transform="translate(48 23) scale(0.72)"/>
+      <use xlink:href="#lotus" transform="translate(23 48) rotate(-90) scale(0.72)"/>
+      <use xlink:href="#bamboo" transform="translate(44 44) rotate(-45) scale(0.6)"/>
+      <rect x="62" y="2" width="176" height="6" fill="url(#band)"/>
+    </g>
+  </defs>
+
+  <rect width="300" height="300" fill="#c2d6c6"/>
+  <!-- the border -->
+  <path d="M0 0 H300 V300 H0Z M37 37 V263 H263 V37Z" fill="#f1ebdd" fill-rule="evenodd"/>
+  <g fill="none" stroke="#b5a37f" stroke-width="0.7">
+    <rect x="1" y="1" width="298" height="298" rx="2"/>
+    <rect x="35" y="35" width="230" height="230"/>
+    <rect x="37.5" y="37.5" width="225" height="225"/>
+  </g>
+  <use xlink:href="#corner"/>
+  <use xlink:href="#corner" transform="rotate(90 150 150)"/>
+  <use xlink:href="#corner" transform="rotate(180 150 150)"/>
+  <use xlink:href="#corner" transform="rotate(270 150 150)"/>
+  <!-- a faint ring under the discards -->
+  <circle cx="150" cy="150" r="66" fill="none" stroke="#d5e3d8" stroke-width="0.8"/>
+</svg>

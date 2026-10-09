@@ -316,7 +316,9 @@ export function isConcealedKong(game: GameState, seat: number, meld: Tile[]): bo
 
 export interface SetInfo { type: 'pong' | 'chow'; tile: Tile }   // pong includes kong; tile = lowest tile
 export interface Decomposition { pair: Tile; sets: SetInfo[] }
-export interface FaanItem { name: string; faan: number }
+// `show`: which tiles earned it, for lighting them up on the result card — the whole hand, the
+// winning tile, or tiles of these kinds (`category-value`, as keyOf). None: not about tiles (No flowers).
+export interface FaanItem { name: string; faan: number; show?: 'hand' | 'win' | string[] }
 export interface ScoreInput {
   concealed: Tile[]                  // the hidden part of the winning hand, winning tile included
   melds: Tile[][]                    // exposed sets
@@ -379,25 +381,27 @@ function setPatterns(d: Decomposition, input: ScoreInput): FaanItem[] {
 
   const suits = new Set(tiles.filter(t => isSuit(t.category)).map(t => t.category))
   const hasHonours = tiles.some(t => !isSuit(t.category))
-  if (suits.size === 0) items.push({ name: 'All honours', faan: 10 })
-  else if (suits.size === 1 && !hasHonours) items.push({ name: 'Pure one suit', faan: 7 })
-  else if (suits.size === 1) items.push({ name: 'Mixed one suit', faan: 3 })
+  if (suits.size === 0) items.push({ name: 'All honours', faan: 10, show: 'hand' })
+  else if (suits.size === 1 && !hasHonours) items.push({ name: 'Pure one suit', faan: 7, show: 'hand' })
+  else if (suits.size === 1) items.push({ name: 'Mixed one suit', faan: 3, show: 'hand' })
 
-  if (sets.every(s => s.type === 'pong')) items.push({ name: 'All pongs', faan: 3 })
-  else if (sets.every(s => s.type === 'chow')) items.push({ name: 'All chi', faan: 1 })
+  if (sets.every(s => s.type === 'pong')) items.push({ name: 'All pongs', faan: 3, show: 'hand' })
+  else if (sets.every(s => s.type === 'chow')) items.push({ name: 'All chi', faan: 1, show: 'hand' })
 
   const pongsOf = (cat: Category) => sets.filter(s => s.type === 'pong' && s.tile.category === cat)
-  const dragonPongs = pongsOf('dragon').length
-  if (dragonPongs === 3) items.push({ name: 'Big three dragons', faan: 8 })
-  else if (dragonPongs === 2 && d.pair.category === 'dragon') items.push({ name: 'Small three dragons', faan: 5 })
-  else if (dragonPongs > 0) items.push({ name: dragonPongs > 1 ? `Dragon pongs ×${dragonPongs}` : 'Dragon pong', faan: dragonPongs })
+  const kinds = (ss: SetInfo[], pair?: Tile) => [...ss.map(s => keyOf(s.tile)), ...(pair ? [keyOf(pair)] : [])]
+  const dragons = pongsOf('dragon'), dragonPongs = dragons.length
+  if (dragonPongs === 3) items.push({ name: 'Big three dragons', faan: 8, show: kinds(dragons) })
+  else if (dragonPongs === 2 && d.pair.category === 'dragon') items.push({ name: 'Small three dragons', faan: 5, show: kinds(dragons, d.pair) })
+  else if (dragonPongs > 0) items.push({ name: dragonPongs > 1 ? `Dragon pongs ×${dragonPongs}` : 'Dragon pong', faan: dragonPongs, show: kinds(dragons) })
 
   const windPongs = pongsOf('wind')
-  if (windPongs.length === 4) items.push({ name: 'Big four winds', faan: 10 })
-  else if (windPongs.length === 3 && d.pair.category === 'wind') items.push({ name: 'Small four winds', faan: 8 })
+  if (windPongs.length === 4) items.push({ name: 'Big four winds', faan: 10, show: kinds(windPongs) })
+  else if (windPongs.length === 3 && d.pair.category === 'wind') items.push({ name: 'Small four winds', faan: 8, show: kinds(windPongs, d.pair) })
   else {
-    if (windPongs.some(s => s.tile.value === input.seatWind)) items.push({ name: 'Seat wind pong', faan: 1 })
-    if (windPongs.some(s => s.tile.value === input.roundWind)) items.push({ name: 'Round wind pong', faan: 1 })
+    const seat = windPongs.find(s => s.tile.value === input.seatWind), round = windPongs.find(s => s.tile.value === input.roundWind)
+    if (seat) items.push({ name: 'Seat wind pong', faan: 1, show: kinds([seat]) })
+    if (round) items.push({ name: 'Round wind pong', faan: 1, show: kinds([round]) })
   }
   return items
 }
@@ -408,29 +412,29 @@ const isConcealed = (input: { melds: Tile[][]; concealedKongs?: number }) => inp
 // Faan from flowers and seasons: none at all, your own seat's, or complete sets of four.
 function bonusItems(bonus: Tile[], seat: number): FaanItem[] {
   if (bonus.length === 0) return [{ name: 'No flowers', faan: 1 }]
-  if (bonus.length === 8) return [{ name: 'All eight flowers', faan: MAX_FAAN }]
+  if (bonus.length === 8) return [{ name: 'All eight flowers', faan: MAX_FAAN, show: bonus.map(keyOf) }]
   const items: FaanItem[] = []
   const full = (['flower', 'season'] as Category[]).filter(c => bonus.filter(t => t.category === c).length === 4)
-  if (full.length) items.push({ name: 'Flower set', faan: 2 })                // a full set replaces its own-flower faan
-  const own = bonus.filter(t => t.value === seat && !full.includes(t.category)).length
-  if (own > 0) items.push({ name: own > 1 ? `Own flowers ×${own}` : 'Own flower', faan: own })
+  if (full.length) items.push({ name: 'Flower set', faan: 2, show: bonus.filter(t => full.includes(t.category)).map(keyOf) })   // a full set replaces its own-flower faan
+  const own = bonus.filter(t => t.value === seat && !full.includes(t.category))
+  if (own.length > 0) items.push({ name: own.length > 1 ? `Own flowers ×${own.length}` : 'Own flower', faan: own.length, show: own.map(keyOf) })
   return items
 }
 
 // Score a winning hand: the faan patterns it earns (best split) and the total, capped at the limit.
 export function scoreHand(input: ScoreInput): { faan: number; items: FaanItem[]; limit: boolean } {
   const common: FaanItem[] = []
-  if (input.selfDrawn) common.push({ name: 'Self-drawn', faan: 1 })
-  if (isConcealed(input)) common.push({ name: 'Concealed hand', faan: 1 })
+  if (input.selfDrawn) common.push({ name: 'Self-drawn', faan: 1, show: 'win' })
+  if (isConcealed(input)) common.push({ name: 'Concealed hand', faan: 1, show: 'hand' })
   common.push(...bonusItems(input.bonus, input.seatWind))
-  if (input.kongReplacement) common.push({ name: 'Win on a kong', faan: 2 })
-  if (input.robbedKong) common.push({ name: 'Robbing a kong', faan: 2 })
-  if (input.lastTile) common.push({ name: 'Last tile', faan: 1 })
+  if (input.kongReplacement) common.push({ name: 'Win on a kong', faan: 2, show: 'win' })
+  if (input.robbedKong) common.push({ name: 'Robbing a kong', faan: 2, show: 'win' })
+  if (input.lastTile) common.push({ name: 'Last tile', faan: 1, show: 'win' })
 
   let best: FaanItem[] = []
   let bestTotal = -1
   if (input.melds.length === 0 && isThirteenOrphans(input.concealed)) {
-    best = [{ name: 'Thirteen orphans', faan: MAX_FAAN }]
+    best = [{ name: 'Thirteen orphans', faan: MAX_FAAN, show: 'hand' }]
     bestTotal = MAX_FAAN
   }
   for (const d of decompose(input.concealed)) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Table, type Phase } from './table'
-import { parse, makeTile, type GameState, type Tile } from './engine'
+import { parse, makeTile, planToMinimum, progressInput, type GameState, type Tile } from './engine'
 
 const RULES = { rounds: 1, minFaan: 1, startPoints: 1000 }
 const tile = (spec: string) => parse(spec)[0]
@@ -182,5 +182,41 @@ describe('two people at the table', () => {
     between.newHand(); between.begin(); playOn(between)
     between.endMatch()                                           // between hands: that hand counts
     expect(between.match.endedAfter).toBe(1)
+  })
+})
+
+describe('Family style', () => {
+  it('no points change hands; each win is counted, with its faan', () => {
+    const t = new Table({ ...RULES, style: 'family' }, [false, false, false, false])
+    for (let hand = 0; hand < 20 && !t.match.over; hand++) {
+      t.newHand(); t.begin()
+      playOn(t)
+      const r = t.match.result!
+      expect(r.deltas).toEqual([0, 0, 0, 0])
+      if (r.winner !== null) expect(t.match.wins![r.winner]).toBeGreaterThan(0)
+    }
+    expect(t.match.scores).toEqual([1000, 1000, 1000, 1000])
+    expect(t.match.bust).toBeNull()
+    const wins = t.match.wins!.reduce((a, b) => a + b, 0)
+    expect(wins).toBeGreaterThan(0)
+    expect(t.match.faanWon!.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(wins)   // minimum 1 faan a win
+  })
+})
+
+describe('Family style at the extremes of its minimum', () => {
+  it('plays whole games with a minimum of 0 or 10 without getting stuck', () => {
+    for (const minFaan of [0, 10]) {
+      const t = new Table({ ...RULES, style: 'family', minFaan }, [false, false, false, false])
+      for (let hand = 0; hand < 12 && !t.match.over; hand++) {
+        t.newHand(); t.begin()
+        playOn(t)
+        expect(t.phase.kind).toBe('over')
+        const r = t.match.result!
+        if (r.winner !== null) expect(r.faan).toBeGreaterThanOrEqual(minFaan)
+        // the hints for reaching the minimum still answer (with no plan, if none gets there)
+        const { plans } = planToMinimum(progressInput(t.game, 0), minFaan)
+        expect(Array.isArray(plans)).toBe(true)
+      }
+    }
   })
 })

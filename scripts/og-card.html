@@ -5,26 +5,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=block" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@900&text=%E9%BA%BB%E9%9B%80%E4%B8%AD%E7%99%BC%E6%9D%B1&display=block" />
     <style>
       html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+      html body { background: var(--paper); }             /* the card itself plain: the tea room is shown inside the screens */
       .card *, .card *::before, .card *::after { animation: none !important; transition: none !important; }
       .card { box-sizing: border-box; width: 1200px; height: 630px; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 0 36px; }
       .left { flex: none; width: 520px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
       .left .menu-hero { transform: scale(0.98); transform-origin: 50% 100%; }
-      /* the words under the logo: quiet, in the logo's colours, no boxes */
-      .rule { width: 84px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, transparent, #ffd75e, transparent); }
-      .lede { margin: 0; max-width: 500px; text-align: center; text-wrap: balance; color: #fff6d6; font-size: 1.45rem; font-weight: 600; line-height: 1.4;
-              text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
-      .lede b { color: #ffd75e; font-weight: 800; }
-      .url { color: rgba(255, 246, 214, 0.75); font-size: 1.2rem; font-weight: 600; }
-      .url b { color: #ffd75e; font-weight: 800; }
+      /* the words under the logo: quiet ink, in the game's colours, no boxes */
+      .rule { width: 84px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--clay), transparent); }
+      .lede { margin: 0; max-width: 500px; text-align: center; text-wrap: balance; color: var(--ink); font-size: 1.45rem; font-weight: 600; line-height: 1.4; }
+      .lede b { color: var(--jade); font-weight: 800; }
+      .url { color: var(--ink-soft); font-size: 1.2rem; font-weight: 600; }
+      .url b { color: var(--clay-text); font-weight: 800; }
       .devices { position: relative; flex: none; width: 580px; height: 520px; }
-      .screen { position: absolute; overflow: hidden; background: #6e1210; }
+      .screen { position: absolute; overflow: hidden; background: var(--paper); }
       .screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
       /* the laptop: the game at a computer's size (1280×800), shown at 0.4 */
-      .laptop { position: absolute; left: 0; top: 30px; width: 540px; filter: drop-shadow(0 20px 18px rgba(0, 0, 0, 0.45)); }
+      .laptop { position: absolute; left: 0; top: 30px; width: 540px; filter: drop-shadow(0 18px 18px rgba(60, 50, 40, 0.3)); }
       /* a screen: a thin black bezel with a camera dot */
       .lid { position: relative; width: 540px; height: 344px; border-radius: 16px; background: #0d0d0f;
              box-shadow: inset 0 0 0 1.5px #2e2e33, 0 -1px 0 1px rgba(255, 255, 255, 0.06); }
@@ -33,7 +32,7 @@
       .lid iframe { width: 1280px; height: 800px; transform: scale(0.4); }
       /* the phone in front: the game laid out at its phone width (480), shown at 0.4 */
       .phone { position: absolute; right: -6px; top: 92px; width: 208px; height: 432px; border-radius: 32px; background: #121212;
-               box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #3a3a3a; rotate: 5deg; }
+               box-shadow: 0 22px 44px rgba(60, 50, 40, 0.35), inset 0 0 0 2px #3a3a3a; rotate: 5deg; }
       .phone .screen { left: 8px; top: 9px; width: 192px; height: 414px; border-radius: 25px; }
       .phone iframe { width: 480px; height: 1035px; transform: scale(0.4); }
     </style>

@@ -228,6 +228,13 @@ describe('scoreHand', () => {
     expect(names(score('123m 456m 789m 234m 55m'))).toContain('Pure one suit')
     expect(names(score('123m 456m 789m 555z 11z'))).toContain('Mixed one suit')
   })
+  it('each pattern says which tiles earned it (for lighting them up on the result card)', () => {
+    const r = score('123m 456p 789s 555z 11s', { selfDrawn: true })
+    const show = (name: string) => r.items.find(i => i.name === name)?.show
+    expect(show('Dragon pong')).toEqual([`${parse('5z')[0].category}-${parse('5z')[0].value}`])
+    expect(show('Self-drawn')).toBe('win')
+    expect(show('Concealed hand')).toBe('hand')
+  })
   it('dragons: single pong, small and big three dragons', () => {
     expect(names(score('123m 456p 789s 555z 11s'))).toContain('Dragon pong')
     expect(names(score('123m 456p 555z 666z 77z'))).toContain('Small three dragons')
@@ -266,16 +273,16 @@ describe('scoreHand', () => {
     const flowers = [0, 1, 2, 3].map(v => makeTile('flower', v))
     const seasons = [0, 1, 2, 3].map(v => makeTile('season', v))
     const plain = '123m 456p 789s 444m 55s'
-    expect(score(plain, { bonus: flowers }).items).toContainEqual({ name: 'Flower set', faan: 2 })
+    expect(score(plain, { bonus: flowers }).items).toContainEqual(expect.objectContaining({ name: 'Flower set', faan: 2 }))
     // a full set of flowers replaces its own flower; the own season (South = 1) still counts
     expect(names(score(plain, { bonus: [...flowers, makeTile('season', 1)] }))).toEqual(['Concealed hand', 'Flower set', 'Own flower'])
     expect(score(plain, { bonus: [...flowers, ...seasons] }).faan).toBe(10)
   })
   it('special ways to win: on a kong, robbing a kong, the last tile', () => {
     const plain = '123m 456p 789s 444m 55s'
-    expect(score(plain, { selfDrawn: true, kongReplacement: true }).items).toContainEqual({ name: 'Win on a kong', faan: 2 })
-    expect(score(plain, { robbedKong: true }).items).toContainEqual({ name: 'Robbing a kong', faan: 2 })
-    expect(score(plain, { lastTile: true }).items).toContainEqual({ name: 'Last tile', faan: 1 })
+    expect(score(plain, { selfDrawn: true, kongReplacement: true }).items).toContainEqual(expect.objectContaining({ name: 'Win on a kong', faan: 2 }))
+    expect(score(plain, { robbedKong: true }).items).toContainEqual(expect.objectContaining({ name: 'Robbing a kong', faan: 2 }))
+    expect(score(plain, { lastTile: true }).items).toContainEqual(expect.objectContaining({ name: 'Last tile', faan: 1 }))
   })
 })
 

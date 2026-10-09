@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 380 1000">
+  <!-- The tea room, left of the table (see body in style.css): bamboo by the wall, and a low stand
+       with a teapot and two cups. Soft colours, so it stays in the background. -->
+  <defs>
+    <path id="leaf" d="M0 0 C10 -6 28 -6 46 0 C28 4 10 4 0 0Z"/>
+    <linearGradient id="stalk" x1="0" x2="1">
+      <stop offset="0" stop-color="#9cb9a4"/><stop offset="0.5" stop-color="#b8d0bd"/><stop offset="1" stop-color="#93b19c"/>
+    </linearGradient>
+    <linearGradient id="pot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c38c73"/><stop offset="1" stop-color="#a8705a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bamboo -->
+  <g fill="url(#stalk)">
+    <rect x="58" y="60" width="11" height="940" rx="4"/>
+    <rect x="118" y="220" width="9" height="780" rx="4"/>
+    <rect x="20" y="360" width="8" height="640" rx="4"/>
+  </g>
+  <g stroke="#86a691" stroke-width="2.2" stroke-linecap="round">
+    <path d="M57 170 h13 M57 290 h13 M57 410 h13 M57 530 h13 M57 650 h13"/>
+    <path d="M117 330 h11 M117 450 h11 M117 570 h11 M117 690 h11"/>
+    <path d="M19 470 h10 M19 590 h10 M19 710 h10"/>
+  </g>
+  <g fill="#a3c0ab">
+    <use xlink:href="#leaf" transform="translate(66 168) rotate(-28)"/>
+    <use xlink:href="#leaf" transform="translate(66 172) rotate(-6)"/>
+    <use xlink:href="#leaf" transform="translate(62 290) rotate(196)"/>
+    <use xlink:href="#leaf" transform="translate(66 292) rotate(-18)"/>
+    <use xlink:href="#leaf" transform="translate(126 330) rotate(-34)"/>
+    <use xlink:href="#leaf" transform="translate(126 334) rotate(-8)"/>
+    <use xlink:href="#leaf" transform="translate(126 336) rotate(14)"/>
+    <use xlink:href="#leaf" transform="translate(62 410) rotate(205)"/>
+    <use xlink:href="#leaf" transform="translate(24 470) rotate(-40)"/>
+    <use xlink:href="#leaf" transform="translate(124 452) rotate(-20)"/>
+  </g>
+  <g fill="#b9d1bf">
+    <use xlink:href="#leaf" transform="translate(64 60) rotate(-70) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(64 66) rotate(-110) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(68 532) rotate(10)"/>
+    <use xlink:href="#leaf" transform="translate(122 222) rotate(-80) scale(0.75)"/>
+    <use xlink:href="#leaf" transform="translate(22 362) rotate(-100) scale(0.7)"/>
+    <use xlink:href="#leaf" transform="translate(126 570) rotate(-12)"/>
+  </g>
+
+  <!-- the tea stand -->
+  <rect x="0" y="830" width="320" height="16" rx="3" fill="#b4936f"/>
+  <rect x="0" y="846" width="306" height="18" fill="#9e7d5d"/>
+  <rect x="18" y="864" width="15" height="136" fill="#8f7053"/>
+  <rect x="272" y="864" width="15" height="136" fill="#8f7053"/>
+  <rect x="33" y="930" width="239" height="8" fill="#9e7d5d"/>
+
+  <!-- steam -->
+  <g fill="none" stroke="#d3cab8" stroke-width="2.2" stroke-linecap="round">
+    <path d="M168 742 c-9 -14 9 -22 0 -36 c-9 -14 9 -22 0 -36"/>
+    <path d="M182 748 c-7 -11 7 -18 0 -29 c-7 -11 7 -18 0 -29"/>
+  </g>
+  <!-- the teapot -->
+  <path d="M206 806 Q230 800 244 772 L252 775 Q242 812 210 822Z" fill="#a8705a"/>
+  <path d="M128 786 C100 778 100 822 130 816" fill="none" stroke="#a8705a" stroke-width="8" stroke-linecap="round"/>
+  <ellipse cx="170" cy="798" rx="48" ry="33" fill="url(#pot)"/>
+  <rect x="140" y="824" width="60" height="7" rx="3" fill="#9a6450"/>
+  <ellipse cx="170" cy="767" rx="24" ry="6.5" fill="#a8705a"/>
+  <circle cx="170" cy="759" r="6.5" fill="#b17862"/>
+  <ellipse cx="152" cy="784" rx="13" ry="6" fill="#fff" opacity="0.22"/>
+  <!-- two cups -->
+  <g fill="#c6dccb" stroke="#a9c3b0" stroke-width="1.2">
+    <path d="M58 806 h34 l-5 24 h-24z"/>
+    <path d="M258 806 h34 l-5 24 h-24z"/>
+  </g>
+  <g fill="#e9f1ea" stroke="#a9c3b0" stroke-width="1.2">
+    <ellipse cx="75" cy="806" rx="17" ry="4"/>
+    <ellipse cx="275" cy="806" rx="17" ry="4"/>
+  </g>
+</svg>

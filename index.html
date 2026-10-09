@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Installable as an app: home-screen icon, full screen, red bars to match the table -->
+    <!-- Installable as an app: home-screen icon, full screen, paper-coloured bars to match the page -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <meta name="theme-color" content="#6e1210" />
+    <meta name="theme-color" content="#efe9dd" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Pong Pong" />
     <meta name="viewport" id="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- What a shared link shows (LinkedIn, WhatsApp, Facebook, X…): the picture is made by scripts/make-og-image.mjs -->
@@ -67,12 +67,10 @@
       if (matchMedia('(pointer: coarse)').matches || /[?&]lite\b/.test(location.search)) document.documentElement.classList.add('lite3d')
     </script>
     <title>Pong Pong Mahjong!</title>
-    <!-- Only the characters drawn on tile faces, so the font download stays tiny -->
+    <!-- The brush font for the tile faces, with only the characters they use, so the download stays tiny -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- The chunky display face for the game's name on the menu -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@900&text=%E4%B8%80%E4%BA%8C%E4%B8%89%E5%9B%9B%E4%BC%8D%E5%85%AD%E4%B8%83%E5%85%AB%E4%B9%9D%E8%90%AC%E6%9D%B1%E5%8D%97%E8%A5%BF%E5%8C%97%E4%B8%AD%E7%99%BC%E6%98%A5%E5%A4%8F%E7%A7%8B%E5%86%AC%E6%A2%85%E8%98%AD%E7%AB%B9%E8%8F%8A%E9%BA%BB%E9%9B%800123456789&display=block" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@700&text=%E4%B8%80%E4%BA%8C%E4%B8%89%E5%9B%9B%E4%BC%8D%E5%85%AD%E4%B8%83%E5%85%AB%E4%B9%9D%E8%90%AC%E6%9D%B1%E5%8D%97%E8%A5%BF%E5%8C%97%E4%B8%AD%E7%99%BC%E6%98%A5%E5%A4%8F%E7%A7%8B%E5%86%AC%E6%A2%85%E8%98%AD%E7%AB%B9%E8%8F%8A%E9%BA%BB%E9%9B%800123456789&display=block" />
   </head>
   <body>
     <div id="app"></div>

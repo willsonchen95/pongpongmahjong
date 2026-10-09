@@ -6,20 +6,21 @@ import {
 } from './engine'
 import { tileName } from './tiles'
 import { rulesSections } from './rules-guide'
-import { resultCard, finalCard, soleLeader, wonByRobbingIn, type ResultContext } from './result-cards'
+import { resultCard, finalCard, wonByRobbingIn, winsOf, type ResultContext } from './result-cards'
 import { TIPS, type CoachStep, type Steps } from './tips'
-import { confetti, mahjongBurst, turnGlow, notice } from './fx'
+import { mahjongBurst, turnGlow, notice } from './fx'
+import { emote, emoteArt } from './emotes'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
-import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, points, fmt, pageTitle } from './ui'
+import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, score, fmt, pageTitle } from './ui'
 import { sfx, music } from './sfx'
 import * as motion from './motion'
-import { Table, type Match, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
+import { Table, type Match, type Rules, type Style, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
 import { track } from './stats'
 import { renderFeedbackPage, quickRating } from './feedback-page'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, BUILTIN_SOUNDS, TURN_MS, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
-import { myClips, playClip, CALL_SLOTS, OWN_SLOTS, type VoiceSlot } from './voice'
-import { renderVoicePage, BUILTIN_LABELS, ownLabel } from './voice-page'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
+import { myClips, playClip, CALL_SLOTS, type VoiceSlot } from './voice'
+import { renderVoicePage } from './voice-page'
 
 // Players sit in fixed places: you at the bottom, then counter-clockwise (the turn order)
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
@@ -35,19 +36,42 @@ const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
 // file shows the table and plays the bots' moves at a pace you can follow.
 
 // What the players agree before a game; remembered for next time.
-interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number; bots: BotLevel }
+// (`minFaan` is Hong Kong style's minimum, `familyMinFaan` Family style's — each kept for next time.)
+interface Settings { rounds: number; minFaan: number; tips: boolean; startPoints: number; bots: BotLevel; style: Style; familyMinFaan: number }
 const SETTINGS_KEY = 'mahjong-settings'
+const DEFAULT_SETTINGS: Settings = { rounds: 1, minFaan: 1, tips: true, startPoints: 1000, bots: 'normal', style: 'hk', familyMinFaan: 1 }
+// Remembered settings, each checked against what the game offers now (RULE_CHOICES): one left over
+// from an older version, or garbled, falls back to its default rather than leaving a question with
+// nothing picked (or a room the server refuses).
+function cleanSettings(saved: unknown): Settings {
+  const s = (saved && typeof saved === 'object' ? saved : {}) as Partial<Record<keyof Settings, unknown>>
+  const d = DEFAULT_SETTINGS
+  const pick = <T>(list: readonly T[], x: unknown, fallback: T): T => (list.includes(x as T) ? x as T : fallback)
+  return {
+    rounds: pick(RULE_CHOICES.rounds, s.rounds, d.rounds),
+    minFaan: pick(RULE_CHOICES.minFaan, s.minFaan, d.minFaan),
+    startPoints: pick(RULE_CHOICES.startPoints, s.startPoints, d.startPoints),
+    bots: pick(RULE_CHOICES.bots, s.bots, d.bots),
+    style: pick(RULE_CHOICES.style, s.style, d.style),
+    familyMinFaan: isFamilyMinFaan(s.familyMinFaan) ? s.familyMinFaan : d.familyMinFaan,
+    tips: typeof s.tips === 'boolean' ? s.tips : d.tips,
+  }
+}
 let settings: Settings = (() => {
-  const fallback: Settings = { rounds: 1, minFaan: 1, tips: true, startPoints: 1000, bots: 'normal' }
-  try { return { ...fallback, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') } } catch { return fallback }
+  try { return cleanSettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')) } catch { return cleanSettings({}) }
 })()
+// The rules for a new game, from the settings: the minimum faan of the chosen style.
+const rulesNow = (bots: BotLevel = settings.bots): Rules => ({
+  rounds: settings.rounds, startPoints: settings.startPoints, bots, style: settings.style,
+  minFaan: settings.style === 'family' ? settings.familyMinFaan : settings.minFaan,
+})
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* storage unavailable — keep it in memory */ }
 }
 
 // You play seat 0; the other three are bots.
 const SEAT_IS_PERSON = [true, false, false, false]
-let table = new Table(settings, SEAT_IS_PERSON)
+let table = new Table(rulesNow(), SEAT_IS_PERSON)
 
 // The screen reads the table through these, refreshed from it by sync() after every change.
 let match: Match = table.match
@@ -70,11 +94,12 @@ let banners: Banner[] = []
 let winTile: Tile | null = null   // the tile that completed the winning hand (raised on the result card)
 let resultClosed = false          // the end-of-hand card was dismissed to look at the table
 let showFinal = false             // the match is over and the final standings are showing
-let celebrate = false             // confetti pending — shown once, not on every re-render
 // A win is revealed before the result card: a "Mahjong!" burst, the winner's tiles lit up on the
 // table, then (REVEAL_MS later) the card.
 const REVEAL_MS = 2200
 let revealUntil = 0               // performance.now() until which the result card waits
+let scoreRevealAt = 0             // when the result card first showed, for its score reveal (-Infinity: skipped)
+let scoreRevealFor = ''           // …and which hand's result that was
 let burst: number | null = null   // a winner whose burst is still to be shown
 let revealTimer = 0
 const revealing = () => game.over && performance.now() < revealUntil
@@ -140,7 +165,7 @@ function playEvents(events: TableEvent[] = table.takeEvents()) {
     else if (e.type === 'discard') { sfx.discard(); if (e.seat !== HUMAN) explainShortWin(e.tile) }
     else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
     else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn(); explainShortWin(null) }
-    else if (e.type === 'win') { celebrate = e.seat === HUMAN; burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sayOrPlay('win', e.seat, () => sfx.win(), () => sfx.win(false)) }
+    else if (e.type === 'win') { burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sayOrPlay('win', e.seat, () => sfx.win(), () => sfx.win(false)) }
   }
   sync()
 }
@@ -262,7 +287,7 @@ function goOnline(code: string, name: string) {
   gen++
   started = false
   intro = null
-  table = new Table(settings, SEAT_IS_PERSON)
+  table = new Table(rulesNow(), SEAT_IS_PERSON)
   sync()
   const room = new OnlineRoom(code, name)
   online = room
@@ -277,7 +302,6 @@ function goOnline(code: string, name: string) {
   room.onError = message => { onlineError = message; if (lobbyShowing()) renderLobby(); else refresh() }
   room.onConnection = () => { if (lobbyShowing()) renderLobby(); else refresh() }
   room.onReact = (seat, emoji) => { if (!lobbyShowing()) showReaction(seat, emoji) }
-  room.onSound = (seat, slot) => playSound(room, seat, slot)
   room.onClosed = host => {                           // the host left: back to the menu, saying why
     leaveRoom(false)
     void dialog('The room has closed', `${host} (the host) left the room, so the game has ended.`, [{ label: 'OK', value: true, cls: 'primary' }])
@@ -309,7 +333,7 @@ function leaveRoom(tellRoom: boolean) {
   onlineDeal = ''
   intro = null
   gen++
-  if (!loadMatch()) { table = new Table(settings, SEAT_IS_PERSON); sync() }   // back to your game against the bots, if any
+  if (!loadMatch()) { table = new Table(rulesNow(), SEAT_IS_PERSON); sync() }   // back to your game against the bots, if any
   renderMenu()
 }
 
@@ -334,7 +358,7 @@ function applyOnline(view: LocalView, events: TableEvent[]) {
   if (newDeal) {
     gen++
     sync()
-    banners = []; resultClosed = false; showFinal = false; celebrate = false
+    banners = []; resultClosed = false; showFinal = false
     inMenu = false
     void runIntro()
     return
@@ -347,7 +371,7 @@ function applyOnline(view: LocalView, events: TableEvent[]) {
   if (game.over && !resultClosed && events.some(e => e.type === 'win' || e.type === 'exhausted')) showFinal = false
   // the host ended the game: straight to the final scores (also when reconnecting afterwards)
   if (view.match.endedAfter !== undefined && (!showFinal || events.some(e => e.type === 'ended'))) {
-    showFinal = true; resultClosed = false; banners = []; celebrate = soleLeader(match) === HUMAN
+    showFinal = true; resultClosed = false; banners = []
   }
   if (inMenu && !intro) { inMenu = false; render() }
   else if (!intro) refresh()
@@ -382,7 +406,7 @@ function startMatch(bots: BotLevel = settings.bots) {
   if (online) { online.leave(); online = null; NAMES = BOT_NAMES }   // a game against the bots instead
   music.start()                                       // the Start click is the gesture browsers want before playing audio
   saveSettings()
-  table = new Table({ ...settings, bots }, SEAT_IS_PERSON)
+  table = new Table(rulesNow(bots), SEAT_IS_PERSON)
   started = true
   finishCounted = false
   track('bot-game')
@@ -395,7 +419,7 @@ function nextHand() {
   gen++
   table.newHand()
   sync()
-  banners = []; resultClosed = false; showFinal = false; celebrate = false
+  banners = []; resultClosed = false; showFinal = false
   inMenu = false
   void runIntro()
 }
@@ -521,7 +545,6 @@ function showStandings() {
   if (!online && !finishCounted && match.endedAfter === undefined) { finishCounted = true; track('bot-game-done') }
   showFinal = true
   resultClosed = false
-  celebrate = soleLeader(match) === HUMAN
   render()
 }
 
@@ -608,7 +631,7 @@ async function openPause() {
   }
   paused = true
   music.duck(true)
-  const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`
+  const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · ${match.style === 'family' ? 'Your wins' : 'Your score'} ${standingText(HUMAN)}`
   const choice = await dialog('Game paused', where, [
     { label: 'Keep playing', value: 'play', cls: 'primary' },
     { label: 'Main menu', value: 'menu', cls: '' },
@@ -637,7 +660,9 @@ function endGameNow() {
 function resumeFromPause() { paused = false; render() }
 
 function confirmEnd(): Promise<boolean> {
-  return dialog('End the game now?', 'The hand being played won’t count. The final scores are everyone’s points so far.', [
+  return dialog('End the game now?', match.style === 'family'
+    ? 'The hand being played won’t count. The final standings are the hands won so far.'
+    : 'The hand being played won’t count. The final scores are everyone’s points so far.', [
     { label: 'No, keep playing', value: false, cls: 'primary' },
     { label: 'Yes, end it', value: true, cls: 'danger' },
   ])
@@ -831,7 +856,7 @@ function menuHero(): HTMLElement {
   const hero = el('div', 'menu-hero')
   const fan = el('div', 'tile-fan')
   for (const spec of ['1p', '5z', '6z', '1s', '1z']) fan.appendChild(tileEl(parse(spec)[0], 'fan-tile'))
-  // the name as a logo: "Pong Pong" over a bigger "Mahjong!", each word bouncing in after the last
+  // the name as a logo: "Pong Pong" over a bigger "Mahjong!", each word fading in after the last
   const title = el('h1', 'menu-title')
   title.setAttribute('aria-label', 'Pong Pong Mahjong!')
   const top = el('span', 'mt-line')
@@ -839,7 +864,7 @@ function menuHero(): HTMLElement {
   title.append(top, el('span', 'mt-line mt-big', ''))
   title.lastElementChild!.appendChild(el('span', 'mt-word', 'Mahjong!'))
   const tagline = el('p', 'menu-tagline')
-  tagline.append(el('span', 'mt-spark', '✦'), 'Pong until you can’t Pong anymore!', el('span', 'mt-spark', '✦'))
+  tagline.append('Classic Hong Kong mahjong · a game of skill, played for fun')
   hero.append(fan, title, el('div', 'menu-cn', '麻雀'), tagline)
   return hero
 }
@@ -859,19 +884,19 @@ function renderMenu() {
     h.append(el('span', 'ms-title', title), el('span', 'ms-sub', sub))
     return h
   }
-  cards.appendChild(heading('Play against bots', 'On your own · works offline'))
+  cards.appendChild(heading('Play on your own', 'Computer players · works offline'))
   if (started && !match.over) {
     cards.appendChild(menuCard(MENU_ICONS.resume, 'Continue game',
-      `${SEATS[match.roundWind]} round · Hand ${match.hand} · Your points ${points(match.scores[HUMAN])}`, continueGame, 'primary'))
+      `${SEATS[match.roundWind]} round · Hand ${match.hand} · ${match.style === 'family' ? 'Your wins' : 'Your score'} ${standingText(HUMAN)}`, continueGame, 'primary'))
   }
   const fresh = !(started && !match.over)
   cards.append(
-    menuCard(MENU_ICONS.play, 'New game', 'Choose your house rules and how good the bots are', renderSetup, fresh ? 'primary' : ''),
-    menuCard(MENU_ICONS.learn, 'Learn to play', 'A guided game — friendly tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
+    menuCard(MENU_ICONS.play, 'New game', 'Play at your own pace — choose the rules', renderStylePick, fresh ? 'primary' : ''),
+    menuCard(MENU_ICONS.learn, 'Learn to play', 'A gentle guided game — tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
     heading('Play with friends', 'Online · share a room code'),
     onlineMenuCard(),
-    menuCard(MENU_ICONS.voice, 'Your voice', 'Record your own Pong!, Chi!, Kong! and soundboard sounds', () => openVoicePage(renderMenu), 'voice-card'),
+    menuCard(MENU_ICONS.voice, 'Your voice', 'Say the calls in your own voice', () => openVoicePage(renderMenu), 'voice-card'),
   )
   const extras = el('div', 'menu-extras')
   const rules = el('button', 'menu-extra')
@@ -919,7 +944,7 @@ function onlineMenuCard(): HTMLElement {
       else if (choice === 'fresh') { leaveSavedRoom(session.code); renderOnlineHome() }
     }, '', 'In a room')
   }
-  return menuCard(MENU_ICONS.online, 'Play online', 'Play with friends — create a room or join one with a code', renderOnlineHome)
+  return menuCard(MENU_ICONS.online, 'Play online', 'Gather friends at one table with a room code', renderOnlineHome)
 }
 
 // The full rules guide as its own page, opened from the menu.
@@ -946,7 +971,7 @@ function renderRulesPage() {
   body.append(intro, ...rulesSections(null), about)
   const foot = el('div', 'rules-foot')
   foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
-  const credit = el('p', 'credit', 'Music: “Chinese Harmony” by LunarBoomMusic, from Pixabay.')
+  const credit = el('p', 'credit', 'Music: “Moonlit Whispers” by kaazoom, from Pixabay.')
   page.append(head, body, foot, credit)
   app.appendChild(page)
   window.scrollTo(0, 0)
@@ -964,16 +989,36 @@ function choiceRow<T>(options: { value: T; label: string; sub: string }[], curre
   return row
 }
 
-// Before a game: agree the minimum faan to win and how long to play, like at a real table.
+// New game, first: which style — Hong Kong (minimum faan and points) or Family (minimum faan only).
+const STYLES: Record<Style, { title: string; sub: string }> = {
+  hk: { title: 'Hong Kong style', sub: 'Reach the minimum faan to win, and score points: bigger hands win more' },
+  family: { title: 'Family style', sub: 'No points — just reach the minimum faan to win. Choose any minimum you like' },
+}
+function renderStylePick() {
+  inMenu = true
+  app.innerHTML = ''
+  const page = el('div', 'setup')
+  page.append(pageTitle('New game', renderMenu, 'Back to the menu'), el('p', 'setup-intro', 'How does your table play?'))
+  const cards = el('div', 'menu-cards style-cards')
+  for (const style of ['hk', 'family'] as Style[]) {
+    cards.appendChild(menuCard(style === 'hk' ? MENU_ICONS.points : MENU_ICONS.play, STYLES[style].title, STYLES[style].sub,
+      () => { settings = { ...settings, style }; saveSettings(); renderSetup() }))
+  }
+  page.appendChild(cards)
+  app.appendChild(page)
+}
+
+// Then agree the house rules for that style, like at a real table.
 function renderSetup() {
   inMenu = true
   app.innerHTML = ''
   const card = el('div', 'setup')
-  card.append(pageTitle('New game', renderMenu, 'Back to the menu'), el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
+  card.append(pageTitle(STYLES[settings.style].title, renderStylePick, 'Back to choosing a style'),
+    el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
 
   ruleChoices(card, renderSetup, true)
   const actions = el('div', 'setup-actions')
-  actions.append(button('‹ Back', renderMenu, 'act'), button('Start game', () => void startNewIfOk(() => startMatch()), 'act primary big'))
+  actions.append(button('‹ Back', renderStylePick, 'act'), button('Start game', () => void startNewIfOk(() => startMatch()), 'act primary big'))
   card.appendChild(actions)
   app.appendChild(card)
 }
@@ -983,13 +1028,25 @@ function renderSetup() {
 function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
   const pick = (change: Partial<Settings>) => { settings = { ...settings, ...change }; saveSettings(); redraw() }
 
-  card.append(el('h2', 'setup-q', 'Minimum to win'),
-    el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. Higher makes winning harder but each win worth more.'),
-    choiceRow([
-      { value: 0, label: 'Any hand', sub: '0 faan — every finished hand wins' },
-      { value: 1, label: '1 faan', sub: 'Good for learning' },
-      { value: 3, label: '3 faan', sub: 'Hong Kong standard' },
-    ], settings.minFaan, v => pick({ minFaan: v })))
+  // (New game picks the style on its own page first; an online room asks here)
+  if (!withTips) {
+    card.append(el('h2', 'setup-q', 'Style'),
+      choiceRow((['hk', 'family'] as Style[]).map(s => ({ value: s, label: STYLES[s].title, sub: STYLES[s].sub })), settings.style, v => pick({ style: v })))
+  }
+
+  if (settings.style === 'family') {
+    card.append(el('h2', 'setup-q', 'Minimum to win'),
+      el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. There are no points — the player who wins the most hands wins the game.'),
+      faanStepper(settings.familyMinFaan, v => pick({ familyMinFaan: v })))
+  } else {
+    card.append(el('h2', 'setup-q', 'Minimum to win'),
+      el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. Higher makes winning harder but each win worth more.'),
+      choiceRow([
+        { value: 0, label: 'Any hand', sub: '0 faan — every finished hand wins' },
+        { value: 1, label: '1 faan', sub: 'Good for learning' },
+        { value: 3, label: '3 faan', sub: 'Hong Kong standard' },
+      ], settings.minFaan, v => pick({ minFaan: v })))
+  }
 
   card.append(el('h2', 'setup-q', 'How good are the bots?'),
     el('p', 'setup-help', withTips ? 'The three players at the table with you.' : 'They take any seats your friends leave empty.'),
@@ -1013,13 +1070,30 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
       ], settings.tips, v => pick({ tips: v })))
   }
 
-  card.append(el('h2', 'setup-q', 'Starting points'),
-    el('p', 'setup-help', 'Everyone starts with this many points. Winners collect from whoever pays; if anyone drops below zero the game ends early. Most points at the end wins.'),
+  if (settings.style === 'family') return                  // no points, so no point limit
+  card.append(el('h2', 'setup-q', 'Point limit'),
+    el('p', 'setup-help', 'Everyone starts at 0. Winners collect points from whoever pays; if anyone falls this far behind, the game ends early. Highest score at the end wins.'),
     choiceRow([
       { value: 1000, label: '1,000', sub: 'Lively — one big hand can end it' },
       { value: 2000, label: '2,000', sub: 'Room for a few bad hands' },
       { value: 5000, label: '5,000', sub: 'Plays to the end almost always' },
     ], settings.startPoints, v => pick({ startPoints: v })))
+}
+
+// Family style's minimum: − 3 + faan, any whole number from FAMILY_MIN_FAAN.min to .max.
+function faanStepper(value: number, onPick: (v: number) => void): HTMLElement {
+  const row = el('div', 'faan-stepper')
+  const step = (d: number, label: string) => {
+    const b = button(label, () => onPick(value + d), 'stepper-btn')
+    b.setAttribute('aria-label', d < 0 ? 'Fewer faan' : 'More faan')
+    b.toggleAttribute('disabled', value + d < FAMILY_MIN_FAAN.min || value + d > FAMILY_MIN_FAAN.max)
+    return b
+  }
+  const shown = el('div', 'stepper-value')
+  shown.append(el('strong', '', String(value)), el('span', '', ' faan'))
+  row.append(step(-1, '−'), shown, step(1, '+'),
+    el('span', 'stepper-sub', value === 0 ? 'Every finished hand wins' : `A hand needs at least ${value} faan to win`))
+  return row
 }
 
 // The "Send feedback" page (feedback-page.ts); `back` redraws the screen it was opened from.
@@ -1036,11 +1110,11 @@ function openVoicePage(back: () => void) {
   inMenu = true
   renderVoicePage(app, back, slot => online?.sendClip(slot))
 }
-// "Your voice · 2 calls and 1 sound recorded" — the way to it from the online pages.
+// "Your voice · 2 calls recorded" — the way to it from the online pages.
 function voiceLink(back: () => void): HTMLElement {
   const clips = myClips()
-  const calls = CALL_SLOTS.filter(s => clips[s]).length, own = OWN_SLOTS.filter(s => clips[s]).length
-  const made = calls + own ? `${calls} call${calls === 1 ? '' : 's'} and ${own} sound${own === 1 ? '' : 's'} recorded` : 'Shout your own Pong! — your friends hear it'
+  const calls = CALL_SLOTS.filter(s => clips[s]).length
+  const made = calls ? `${calls} call${calls === 1 ? '' : 's'} recorded` : 'Say your own Pong! — your friends hear it'
   const b = button('', () => openVoicePage(back), 'voice-link')
   b.innerHTML = MENU_ICONS.voice
   const text = el('span', 'vl-text')
@@ -1152,7 +1226,7 @@ function renderLobby() {
       ruleChoices(card, renderLobby, false)
       const actions = el('div', 'setup-actions')
       actions.append(button('Leave', leaveOnline, 'act'),
-        button('Start game', () => { track('online-game'); room.start({ rounds: settings.rounds, minFaan: settings.minFaan, startPoints: settings.startPoints, bots: settings.bots }) }, 'act primary big'))
+        button('Start game', () => { track('online-game'); room.start(rulesNow()) }, 'act primary big'))
       card.appendChild(actions)
     } else {
       const host = r.seats.find(s => s.host)
@@ -1327,7 +1401,7 @@ const flowersVisible = (seat: number) => !intro || intro.flowersShown[seat]
 // with every draw, the rack changes far less often).
 function sideParts(seat: number): HTMLElement[] {
   const w = seatWind(game, seat)
-  const labelKey = [NAMES[seat], match.scores[seat], w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current, turnDeadlineOf(seat)].join(';')
+  const labelKey = [NAMES[seat], match.scores[seat], winsOf(match, seat), w, seat === game.dealer, seat === game.winner, !game.over && seat === game.current, turnDeadlineOf(seat)].join(';')
   const rackKey = [
     tileScale(), seat === game.winner,
     seat === HUMAN ? '' : game.over ? ids(sortHand(game.hands[seat])) : handCount(seat),
@@ -1355,7 +1429,7 @@ function sideLabel(seat: number): HTMLElement {
   else if (!game.over && seat === game.current) labelCls += ' active'
   const label = el('div', labelCls)
   const w = seatWind(game, seat)
-  const name = el('div', 'wl-name', `${NAMES[seat]} · ${points(match.scores[seat])}`)
+  const name = el('div', 'wl-name', `${NAMES[seat]} · ${standingText(seat)}`)
   label.append(name, el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`))
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
   // online, the time left on their turn: beside the name, not under it — the others' labels are turned
@@ -1623,7 +1697,7 @@ function winCard(o: Offer): HTMLElement {
   const head = el('div', 'claim-head')
   head.append(el('span', '', o.robbing ? `${NAMES[o.from]} is adding this to a pong — it finishes your hand:` : `${NAMES[o.from]} threw away the tile you need:`),
     tileEl(o.tile, 'claim-tile'))
-  const win = claimButton('Mahjong!', `Win now — ${faan} faan, ${fmt(payout(faan))} points`, () => humanClaim('win'), 'win big-win')
+  const win = claimButton('Mahjong!', (match.style === 'family' ? `Win now — ${faan} faan` : `Win now — ${faan} faan, ${fmt(payout(faan))} points`), () => humanClaim('win'), 'win big-win')
   const pass = button('Not now', async () => {
     const choice = await dialog('Give up the win?', 'If you pass, this tile goes on and you keep playing for a later win. Most players take it.', [
       { label: 'Take the win', value: 'win', cls: 'primary' },
@@ -1738,7 +1812,7 @@ function bestPlanPara(): HTMLElement | null {
     p.append(item.action === 'need' ? ' — need ' : ' — throw away ')
     for (const t of item.tiles) p.appendChild(mini(t))
   }
-  p.append('. Hover over “Your hand” for more plans.')
+  p.append(matchMedia('(hover: hover)').matches ? '. Hover over “Your hand” for more plans.' : '. Tap “Your hand” for more plans.')
   return p
 }
 
@@ -1785,6 +1859,29 @@ interface Shell {
 let shell: Shell | null = null
 
 // Make `container`'s children exactly `wanted`, in order, touching only the ones that differ.
+// A player's standing, as shown by their name: points won or lost, or in Family style hands won.
+const standingText = (seat: number) => match.style === 'family'
+  ? `${winsOf(match, seat)} win${winsOf(match, seat) === 1 ? '' : 's'}`
+  : score(match.scores[seat], match.startPoints)
+
+// The end-of-hand and final cards are rebuilt on every redraw; only their first appearance fades in,
+// so a tap or an online tick doesn't make them blink.
+let endCardKey = '', endCardAt = 0
+function settled(card: HTMLElement, key: string): HTMLElement {
+  if (key !== endCardKey) { endCardKey = key; endCardAt = performance.now() }
+  else if (performance.now() - endCardAt > 500) card.classList.add('settled')
+  return card
+}
+
+// Seconds since the result card first showed (its score reveal plays from there), or Infinity — the
+// whole card at once — when the reveal was skipped or the player prefers less motion.
+function scoreRevealSince(): number {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return Infinity
+  const hand = `${match.roundWind}:${match.hand}:${match.scores.join()}`   // (the scores change with every hand)
+  if (hand !== scoreRevealFor) { scoreRevealFor = hand; scoreRevealAt = performance.now() }
+  return (performance.now() - scoreRevealAt) / 1000
+}
+
 function placeAll(container: HTMLElement, wanted: HTMLElement[]) {
   wanted.forEach((e, i) => {
     const at = container.children[i]
@@ -1832,7 +1929,7 @@ function renderTable() {
   const leftGroup = el('div', 'tb-left')
   leftGroup.appendChild(chip(ICONS.menu, 'Menu', () => void openPause()))
   if (online) {                                       // quick reactions for the others at the table
-    const react = chip('😀', null, () => toggleReactions(react), 'react-chip')
+    const react = chip(emoteArt('👍'), null, () => toggleReactions(react), 'react-chip')
     react.title = 'Send a reaction'
     leftGroup.appendChild(react)
   }
@@ -1874,7 +1971,11 @@ function renderTable() {
   const o = offer
   if (online?.away) extras.push(part('away', 'away', awayCard))
   else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
-  if (game.over && !resultClosed && !revealing()) extras.push(showFinal ? finalCard(resultContext(), finalButtons(), quickRating(() => openFeedback(() => { inMenu = false; render() }, 'game-end'))) : resultCard(resultContext(), handOverButtons()))
+  if (game.over && !resultClosed && !revealing()) {
+    const key = `${showFinal ? 'final' : 'hand'}:${match.roundWind}:${match.hand}:${match.scores.join()}:${(match.wins ?? []).join()}`
+    extras.push(settled(showFinal ? finalCard(resultContext(), finalButtons(), quickRating(() => openFeedback(() => { inMenu = false; render() }, 'game-end')))
+      : resultCard(resultContext(), handOverButtons(), scoreRevealSince(), () => { scoreRevealAt = -Infinity; render() }), key))
+  }
   if (revealing() && !revealTimer) revealTimer = window.setTimeout(() => { revealTimer = 0; refresh() }, revealUntil - performance.now() + 20)
   for (const x of sh.extras) if (!extras.includes(x)) x.remove()
   for (const x of extras) if (x.parentElement !== sh.main) sh.main.append(x)
@@ -1897,7 +1998,6 @@ function renderTable() {
     mahjongBurst(scene, burst === HUMAN ? 'You win!' : `${NAMES[burst]} wins`, burst === HUMAN)
     burst = null
   }
-  if (celebrate) { celebrate = false; main.appendChild(confetti()) }
   for (const b of banners) showBanner(b, scene)
   banners = []
   saveMatch()
@@ -1924,21 +2024,15 @@ function toggleReactions(from: HTMLElement) {
   const outside = (e: Event) => { if (!tray.contains(e.target as Node) && !from.contains(e.target as Node)) close() }
   const send = (what: string) => () => { online?.react(what); close() }
   const emojis = el('div', 'react-row'), phrases = el('div', 'phrase-grid')   // the emoji, then a few short phrases
-  for (const emoji of REACTIONS) { const b = el('button', 'react-pick', emoji); b.onclick = send(emoji); emojis.appendChild(b) }
+  for (const emoji of REACTIONS) {                   // each drawn as its little character (emotes.ts)
+    const b = el('button', 'react-pick')
+    b.append(emote(emoji) ?? emoji)
+    b.title = b.firstElementChild?.getAttribute('title') ?? ''
+    b.onclick = send(emoji)
+    emojis.appendChild(b)
+  }
   for (const text of PHRASES) { const b = el('button', 'phrase-pick', text); b.onclick = send(text); phrases.appendChild(b) }
-  // then the soundboard: the ready-made sounds, and your own recorded ones
-  const board = el('div', 'sound-grid')
-  const play = (slot: string) => () => { online?.sound(slot); close() }
-  for (const name of BUILTIN_SOUNDS) {
-    const [emoji, label] = BUILTIN_LABELS[name]
-    const b = el('button', 'sound-pick', `${emoji} ${label}`); b.onclick = play(name); board.appendChild(b)
-  }
-  for (const slot of OWN_SLOTS) {
-    if (!myClips()[slot]) continue
-    const b = el('button', 'sound-pick own', `🔊 ${ownLabel(slot)}`); b.onclick = play(slot); board.appendChild(b)
-  }
-  tray.append(emojis, phrases, el('div', 'tray-head', 'Soundboard'), board)
-  if (!OWN_SLOTS.some(s => myClips()[s])) tray.appendChild(el('p', 'tray-hint', 'Add sounds of your own on the Your voice page (in the menu).'))
+  tray.append(emojis, phrases)
   document.body.appendChild(tray)
   // under the button, kept on screen
   const r = from.getBoundingClientRect()
@@ -1947,22 +2041,14 @@ function toggleReactions(from: HTMLElement) {
   document.addEventListener('pointerdown', outside, true)
 }
 
-// Someone played a soundboard sound: play it, with a speech bubble saying what it is.
-function playSound(room: OnlineRoom, seat: number, slot: string) {
-  const builtin = BUILTIN_LABELS[slot]
-  const clip = builtin ? undefined : room.clipFor(seat, slot as VoiceSlot)
-  if (builtin) sfx.board(slot)
-  else if (clip) void playClip(clip)
-  else return
-  if (!lobbyShowing()) showReaction(seat, builtin ? builtin.join(' ') : `🔊 ${clip?.label ?? 'Sound'}`, true)
-}
-
 function showReaction(seat: number, emoji: string, bubbled = PHRASES.includes(emoji)) {
   const scene = shell?.scene
   if (!scene || !document.contains(scene)) return
   const r = scene.getBoundingClientRect()
   const [fx, fy] = BANNER_SPOT[String(seat)]
-  const bubble = el('div', 'reaction' + (bubbled ? ' phrase' : ''), emoji)   // a phrase comes in a speech bubble
+  const art = bubbled ? null : emote(emoji)
+  const bubble = el('div', 'reaction' + (bubbled ? ' phrase' : ''), art ? '' : emoji)   // a phrase comes in a speech bubble
+  if (art) bubble.appendChild(art)
   bubble.style.left = `${r.left + r.width * Math.min(0.88, Math.max(0.12, fx))}px`   // (kept clear of the screen's edges)
   bubble.style.top = `${r.top + r.height * fy}px`
   bubble.addEventListener('animationend', () => bubble.remove())
@@ -2064,6 +2150,14 @@ function loadMatch(): boolean {
   } catch { s = null }
   if (!s?.table?.match || !s.table.game?.hands || s.table.match.over) { clearSave(); return false }
   table = Table.fromData(s.table)
+  // a Hong Kong game saved with a point limit the game no longer offers (an older test version had
+  // 20/50/100): carry on with the default limit, everyone's points won or lost unchanged
+  const m = table.match
+  if (m.style !== 'family' && !(RULE_CHOICES.startPoints as readonly number[]).includes(m.startPoints)) {
+    const shift = DEFAULT_SETTINGS.startPoints - m.startPoints
+    m.scores = m.scores.map(p => p + shift)
+    m.startPoints = DEFAULT_SETTINGS.startPoints
+  }
   sync()
   wallBreak = s.wallBreak; resultClosed = s.resultClosed; showFinal = s.showFinal
   started = true

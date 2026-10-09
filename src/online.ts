@@ -9,7 +9,7 @@ import { myClips, prepare, type Clip, type VoiceSlot } from './voice'
 import { VOICE_SLOTS } from '../server/room-core'
 
 export type { SeatInfo }
-export { REACTIONS, PHRASES, TURN_MS, BUILTIN_SOUNDS } from '../server/room-core'
+export { REACTIONS, PHRASES, TURN_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan } from '../server/room-core'
 
 // Where the room server is: while developing on this computer or its home network, the local
 // `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`),
@@ -114,6 +114,7 @@ export function turnView(v: SeatView, serverNow: number): LocalView {
   const m = v.match
   const match: Match = {
     ...m, scores: rot(m.scores, me), dealer: seat(m.dealer, me), bust: seatOrNull(m.bust, me),
+    ...(m.wins ? { wins: rot(m.wins, me) } : {}), ...(m.faanWon ? { faanWon: rot(m.faanWon, me) } : {}),
     result: m.result && { ...m.result, winner: seatOrNull(m.result.winner, me), from: seatOrNull(m.result.from, me), deltas: rot(m.result.deltas, me) },
   }
   const p = v.phase
@@ -163,7 +164,6 @@ export class OnlineRoom {
   onConnection: () => void = () => {}
   onReact: (seat: number, emoji: string) => void = () => {}   // seat as on screen (you = 0)
   onClosed: (host: string) => void = () => {}               // the host left, so the room closed
-  onSound: (seat: number, slot: string) => void = () => {}  // someone played a soundboard sound (seat as on screen)
 
   constructor(code: string, name: string) {
     this.code = code
@@ -224,7 +224,6 @@ export class OnlineRoom {
         else delete this.clips[m.seat][m.slot]
       }
       else if (m.type === 'voice-need') for (const slot of m.slots) this.sendClip(slot)
-      else if (m.type === 'sound') { if (this.seat !== null) this.onSound(seat(m.seat, this.seat), m.slot) }
       else if (m.type === 'state') {
         this.view = turnView(m.view, m.now)
         this.onState(this.view, turnEvents(m.events, m.view.seat))
@@ -251,7 +250,6 @@ export class OnlineRoom {
   start(rules: Rules) { this.send({ type: 'start', rules }) }
   endGame() { this.send({ type: 'end' }) }                 // host only: everyone gets the final scores
   react(emoji: string) { this.send({ type: 'react', emoji }) }
-  sound(slot: string) { this.send({ type: 'sound', slot }) }
 
   // One of your clips, new, changed or deleted: pass it on to the room.
   sendClip(slot: VoiceSlot) {

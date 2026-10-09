@@ -1,9 +1,10 @@
 // The rules guide: how to win, the sets, taking tiles, scoring patterns and what faan are worth.
 // Shared by the in-game help panel and the "How to play" page in the menu.
 import { type Tile, makeTile, payout, MAX_FAAN } from './engine'
+import type { Style } from './table'
 import { el, tileEl, para, exampleTiles, fmt } from './ui'
 
-interface InGame { minFaan: number; startPoints: number }
+interface InGame { minFaan: number; startPoints: number; style?: Style }
 
 // The rules guide — shared by the in-game panel and the "How to play" page in the menu.
 // In a game, `inGame` carries its rules, for the reminders of its minimum faan and starting points.
@@ -69,13 +70,25 @@ const PATTERNS: { name: string; faan: string; what: string; tiles?: string; bonu
   { name: 'All eight flowers', faan: `${MAX_FAAN} (limit)`, what: 'Win holding every flower and season.' },
 ]
 
+// What a faan pattern on a result card means, in a sentence ("Dragon pongs ×2" is a Dragon pong).
+const WIND_PONGS: Record<string, string> = {
+  'Seat wind pong': 'Three of your seat’s wind.',
+  'Round wind pong': 'Three of this round’s wind.',
+}
+export function faanMeaning(name: string): string | undefined {
+  const base = name.replace(/ ×\d+$/, '')
+  return WIND_PONGS[base] ?? PATTERNS.find(p => p.name === base || p.name === base.replace(/s$/, '') || `${p.name}s` === base)?.what
+}
+
 function scoringSection(inGame: InGame | null): HTMLElement {
   const s = el('section')
-  s.append(el('h3', '', 'How to earn points'),
-    para('Every winning hand scores ', el('strong', '', 'faan'), ' for the patterns in it. Add them up — more faan, more points.'),
+  const family = inGame?.style === 'family'
+  s.append(el('h3', '', family ? 'How to score faan' : 'How to earn points'),
+    para('Every winning hand scores ', el('strong', '', 'faan'), ' for the patterns in it. Add them up',
+      family ? ' — a hand needs the agreed minimum to win.' : ' — more faan, more points.'),
     para(el('strong', 'min-note', inGame
       ? `This game: you need at least ${inGame.minFaan} faan to win.`
-      : 'Before a game you choose the minimum faan needed to win (0, 1 or 3).')))
+      : 'Before a game you choose the minimum faan needed to win: 0, 1 or 3 in Hong Kong style, any number in Family style.')))
 
   for (const pt of PATTERNS) {
     const card = el('div', 'pattern-card')
@@ -93,14 +106,22 @@ function scoringSection(inGame: InGame | null): HTMLElement {
     s.appendChild(card)
   }
 
-  // what the faan are worth
+  // what the faan are worth: points in Hong Kong style; in Family style, only the minimum matters
+  const dealer = 'The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'
+  s.appendChild(el('h3', 'sub-h', 'What faan are worth'))
+  if (inGame?.style === 'family') {
+    s.append(para('This game is ', el('strong', '', 'Family style'), ': there are no points. A hand just has to reach the minimum faan to win, and whoever wins the most hands wins the game (a tie goes to the one whose wins added up to more faan).'),
+      para(dealer))
+    return s
+  }
   const table = el('div', 'payout-table')
   for (let f = 0; f <= MAX_FAAN; f++) table.append(el('span', 'pf', `${f}`), el('span', 'pp', fmt(payout(f))))
-  s.append(el('h3', 'sub-h', 'What faan are worth'), table,
+  s.append(table,
     para('If you win on someone’s thrown-away tile, ', el('strong', '', 'they pay'), ' the full amount. If you draw it yourself, ',
       el('strong', '', 'all three pay half'), ' each.'),
-    para('Everyone starts with the same points (',
+    para('Everyone starts at 0. If anyone falls ',
       el('strong', '', inGame ? fmt(inGame.startPoints) : '1,000, 2,000 or 5,000'),
-      '). If anyone drops below zero, the game ends early. The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'))
+      ' points behind, the game ends early. ', dealer))
+  if (!inGame) s.appendChild(para('That’s ', el('strong', '', 'Hong Kong style'), '. In ', el('strong', '', 'Family style'), ' (chosen in New game) there are no points at all: reach the minimum faan to win, and the most hands won wins the game.'))
   return s
 }

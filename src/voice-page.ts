@@ -1,20 +1,13 @@
-// The "Your voice" page: record your own Pong!, Chi!, Kong! and Mahjong!, and three sounds of your own
-// for the soundboard, then hear them back. (Recording, storing and playing are in voice.ts.)
+// The "Your voice" page: record your own Pong!, Chi!, Kong! and Mahjong!, then hear them back. (Recording, storing and playing are in voice.ts.)
 
 import { el, button, pageTitle } from './ui'
 import { sfx, isMuted } from './sfx'
-import { BUILTIN_SOUNDS } from '../server/room-core'
 import {
-  CALL_SLOTS, OWN_SLOTS, MAX_SECONDS, myClips, saveClip, renameClip, clipSeconds, canRecord, startRecording, playClip,
+  CALL_SLOTS, MAX_SECONDS, myClips, saveClip, clipSeconds, canRecord, startRecording, playClip,
   type Recording, type VoiceSlot,
 } from './voice'
 
 export const CALL_LABELS: Record<string, string> = { pong: 'Pong!', chow: 'Chi!', kong: 'Kong!', win: 'Mahjong!' }
-// the soundboard's ready-made sounds: [emoji, name]
-export const BUILTIN_LABELS: Record<string, [string, string]> = {
-  horn: ['📯', 'Air horn'], drum: ['🥁', 'Ba-dum-tss'], trombone: ['🎺', 'Sad trombone'], clap: ['👏', 'Applause'],
-}
-export const ownLabel = (slot: VoiceSlot) => myClips()[slot]?.label || `Sound ${OWN_SLOTS.indexOf(slot as typeof OWN_SLOTS[number]) + 1}`
 
 let recording: { slot: VoiceSlot; rec: Recording } | null = null
 let message = ''
@@ -27,7 +20,7 @@ export function renderVoicePage(app: HTMLElement, back: () => void, changed: (sl
   app.innerHTML = ''
   const card = el('div', 'setup voice-page')
   card.append(pageTitle('Your voice', leave, 'Back'),
-    el('p', 'setup-intro', 'Record yourself and your friends hear you! Shout your own Pong!, Chi!, Kong! and Mahjong!, and make three sounds for the soundboard (the 😀 button in an online game). Each clip is up to 2½ seconds.'))
+    el('p', 'setup-intro', 'Record yourself and your friends hear you! Say your own Pong!, Chi!, Kong! and Mahjong! for your friends to hear in online games. Each clip is up to 2½ seconds.'))
   if (!canRecord()) {
     card.appendChild(el('p', 'form-message', 'Recording needs the game opened from its web address (https://pongpongmahjong.pages.dev) in a browser that can use the microphone.'))
   }
@@ -60,8 +53,6 @@ export function renderVoicePage(app: HTMLElement, back: () => void, changed: (sl
       recording = null
       const clip = await was.rec.stop()
       if (!clip) { message = 'Didn’t hear anything — try again, a bit closer to the microphone.'; return redraw() }
-      const typed = name instanceof HTMLInputElement && was.slot === slot ? name.value.trim() : ''
-      if (typed || myClips()[was.slot]?.label) clip.label = (typed || myClips()[was.slot]?.label)!.slice(0, 16)
       message = saveClip(was.slot, clip) ? '' : 'Couldn’t save it — this phone is out of space for the game.'
       if (!message) { changed(was.slot); void playClip(clip) }
       return redraw()
@@ -83,32 +74,11 @@ export function renderVoicePage(app: HTMLElement, back: () => void, changed: (sl
     }
   }
 
-  card.appendChild(el('h2', 'setup-q', 'Your calls'))
+  card.appendChild(el('h2', 'setup-q plain', 'Your calls'))
   const calls = el('div', 'voice-list')
   for (const slot of CALL_SLOTS) calls.appendChild(row(slot, el('span', 'voice-name', CALL_LABELS[slot]),
     () => (slot === 'win' ? sfx.win() : sfx.call(CALL_LABELS[slot]))))
   card.appendChild(calls)
-
-  card.append(el('h2', 'setup-q', 'Your soundboard'),
-    el('p', 'setup-help', 'Give each sound a name — it’s what your friends see when you play it.'))
-  const own = el('div', 'voice-list')
-  for (const slot of OWN_SLOTS) {
-    const input = el('input', 'text-input voice-label') as HTMLInputElement
-    input.maxLength = 16
-    input.placeholder = `Sound ${OWN_SLOTS.indexOf(slot) + 1}`
-    input.value = myClips()[slot]?.label ?? ''
-    input.onchange = () => { if (renameClip(slot, input.value)) changed(slot) }
-    own.appendChild(row(slot, input, null))
-  }
-  card.appendChild(own)
-
-  card.append(el('h2', 'setup-q', 'Ready-made sounds'), el('p', 'setup-help', 'Everyone has these on the soundboard too.'))
-  const builtins = el('div', 'voice-builtins')
-  for (const name of BUILTIN_SOUNDS) {
-    const [emoji, label] = BUILTIN_LABELS[name]
-    builtins.appendChild(button(`${emoji} ${label}`, () => sfx.board(name), 'act'))
-  }
-  card.appendChild(builtins)
 
   const actions = el('div', 'setup-actions')
   actions.append(button('‹ Back', leave, 'act'))

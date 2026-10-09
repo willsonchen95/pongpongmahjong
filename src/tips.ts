@@ -31,7 +31,7 @@ export const TIPS = {
           ? 'Tap the tile you need least to lift it, then tap it again to throw it away.'
           : 'Tap the tile you need least to throw it away.'] },
       { target: '.hm-total', title: 'Your hand’s score',
-        body: ['This shows the faan (points) your hand already has.', 'Hover over it — or tap it — to see what you have and what to aim for next.'] },
+        body: ['This shows the faan your hand already has.', 'Hover over it — or tap it — to see what you have and what to aim for next.'] },
       { target: '.status-pill', title: 'What’s happening',
         body: ['This tells you whose turn it is. It glows gold whenever it’s your move.'] },
       { target: '.rules-chip', title: 'The rule book',
@@ -58,7 +58,7 @@ export const TIPS = {
   }],
   result: (): CoachStep[] => [{
     target: '.result-cols', title: 'How the hand scored',
-    body: ['The winner scores faan for the patterns in their hand — more faan, more points.',
-      'Whoever threw the winning tile pays. If the winner drew it themselves, all three others pay.'],
+    body: ['The winner scores faan for the patterns in their hand. Tap a pattern to see which tiles earned it.',
+      'In Hong Kong style, whoever threw the winning tile pays; if the winner drew it themselves, all three others pay.'],
   }],
 }

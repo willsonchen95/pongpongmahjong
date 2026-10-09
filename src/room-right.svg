@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 1000">
+  <!-- The tea room, right of the table (see body in style.css): a round moon window looking out on
+       misty hills, a plum branch across it, and a celadon vase on the floor. -->
+  <defs>
+    <clipPath id="moon"><circle cx="220" cy="330" r="132"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f3ea"/><stop offset="1" stop-color="#ebe3d2"/>
+    </linearGradient>
+    <linearGradient id="vase" x1="0" x2="1">
+      <stop offset="0" stop-color="#b3cfba"/><stop offset="0.45" stop-color="#cfe2d3"/><stop offset="1" stop-color="#a7c6b0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- the moon window -->
+  <g clip-path="url(#moon)">
+    <rect x="80" y="190" width="290" height="290" fill="url(#sky)"/>
+    <path d="M80 380 Q130 330 170 360 Q210 310 260 352 Q300 320 370 368 V480 H80Z" fill="#dcd5c3"/>
+    <path d="M80 420 Q140 380 200 410 Q260 378 370 418 V480 H80Z" fill="#cfd9cc"/>
+    <circle cx="282" cy="262" r="16" fill="#f1e6d4"/>
+    <g stroke="#bba886" stroke-width="3" fill="none">
+      <path d="M176 190 V470 M264 190 V470 M80 286 H370 M80 374 H370"/>
+      <rect x="198" y="308" width="44" height="44"/>
+    </g>
+  </g>
+  <circle cx="220" cy="330" r="139" fill="none" stroke="#a58a6c" stroke-width="14"/>
+  <circle cx="220" cy="330" r="148" fill="none" stroke="#c7b597" stroke-width="2"/>
+
+  <!-- a plum branch -->
+  <g fill="none" stroke="#8a6f5a" stroke-linecap="round">
+    <path d="M380 30 C330 60 300 70 262 112 C236 140 214 150 180 160" stroke-width="6"/>
+    <path d="M300 74 C296 116 274 150 262 200" stroke-width="4"/>
+    <path d="M240 128 C226 112 206 104 188 108" stroke-width="3"/>
+    <path d="M276 160 C292 176 300 196 318 206" stroke-width="3"/>
+  </g>
+  <g fill="#e4bcb2">
+    <circle cx="180" cy="160" r="7"/><circle cx="214" cy="146" r="6"/><circle cx="188" cy="108" r="6.5"/>
+    <circle cx="262" cy="200" r="7"/><circle cx="318" cy="206" r="6"/><circle cx="296" cy="112" r="6.5"/>
+    <circle cx="242" cy="124" r="5"/><circle cx="340" cy="56" r="6"/><circle cx="282" cy="170" r="5"/>
+  </g>
+  <g fill="#c98f84">
+    <circle cx="180" cy="160" r="2.2"/><circle cx="214" cy="146" r="2"/><circle cx="188" cy="108" r="2"/>
+    <circle cx="262" cy="200" r="2.2"/><circle cx="318" cy="206" r="2"/><circle cx="296" cy="112" r="2"/>
+    <circle cx="340" cy="56" r="2"/>
+  </g>
+
+  <!-- a celadon vase of willow on the floor -->
+  <g fill="none" stroke="#8a7a5e" stroke-width="2" stroke-linecap="round">
+    <path d="M250 820 C246 740 230 690 196 640"/>
+    <path d="M256 820 C260 730 272 690 300 650"/>
+    <path d="M253 820 C252 760 254 700 250 610"/>
+  </g>
+  <g fill="#c9d8c3">
+    <ellipse cx="210" cy="660" rx="4" ry="8" transform="rotate(-30 210 660)"/>
+    <ellipse cx="226" cy="700" rx="4" ry="8" transform="rotate(-25 226 700)"/>
+    <ellipse cx="290" cy="664" rx="4" ry="8" transform="rotate(30 290 664)"/>
+    <ellipse cx="275" cy="700" rx="4" ry="8" transform="rotate(25 275 700)"/>
+    <ellipse cx="251" cy="630" rx="4" ry="8"/>
+    <ellipse cx="253" cy="680" rx="4" ry="8"/>
+  </g>
+  <path d="M236 812 h34 c0 18 22 30 22 76 c0 40 -18 60 -39 60 c-21 0 -39 -20 -39 -60 c0 -46 22 -58 22 -76z" fill="url(#vase)"/>
+  <path d="M232 808 h42 v8 h-42z" fill="#a7c6b0"/>
+  <ellipse cx="253" cy="948" rx="52" ry="8" fill="#ddd4c3"/>
+  <rect x="190" y="948" width="126" height="12" rx="3" fill="#a58a6c"/>
+</svg>

@@ -369,6 +369,10 @@ describe('what players send is checked', () => {
   it('the host can only pick rules the game offers', () => {
     expect(cleanRules({ rounds: 4, minFaan: 3, startPoints: 5000, bots: 'hard' })).toEqual({ rounds: 4, minFaan: 3, startPoints: 5000, bots: 'hard' })
     expect(cleanRules({ rounds: 1, minFaan: 0, startPoints: 1000, extra: 'x'.repeat(100) })).toEqual({ rounds: 1, minFaan: 0, startPoints: 1000 })
+    expect(cleanRules({ rounds: 1, minFaan: 5, startPoints: 1000, style: 'family' })).toEqual({ rounds: 1, minFaan: 5, startPoints: 1000, style: 'family' })
+    expect(cleanRules({ rounds: 1, minFaan: 5, startPoints: 1000 })).toBeNull()                     // 5 is only for Family style
+    expect(cleanRules({ rounds: 1, minFaan: 11, startPoints: 1000, style: 'family' })).toBeNull()
+    expect(cleanRules({ rounds: 1, minFaan: 1, startPoints: 1000, style: 'party' })).toBeNull()
     for (const bad of [null, 'x', { ...RULES, rounds: 1e9 }, { ...RULES, minFaan: 99 }, { ...RULES, startPoints: -5 }, { ...RULES, bots: 'evil' }])
       expect(cleanRules(bad)).toBeNull()
     const room = new RoomCore(newRoom('ABCD', RULES))

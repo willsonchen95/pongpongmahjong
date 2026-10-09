@@ -116,13 +116,30 @@ function cleanClip(c: unknown): Clip | null {
 }
 const isSlot = (x: unknown): x is VoiceSlot => (VOICE_SLOTS as readonly unknown[]).includes(x)
 
+// The house rules the game offers — the New game screen shows exactly these, and a room (or a
+// player's remembered settings) with anything else isn't accepted.
+export const RULE_CHOICES = {
+  rounds: [1, 4],                                         // the East round only, or all four
+  minFaan: [0, 1, 3],                                     // Hong Kong style's minimum
+  startPoints: [1000, 2000, 5000],                        // Hong Kong style's point limit
+  bots: ['easy', 'normal', 'hard'],
+  style: ['hk', 'family'],
+} as const
+// Family style's minimum faan: any whole number in this range.
+export const FAMILY_MIN_FAAN = { min: 0, max: 10 }
+export const isFamilyMinFaan = (n: unknown): n is number =>
+  Number.isInteger(n) && (n as number) >= FAMILY_MIN_FAAN.min && (n as number) <= FAMILY_MIN_FAAN.max
+const offered = <T>(list: readonly T[], x: unknown): x is T => list.includes(x as T)
+
 // The host's rules, kept to what the game offers (anything else is refused).
 export function cleanRules(r: unknown): Rules | null {
   if (!r || typeof r !== 'object') return null
-  const { rounds, minFaan, startPoints, bots } = r as Rules
-  if (![1, 4].includes(rounds) || ![0, 1, 3].includes(minFaan) || ![1000, 2000, 5000].includes(startPoints)) return null
-  if (bots !== undefined && !['easy', 'normal', 'hard'].includes(bots)) return null
-  return bots ? { rounds, minFaan, startPoints, bots } : { rounds, minFaan, startPoints }
+  const { rounds, minFaan, startPoints, bots, style } = r as Rules
+  if (style !== undefined && !offered(RULE_CHOICES.style, style)) return null
+  const minOk = style === 'family' ? isFamilyMinFaan(minFaan) : offered(RULE_CHOICES.minFaan, minFaan)
+  if (!offered(RULE_CHOICES.rounds, rounds) || !minOk || !offered(RULE_CHOICES.startPoints, startPoints)) return null
+  if (bots !== undefined && !offered(RULE_CHOICES.bots, bots)) return null
+  return { rounds, minFaan, startPoints, ...(bots ? { bots } : {}), ...(style ? { style } : {}) }
 }
 
 // An answer to a tile on offer: one of the known kinds, and for a chow, the three tile ids it uses.

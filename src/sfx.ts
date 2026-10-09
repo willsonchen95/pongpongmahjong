@@ -1,4 +1,6 @@
 // Game sounds, synthesised with Web Audio (no audio files), plus spoken calls via speech synthesis.
+// Kept calm, like a quiet tea house: soft wooden taps, and the calls spoken gently in Chinese where
+// the device has a Chinese voice.
 // The audio context starts on the first user click (browsers block sound before that).
 
 const MUTE_KEY = 'mahjong-muted'
@@ -57,58 +59,79 @@ function tone(a: AudioContext, at: number, freq: number, length: number, gain: n
   osc.start(at); osc.stop(at + length + 0.02)
 }
 
-// A tone that slides from one pitch to another (a drum's thud drops in pitch as it fades).
-function slide(a: AudioContext, at: number, from: number, to: number, length: number, gain: number, type: OscillatorType = 'sine') {
-  const osc = a.createOscillator(); osc.type = type
-  osc.frequency.setValueAtTime(from, at)
-  osc.frequency.exponentialRampToValueAtTime(to, at + length)
-  const g = a.createGain()
-  g.gain.setValueAtTime(gain, at)
-  g.gain.exponentialRampToValueAtTime(0.0001, at + length)
-  osc.connect(g).connect(a.destination)
-  osc.start(at); osc.stop(at + length + 0.02)
-}
-
-// A brassy note: buzzy waves through a filter that opens and closes ("wah"), with a wobble if held.
-function brass(a: AudioContext, at: number, freqs: number[], length: number, gain: number, wobble = 0) {
-  const filter = a.createBiquadFilter(); filter.type = 'lowpass'; filter.Q.value = 4
-  filter.frequency.setValueAtTime(400, at)
-  filter.frequency.linearRampToValueAtTime(2200, at + 0.08)
-  filter.frequency.linearRampToValueAtTime(900, at + length)
-  const g = a.createGain()
-  g.gain.setValueAtTime(0.0001, at)
-  g.gain.exponentialRampToValueAtTime(gain, at + 0.04)
-  g.gain.setValueAtTime(gain, at + length - 0.08)
-  g.gain.exponentialRampToValueAtTime(0.0001, at + length)
-  filter.connect(g).connect(a.destination)
-  for (const f of freqs) {
-    const osc = a.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = f
-    if (wobble) {
-      const lfo = a.createOscillator(); lfo.frequency.value = 5.5
-      const depth = a.createGain(); depth.gain.value = wobble
-      lfo.connect(depth).connect(osc.frequency)
-      lfo.start(at); lfo.stop(at + length + 0.02)
-    }
-    osc.connect(filter)
+// A plucked string, a little like a guzheng: a few harmonics through a filter that closes as the
+// note dies away, starting a touch sharp and settling onto the pitch.
+function pluck(a: AudioContext, at: number, freq: number, length: number, gain: number) {
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7
+  lp.frequency.setValueAtTime(freq * 6, at)
+  lp.frequency.exponentialRampToValueAtTime(freq * 1.5, at + length)
+  const out = a.createGain()
+  out.gain.setValueAtTime(0.0001, at)
+  out.gain.exponentialRampToValueAtTime(gain, at + 0.006)
+  out.gain.exponentialRampToValueAtTime(0.0001, at + length)
+  lp.connect(out).connect(a.destination)
+  for (const [h, level] of [[1, 1], [2, 0.45], [3, 0.18]]) {
+    const osc = a.createOscillator(); osc.type = h === 1 ? 'triangle' : 'sine'
+    osc.frequency.setValueAtTime(freq * h * 1.006, at)
+    osc.frequency.exponentialRampToValueAtTime(freq * h, at + 0.08)
+    const g = a.createGain(); g.gain.value = level
+    osc.connect(g).connect(lp)
     osc.start(at); osc.stop(at + length + 0.02)
   }
+}
+
+// Notes of the five-note (pentatonic) scale on G, for the win.
+const G4 = 392, A4 = 440, B4 = 494, D5 = 587, E5 = 659, G5 = 784
+
+// ---------- Spoken calls ----------
+// Said by a woman's voice in Cantonese where the device has one (it's Hong Kong mahjong), else in
+// Mandarin, else in English as written. Chi is always Mandarin 吃 ("chī", as Google Translate says
+// it) — the Cantonese for it doesn't sound like "chi" at all. Speech voices don't say whether
+// they're a man or a woman, so the known men's voices are skipped by name.
+const CHINESE_CALLS: Record<string, { yue?: string; zh: string }> = {
+  'Pong!': { yue: '碰', zh: '碰' },
+  'Chi!': { zh: '吃' },                                   // Mandarin only (see above)
+  'Kong!': { yue: '槓', zh: '槓' },
+  'Mahjong!': { yue: '食糊', zh: '胡了' },
+}
+const MEN = /danny|kangkang|yunxi|yunjian|yunyang|yunhao|yunze|wanlung|zhiwei|male/i
+
+let cantonese: SpeechSynthesisVoice | null = null
+let mandarin: SpeechSynthesisVoice | null = null
+const langOf = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-')
+const isCantonese = (v: SpeechSynthesisVoice) => langOf(v) === 'zh-hk' || langOf(v).startsWith('yue')
+function pickVoices() {
+  const women = speechSynthesis.getVoices().filter(v => !MEN.test(v.name))
+  cantonese = women.find(isCantonese) ?? null
+  // mainland Mandarin first: on Chrome that's Google's own voice, the one Google Translate uses
+  mandarin = women.find(v => langOf(v) === 'zh-cn') ?? women.find(v => langOf(v) === 'zh-tw')
+    ?? women.find(v => langOf(v).startsWith('zh') && !isCantonese(v)) ?? null
+}
+if (typeof speechSynthesis !== 'undefined') {
+  pickVoices()
+  speechSynthesis.addEventListener?.('voiceschanged', pickVoices)   // (some browsers load them late)
 }
 
 function say(word: string) {
   if (muted || document.hidden || typeof speechSynthesis === 'undefined') return
   speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(word)
-  u.rate = 1.1; u.pitch = 1.1; u.volume = 0.9
+  const chinese = CHINESE_CALLS[word]
+  const [text, voice] = chinese?.yue && cantonese ? [chinese.yue, cantonese]
+    : chinese && mandarin ? [chinese.zh, mandarin]
+    : [word, null]
+  const u = new SpeechSynthesisUtterance(text)
+  if (voice) { u.voice = voice; u.lang = voice.lang }
+  u.rate = 0.85; u.pitch = 1; u.volume = 0.75                     // unhurried and soft
   speechSynthesis.speak(u)
 }
 
 // ---------- Background music ----------
-// "Chinese Harmony" by LunarBoomMusic (Pixabay Content License — free to use in the game, no
+// "Moonlit Whispers" by kaazoom (Pixabay Content License — free to use in the game, no
 // attribution required; we credit it on the How to play page). Quiet and looping; it fades in and
 // out rather than cutting, and dips further while a tip or result card is up. Its on/off setting is
 // separate from the sound effects.
 
-const MUSIC_SRC = 'music/lunarboommusic-chinese-harmony-564699.mp3'
+const MUSIC_SRC = 'music/kaazoom-moonlit-whispers-353045.mp3'
 const MUSIC_KEY = 'mahjong-music-off'
 const MUSIC_VOLUME = 0.22
 const DUCKED_VOLUME = 0.07
@@ -201,18 +224,18 @@ export const music = {
 }
 
 export const sfx = {
-  // a tile slapped down on the table: bright click + low thump
+  // a tile set down on the cloth: a soft wooden tok (a little different each time, like real tiles)
   discard() {
     const a = audio(); if (!a) return
-    const t = a.currentTime
-    knock(a, t, 2600, 1.2, 0.9, 0.07)
-    knock(a, t + 0.012, 1400, 2, 0.35, 0.05)
-    tone(a, t, 170, 0.08, 0.25)
+    const t = a.currentTime, v = 0.9 + Math.random() * 0.2
+    knock(a, t, 1150 * v, 1.1, 0.3, 0.05)
+    knock(a, t, 520 * v, 0.8, 0.22, 0.06, 'lowpass')
+    tone(a, t, 150 * v, 0.07, 0.07)
   },
-  // a tile slid off the wall: softer, higher click (quieter for the bots)
+  // a tile slid off the wall: a quieter, lighter tap (quieter still for the others)
   draw(quiet = false) {
     const a = audio(); if (!a) return
-    knock(a, a.currentTime, 4200, 1.5, quiet ? 0.12 : 0.35, 0.04)
+    knock(a, a.currentTime, 2300, 1.2, quiet ? 0.05 : 0.14, 0.035)
   },
   // pong / chow / kong: a two-note chime and the word spoken aloud (not when the player's own
   // recorded voice says it instead)
@@ -224,24 +247,24 @@ export const sfx = {
     tone(a, t + 0.09, 990, 0.35, 0.18, 'triangle')
     if (spoken) say(word)
   },
-  // dice rattling in the hand, then landing on the table
+  // dice rattling in the hand, then landing on the cloth
   dice() {
     const a = audio(); if (!a) return
     const t = a.currentTime
-    for (let i = 0; i < 9; i++) knock(a, t + i * 0.07 + Math.random() * 0.03, 3200 + Math.random() * 1600, 2, 0.18, 0.03)
-    for (let i = 0; i < 3; i++) knock(a, t + 0.85 + i * 0.09, 1800, 1.5, 0.5, 0.05)
+    for (let i = 0; i < 9; i++) knock(a, t + i * 0.07 + Math.random() * 0.03, 2200 + Math.random() * 900, 2, 0.08, 0.03)
+    for (let i = 0; i < 3; i++) knock(a, t + 0.85 + i * 0.09, 1100, 1.2, 0.2 - i * 0.05, 0.05)
   },
-  // a clock's tick while your time runs out (tock on alternate ticks; urgent = higher and louder)
+  // a soft wooden tick while your time runs out (tock on alternate ticks; urgent = a little clearer)
   tick(tock = false, urgent = false) {
     const a = audio(); if (!a) return
     const t = a.currentTime
-    knock(a, t, tock ? 1900 : 2600, 6, urgent ? 0.5 : 0.3, 0.03)
-    tone(a, t, tock ? 880 : 1175, 0.05, urgent ? 0.07 : 0.04, 'square')
+    knock(a, t, tock ? 1300 : 1700, 5, urgent ? 0.26 : 0.15, 0.03)
+    if (urgent) tone(a, t, tock ? 587 : 784, 0.08, 0.025)
   },
   // a small batch of tiles slid across to a player
   deal() {
     const a = audio(); if (!a) return
-    knock(a, a.currentTime, 3000, 1.4, 0.16, 0.05)
+    knock(a, a.currentTime, 1900, 1.2, 0.08, 0.05)
   },
   // a flower or season turned up: a light bell
   flower() {
@@ -257,32 +280,12 @@ export const sfx = {
     tone(a, t, 784, 0.35, 0.12)
     tone(a, t + 0.14, 1175, 0.5, 0.12)
   },
+  // a win: a slow run up the scale, like a hand drawn across guzheng strings, settling on a low note
   win(spoken = true) {
     const a = audio(); if (!a) return
     const t = a.currentTime
-    ;[523, 659, 784, 1047].forEach((f, i) => tone(a, t + i * 0.11, f, 0.6, 0.2, 'triangle'))
+    ;[G4, A4, B4, D5, E5, G5].forEach((f, i) => pluck(a, t + i * 0.13, f, 1.4, 0.11))
+    pluck(a, t + 0.85, G4 / 2, 2.2, 0.12)
     if (spoken) say('Mahjong!')
-  },
-  // the soundboard's ready-made sounds (see BUILTIN_SOUNDS)
-  board(name: string) {
-    const a = audio(); if (!a) return
-    const t = a.currentTime
-    if (name === 'horn') {                             // air horn: honk, honk, hoooonk
-      ;[[0, 0.16], [0.22, 0.16], [0.44, 0.75]].forEach(([at, len]) => brass(a, t + at, [466, 470, 587], len, 0.09))
-    } else if (name === 'drum') {                      // ba-dum-tss
-      slide(a, t, 190, 110, 0.18, 0.5)
-      knock(a, t, 900, 1, 0.25, 0.05)
-      slide(a, t + 0.17, 150, 85, 0.22, 0.5)
-      knock(a, t + 0.17, 700, 1, 0.25, 0.05)
-      knock(a, t + 0.45, 7500, 0.7, 0.55, 1.1, 'highpass')
-    } else if (name === 'trombone') {                  // sad trombone: wah, wah, wah, waaaah
-      ;[[0, 294, 0.38], [0.42, 277, 0.38], [0.84, 262, 0.38], [1.26, 247, 1.2]].forEach(([at, f, len], i) =>
-        brass(a, t + at, [f, f * 1.003], len, 0.11, i === 3 ? 7 : 0))
-    } else if (name === 'clap') {                      // applause: lots of claps, dying away
-      for (let i = 0; i < 70; i++) {
-        const at = Math.random() ** 1.6 * 1.8
-        knock(a, t + at, 1100 + Math.random() * 1500, 1.4, 0.35 * (1 - at / 2.2), 0.03)
-      }
-    }
   },
 }

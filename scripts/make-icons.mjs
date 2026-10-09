@@ -1,4 +1,4 @@
-// Draws the app icon (a 中 tile on red lacquer) and writes the PNGs the install manifest needs.
+// Draws the app icon (a 中 tile on a jade cloth) and writes the PNGs the install manifest needs.
 // Run with `node scripts/make-icons.mjs` after changing the drawing; the results are committed.
 // The 中 is drawn with shapes, not a font, so it looks the same on every computer.
 import sharp from 'sharp'
@@ -14,13 +14,13 @@ function iconSvg(scale = 1, rounded = false) {
   const [vx, vy] = u(0.5 - 0.06, 0.16)
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="30%" r="80%"><stop offset="0" stop-color="#b52a25"/><stop offset="1" stop-color="#6e1210"/></radialGradient>
+    <radialGradient id="bg" cx="50%" cy="30%" r="80%"><stop offset="0" stop-color="#7ea694"/><stop offset="1" stop-color="#4f7a67"/></radialGradient>
     <linearGradient id="face" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ece8dc"/></linearGradient>
   </defs>
   <rect width="${s}" height="${s}" rx="${rounded ? 112 : 0}" fill="url(#bg)"/>
   <rect x="${x}" y="${y + edge + 10 * scale}" width="${w}" height="${h}" rx="${r}" fill="#000" opacity="0.28"/>
-  <rect x="${x}" y="${y + edge}" width="${w}" height="${h}" rx="${r}" fill="#1f2a6e"/>
-  <rect x="${x}" y="${y + edge * 0.45}" width="${w}" height="${h}" rx="${r}" fill="#3445a8"/>
+  <rect x="${x}" y="${y + edge}" width="${w}" height="${h}" rx="${r}" fill="#263a48"/>
+  <rect x="${x}" y="${y + edge * 0.45}" width="${w}" height="${h}" rx="${r}" fill="#3b5568"/>
   <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="url(#face)"/>
   <rect x="${bx + t / 2}" y="${by + t / 2}" width="${bw - t}" height="${bh - t}" rx="${t * 0.35}" fill="none" stroke="#c8211c" stroke-width="${t}"/>
   <rect x="${vx}" y="${vy}" width="${w * 0.12}" height="${h * 0.68}" rx="${t * 0.3}" fill="#c8211c"/>
