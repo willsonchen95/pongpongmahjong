@@ -1242,6 +1242,10 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 .about-promise h3 { color: var(--jade-dark) !important; }
 .about-promise ul { margin: 6px 0 0; padding-left: 20px; }
 .about-promise li { margin: 4px 0; }
+.about-changes .release + .release { margin-top: 12px; }
+.about-changes h4 { margin: 8px 0 4px; font-size: 1rem; color: var(--ink); }
+.about-changes ul { margin: 0; padding-left: 20px; }
+.about-changes li { margin: 3px 0; }
 
 .menu-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
 /* a fan of five tiles, like a hand being shown */

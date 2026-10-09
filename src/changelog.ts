@@ -1,0 +1,30 @@
+// What changed in each version, newest first — shown at the end of the About page. When releasing,
+// add an entry here and set the same version in package.json (npm version <x.y.z> --no-git-tag-version).
+
+export interface Release { version: string; date: string; notes: string[] }
+
+export const CHANGELOG: Release[] = [
+  {
+    version: '1.1.0', date: '9 October 2026',
+    notes: [
+      'A calm new look: a tea-house table with a printed mat, brush-lettered tiles in soft colours, and a quiet tea room around the game.',
+      'Family style: no points — just reach the minimum faan to win (choose any minimum from 0 to 10). The most hands won wins the game.',
+      'See how a hand scored: each faan pattern appears in turn and lights up the tiles that earned it. Tap a pattern to see what it means.',
+      'Your record: your history, your biggest hand and 17 challenges to collect — kept on your device only.',
+      'Reactions drawn as a little tea-house cast: a panda, a bao, a koi, a teacup, a teapot and a lion dance.',
+      'Calmer sounds, new background music, and Chi spoken in Chinese.',
+      'An About page that says plainly what the game is: free, played for fun, no money and no sign-up.',
+      'Easier to read: the discards stand out on the table, and ties share their place in the final standings.',
+    ],
+  },
+  {
+    version: '1.0.0', date: '8 October 2026',
+    notes: [
+      'The first version: Hong Kong mahjong in the browser, on phones and computers.',
+      'Play against bots at three levels, or learn with a guided game and beginner tips.',
+      'Private online rooms with friends — share a code; bots fill any empty seats.',
+      'Record your own Pong!, Chi!, Kong! and Mahjong! calls for your friends to hear.',
+      'Installs like an app on phones, and plays against the bots offline.',
+    ],
+  },
+]

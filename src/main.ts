@@ -9,6 +9,7 @@ import { rulesSections } from './rules-guide'
 import { resultCard, finalCard, wonByRobbingIn, winsOf, placeOf, type ResultContext } from './result-cards'
 import { loadRecord, saveRecord, clearRecord, emptyRecord, noteHand, noteGame, CHALLENGES } from './record'
 import { renderRecordPage } from './record-page'
+import { CHANGELOG } from './changelog'
 import { TIPS, type CoachStep, type Steps } from './tips'
 import { mahjongBurst, turnGlow, notice } from './fx'
 import { emote, emoteArt } from './emotes'
@@ -1013,8 +1014,20 @@ function renderAboutPage() {
     para(el('strong', '', 'The bots'), ' work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.'),
     para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'))
 
+  // what changed in each version, newest first (changelog.ts)
+  const changes = el('section', 'about-changes')
+  changes.appendChild(el('h3', '', 'What’s new'))
+  for (const r of CHANGELOG) {
+    const release = el('div', 'release')
+    release.appendChild(el('h4', '', `Version ${r.version} · ${r.date}`))
+    const list = el('ul')
+    for (const n of r.notes) list.appendChild(el('li', '', n))
+    release.appendChild(list)
+    changes.appendChild(release)
+  }
+
   const body = el('div', 'rules-body help about-body')
-  body.append(fun, privacy, why, how)
+  body.append(fun, privacy, why, how, changes)
   const foot = el('div', 'rules-foot')
   foot.append(button('Back to menu', renderMenu, 'act'))
   const credit = el('p', 'credit', 'Music: “Moonlit Whispers” by kaazoom, from Pixabay.')
