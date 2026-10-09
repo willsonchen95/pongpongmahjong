@@ -1192,6 +1192,13 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 .menu-extras { order: 1; }
 .menu-version { order: 2; margin: 18px 0 0; text-align: center; font-size: 0.8rem; letter-spacing: 0.04em; opacity: 0.5; }
 .credit { margin: 18px 0 0; text-align: center; font-size: 0.92rem; opacity: 0.7; }
+/* "Free to play · No money, bets or prizes · No sign-up" under the menu's choices */
+.menu-promise { order: 2; margin: 16px 0 0; text-align: center; font-size: 0.9rem; font-weight: 600; color: var(--jade-dark); text-wrap: balance; }
+/* the About page's promise: first, in a soft jade box */
+.about-promise { padding: 14px 18px !important; border: 1px solid #a9c2ae !important; border-radius: 14px; background: #e3eee7; }
+.about-promise h3 { color: var(--jade-dark) !important; }
+.about-promise ul { margin: 6px 0 0; padding-left: 20px; }
+.about-promise li { margin: 4px 0; }
 
 .menu-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
 /* a fan of five tiles, like a hand being shown */
@@ -1613,7 +1620,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .menu-page { min-height: calc(100dvh - 28px); margin: 0 auto; justify-content: center; }
   .menu-sound { position: static; margin: 14px 0 12px; justify-content: center; }
   .menu-tagline { margin-bottom: 0; }
-  .menu-version { position: fixed; left: 0; right: 0; bottom: 8px; margin: 0; pointer-events: none; }
+  .menu-version { margin: 10px 0 0; }                     /* at the end of the menu (pinned, it would cover the menu as you scroll) */
   .tile-fan { height: 90px; }
   .tile-fan .fan-tile { width: 50px; height: 68px; }
   .mt-line { font-size: 2.6rem; }
@@ -1788,6 +1795,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .menu-sound .chip { height: 40px; width: 40px; }
   /* the version at the bottom of the logo's side, where there's room */
   .menu-version { position: fixed; left: 0; right: 50%; bottom: 8px; margin: 0; pointer-events: none; }
+  .menu-promise { grid-column: 2; margin-top: 10px; font-size: 0.8rem; }   /* under the choices, on their side */
   .tile-fan { height: 70px; margin-bottom: 4px; }
   .tile-fan .fan-tile { width: 42px; height: 57px; }
   .mt-line { font-size: 2.1rem; }

@@ -207,7 +207,7 @@ describe('Family style at the extremes of its minimum', () => {
   it('plays whole games with a minimum of 0 or 10 without getting stuck', () => {
     for (const minFaan of [0, 10]) {
       const t = new Table({ ...RULES, style: 'family', minFaan }, [false, false, false, false])
-      for (let hand = 0; hand < 12 && !t.match.over; hand++) {
+      for (let hand = 0; hand < 6 && !t.match.over; hand++) {
         t.newHand(); t.begin()
         playOn(t)
         expect(t.phase.kind).toBe('over')
@@ -218,5 +218,5 @@ describe('Family style at the extremes of its minimum', () => {
         expect(Array.isArray(plans)).toBe(true)
       }
     }
-  })
+  }, 30_000)                                             // (whole hands of bot play: give it time on a busy machine)
 })

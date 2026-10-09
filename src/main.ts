@@ -907,7 +907,11 @@ function renderMenu() {
   feedback.innerHTML = MENU_ICONS.feedback
   feedback.append(el('span', '', 'Feedback'))
   feedback.onclick = () => openFeedback(renderMenu, 'menu')
-  extras.append(rules, feedback)
+  const about = el('button', 'menu-extra')
+  about.innerHTML = MENU_ICONS.about
+  about.append(el('span', '', 'About'))
+  about.onclick = renderAboutPage
+  extras.append(rules, feedback, about)
   const install = installButton()
   if (install) extras.appendChild(install)
   // which version this is, at the very bottom of the menu
@@ -917,7 +921,9 @@ function renderMenu() {
   // buttons under the logo; elsewhere it melts away and the buttons come after the choices
   const side = el('div', 'menu-side')
   side.append(menuHero(), extras)
-  page.append(side, sound, cards, el('p', 'menu-version', `${version} · © 2026 Wilson Chen. All rights reserved.`))
+  // said plainly on the menu, so nobody has to wonder (the About page has the details)
+  const promise = el('p', 'menu-promise', 'Free to play · No money, bets or prizes · No sign-up')
+  page.append(side, sound, cards, promise, el('p', 'menu-version', `${version} · © 2026 Wilson Chen. All rights reserved.`))
   app.appendChild(page)
 }
 
@@ -958,19 +964,56 @@ function renderRulesPage() {
     para('Mahjong is played by four players with 144 tiles. You sit at the bottom of the table; play goes round counter-clockwise — you, then Mei, Kai and Lin.'),
     para('On your turn you take a tile from the wall, then throw one away. The first to complete a winning hand calls ', el('strong', '', 'Mahjong!')),
   )
-  // who made it and how — for the curious (and anyone who arrived from a portfolio link)
-  const about = el('section', 'rules-about')
-  about.append(el('h3', '', 'About this game'),
-    para('Pong Pong Mahjong! is made by Wilson Chen. It’s written from scratch in TypeScript — no game engine — and runs in any browser.'),
+  const body = el('div', 'rules-body help')
+  body.append(intro, ...rulesSections(null))
+  const foot = el('div', 'rules-foot')
+  foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
+  page.append(head, body, foot)
+  app.appendChild(page)
+  window.scrollTo(0, 0)
+}
+
+// About: first and plainly, that this is a game played for fun — no money, no bets, nothing to buy,
+// no sign-up — then what it keeps and sends, why it was made, and how it's built.
+function renderAboutPage() {
+  inMenu = true
+  app.innerHTML = ''
+  const page = el('div', 'rules-page')
+  const head = pageTitle('About', renderMenu, 'Back to the menu')
+  const fun = el('section', 'about-promise')
+  const list = el('ul')
+  fun.append(el('h3', '', 'A game played for fun — never for money'), list)
+  for (const line of [
+    'Free to play, with nothing to buy and no ads.',
+    'No real money, no betting and no prizes. Points only keep score, like on a scoresheet — or play Family style with no points at all.',
+    'No sign-up or account. It never asks for passwords, card details or anything personal.',
+    'No download needed: it runs in your browser. Installing it on a phone is optional.',
+  ]) list.appendChild(el('li', '', line))
+
+  const privacy = el('section')
+  privacy.append(el('h3', '', 'What it keeps, and what it sends'),
+    para(el('strong', '', 'On your device:'), ' your saved game and settings. Nothing else.'),
+    para(el('strong', '', 'Play counts:'), ' when a game starts or ends, a count is sent with a random id for this browser — no name, no cookies — just to see how many people play.'),
+    para(el('strong', '', 'Online rooms:'), ' the nickname you type and, if you record them, your Pong!, Chi!, Kong! and Mahjong! calls, shared only with the players in your room.'),
+    para(el('strong', '', 'Feedback:'), ' only what you write in it (an email address is optional).'))
+
+  const why = el('section')
+  why.append(el('h3', '', 'Why it was made'),
+    para('Pong Pong Mahjong! is a personal project by Wilson Chen: a way to learn how a real product is built end to end — designing it, testing it carefully (QA), listening to players’ feedback, improving it, and running it online.'),
+    para('Found a bug or have an idea? Use ', el('strong', '', 'Feedback'), ' on the main menu — every message is read.'))
+
+  const how = el('section')
+  how.append(el('h3', '', 'How it’s built'),
+    para('Written from scratch in TypeScript — no game engine — and it runs in any browser.'),
     para(el('strong', '', 'Any device, together:'), ' the same game runs on iPhone, Android and computers, and everyone at a table can be on a different one.'),
     para(el('strong', '', 'Online rooms'), ' run on Cloudflare: each room is its own small server that deals the tiles and checks every move, so nobody can peek at another player’s hand.'),
     para(el('strong', '', 'The bots'), ' work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.'),
-    para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'),
-    para('Found a bug or have an idea? Use ', el('strong', '', 'Feedback'), ' on the main menu — every message is read.'))
-  const body = el('div', 'rules-body help')
-  body.append(intro, ...rulesSections(null), about)
+    para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'))
+
+  const body = el('div', 'rules-body help about-body')
+  body.append(fun, privacy, why, how)
   const foot = el('div', 'rules-foot')
-  foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
+  foot.append(button('Back to menu', renderMenu, 'act'))
   const credit = el('p', 'credit', 'Music: “Moonlit Whispers” by kaazoom, from Pixabay.')
   page.append(head, body, foot, credit)
   app.appendChild(page)
