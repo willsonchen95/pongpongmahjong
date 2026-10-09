@@ -5,6 +5,7 @@ import { type Tile, type GameState, type FaanItem, SEATS, sortHand, payout, MAX_
 import type { Match, HandResult } from './table'
 import { el, tileEl, fmt, signed, score } from './ui'
 import { faanMeaning } from './rules-guide'
+import { t, faanName } from './i18n'
 
 const HUMAN = 0                       // on your own screen you're always seat 0
 export interface ResultContext { match: Match; game: GameState; names: string[]; winTile: Tile | null }
@@ -12,7 +13,6 @@ export interface ResultContext { match: Match; game: GameState; names: string[];
 // The card being built reads these, set from its context.
 let match: Match, game: GameState, NAMES: string[], winTile: Tile | null
 function use(ctx: ResultContext) { ({ match, game, names: NAMES, winTile } = ctx) }
-const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
 export const isFamily = (m: Match) => m.style === 'family'
 export const winsOf = (m: Match, p: number) => m.wins?.[p] ?? 0
 const faanWonOf = (m: Match, p: number) => m.faanWon?.[p] ?? 0
@@ -28,7 +28,7 @@ export const soleLeader = (m: Match): number | null => {
   return ahead(m, first, second) < 0 ? first : null
 }
 // "2 wins · 9 faan"
-const winsText = (m: Match, p: number) => `${winsOf(m, p)} win${winsOf(m, p) === 1 ? '' : 's'} · ${faanWonOf(m, p)} faan`
+const winsText = (m: Match, p: number) => t(winsOf(m, p) === 1 ? '{n} win · {f} faan' : '{n} wins · {f} faan', { n: winsOf(m, p), f: faanWonOf(m, p) })
 const standings = () => standingsOf(match)
 
 // The faan pattern being explained on the result card ('': none), kept across redraws of the same hand.
@@ -83,60 +83,66 @@ const wonByRobbing = () => wonByRobbingIn(match)
 
 // Family style: hands won so far, best first, with this hand's winner marked.
 function winsTable(winner: number | null): HTMLElement {
-  const t = el('div', 'score-table')
-  t.append(el('span', 'st-head'), el('span', 'st-head', 'This hand'), el('span', 'st-head', 'Wins'))
+  const table = el('div', 'score-table')
+  table.append(el('span', 'st-head'), el('span', 'st-head', t('This hand')), el('span', 'st-head', t('Wins')))
   for (const p of standings()) {
-    t.append(
+    table.append(
       el('span', 'st-name' + (p === HUMAN ? ' you' : ''), NAMES[p]),
-      el('span', 'st-delta' + (p === winner ? ' up' : ''), p === winner ? 'won' : '—'),
+      el('span', 'st-delta' + (p === winner ? ' up' : ''), p === winner ? t('won') : '—'),
       el('span', 'st-total', String(winsOf(match, p))),
     )
   }
-  return t
+  return table
 }
 
 // Everyone's score change for the hand and their new total, best first.
 function scoreTable(deltas: number[]): HTMLElement {
-  const t = el('div', 'score-table')
-  t.append(el('span', 'st-head'), el('span', 'st-head', 'This hand'), el('span', 'st-head', 'Total'))
+  const table = el('div', 'score-table')
+  table.append(el('span', 'st-head'), el('span', 'st-head', t('This hand')), el('span', 'st-head', t('Total')))
   for (const p of standings()) {
     const d = deltas[p]
-    t.append(
+    table.append(
       el('span', 'st-name' + (p === HUMAN ? ' you' : ''), NAMES[p]),
       el('span', 'st-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '—' : signed(d)),
       el('span', 'st-total' + (match.scores[p] < 0 ? ' bust' : ''), score(match.scores[p], match.startPoints)),
     )
   }
-  return t
+  return table
 }
 
 // "Who pays, and why": the payment rule that applied this hand in one sentence, then each player's
 // share with the reason — so a minus score never comes as a surprise.
 function paymentBox(r: HandResult, w: number, when: number): HTMLElement {
-  const who = (p: number) => (p === HUMAN ? 'You' : NAMES[p])
-  const pays = (p: number) => (p === HUMAN ? 'you pay' : `${NAMES[p]} pays`)
+  const who = (p: number) => (p === HUMAN ? t('You') : NAMES[p])
   const points = payout(r.faan)
-  const worth = `${r.faan} faan is worth ${fmt(points)} points.`
-  let rule: string
+  const worth = t('{faan} faan is worth {points} points.', { faan: r.faan, points: fmt(points) })
+  // whoever gave the tile away pays it all
+  const payer = r.from === null ? '' : r.from === HUMAN
+    ? t('So you pay the full {points} — the others pay nothing.', { points: fmt(points) })
+    : t('So {name} pays the full {points} — the others pay nothing.', { name: NAMES[r.from], points: fmt(points) })
+  let how: string
   if (r.from === null) {
-    rule = `${worth} ${who(w)} drew the winning tile from the wall, so nobody gave it away — the other three share the cost and each pay half (${fmt(points / 2)}).`
+    how = t(w === HUMAN ? 'You drew the winning tile from the wall, so nobody gave it away — the other three share the cost and each pay half ({half}).'
+      : '{who} drew the winning tile from the wall, so nobody gave it away — the other three share the cost and each pay half ({half}).', { who: who(w), half: fmt(points / 2) })
   } else if (wonByRobbing()) {
-    rule = `${worth} ${who(w)} robbed ${possessive(r.from)} kong: the tile added to the pong finished the hand. That counts like throwing away the winning tile, so ${pays(r.from)} the full ${fmt(points)} and the others pay nothing.`
+    how = t(r.from === HUMAN ? '{who} robbed your kong: the tile added to the pong finished the hand. That counts like throwing away the winning tile.'
+      : '{who} robbed {from}’s kong: the tile added to the pong finished the hand. That counts like throwing away the winning tile.', { who: who(w), from: NAMES[r.from] }) + ' ' + payer
   } else {
-    rule = `${worth} ${who(r.from)} threw away the winning tile, so ${pays(r.from)} the full ${fmt(points)} — the others pay nothing.`
+    how = t(r.from === HUMAN ? 'You threw away the winning tile.' : '{name} threw away the winning tile.', { name: NAMES[r.from] }) + ' ' + payer
   }
+  const rule = `${worth} ${how}`
 
   const box = el('div', 'pay-box')
-  box.append(el('h4', '', 'Who pays, and why'), el('p', 'pay-rule', rule))
+  box.append(el('h4', '', t('Who pays, and why')), el('p', 'pay-rule', rule))
   const rows = el('div', 'pay-rows')
   for (const p of [w, ...[1, 2, 3].map(k => (w + k) % 4)]) {
     const d = r.deltas[p]
     let why: string
-    const lower = (q: number) => (q === HUMAN ? 'you' : NAMES[q])
-    if (p === w) why = r.from === null ? 'won — collected half from each of the other three' : `won — collected it all from ${lower(r.from)}`
-    else if (r.from === null) why = `paid half to ${lower(w)}`
-    else if (p === r.from) why = wonByRobbing() ? 'paid it all — the kong was robbed' : 'paid it all — threw away the winning tile'
-    else why = 'paid nothing — didn’t throw the winning tile'
+    const lower = (q: number) => (q === HUMAN ? t('you') : NAMES[q])
+    if (p === w) why = r.from === null ? t('won — collected half from each of the other three') : t('won — collected it all from {name}', { name: lower(r.from) })
+    else if (r.from === null) why = t('paid half to {name}', { name: lower(w) })
+    else if (p === r.from) why = wonByRobbing() ? t('paid it all — the kong was robbed') : t('paid it all — threw away the winning tile')
+    else why = t('paid nothing — didn’t throw the winning tile')
     const row = [
       el('span', 'pay-name' + (p === HUMAN ? ' you' : ''), who(p)),
       el('span', 'pay-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '0' : signed(d)),
@@ -163,28 +169,29 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
   const lit: ShownTile[] = []
   const tile = (t: Tile, cls: string, bonus = false) => { const e = tileEl(t, cls); lit.push({ el: e, tile: t, bonus }); return e }
   if (w === null) {
-    card.append(el('div', 'result-title', 'Draw'), el('div', 'result-sub', isFamily(match) ? 'The wall ran out — nobody wins this hand.' : 'The wall ran out — nobody pays.'))
+    card.append(el('div', 'result-title', t('Draw')), el('div', 'result-sub', isFamily(match) ? t('The wall ran out — nobody wins this hand.') : t('The wall ran out — nobody pays.')))
   } else {
-    if (w === HUMAN) card.append(el('div', 'result-title', 'Congratulations'), el('div', 'result-sub', 'You win — Mahjong!'))
-    else card.append(el('div', 'result-title', 'Mahjong!'), el('div', 'result-sub', `${NAMES[w]} wins this hand`))
+    if (w === HUMAN) card.append(el('div', 'result-title', t('Congratulations')), el('div', 'result-sub', t('You win — Mahjong!')))
+    else card.append(el('div', 'result-title', 'Mahjong!'), el('div', 'result-sub', t('{name} wins this hand', { name: NAMES[w] })))
+    const from = r.from === null ? '' : NAMES[r.from]
     card.appendChild(el('div', 'result-how', r.from === null
-      ? (w === HUMAN ? 'You drew the winning tile yourself' : `${NAMES[w]} drew the winning tile`)
-      : wonByRobbing() ? `Robbed ${possessive(r.from)} kong — the tile they added completed the hand`
-      : `Won with ${possessive(r.from)} thrown-away tile`))
+      ? (w === HUMAN ? t('You drew the winning tile yourself') : t('{name} drew the winning tile', { name: NAMES[w] }))
+      : wonByRobbing() ? t(r.from === HUMAN ? 'Robbed your kong — the tile you added completed the hand' : 'Robbed {from}’s kong — the tile they added completed the hand', { from })
+      : t(r.from === HUMAN ? 'Won with your thrown-away tile' : 'Won with {from}’s thrown-away tile', { from })))
 
     // the winning hand: exposed sets first, then the rest sorted; the winning tile is raised
     const hand = el('div', 'result-hand')
     for (const meld of game.melds[w]) {
       const g = el('div', 'rh-group')
-      for (const t of meld) g.appendChild(tile(t, 'rh'))
+      for (const x of meld) g.appendChild(tile(x, 'rh'))
       hand.appendChild(g)
     }
     const g = el('div', 'rh-group')
-    for (const t of sortHand(game.hands[w])) g.appendChild(tile(t, 'rh' + (t === winTile ? ' win-tile' : '')))
+    for (const x of sortHand(game.hands[w])) g.appendChild(tile(x, 'rh' + (x === winTile ? ' win-tile' : '')))
     hand.appendChild(g)
     if (game.bonus[w].length) {                        // their flowers and seasons, a little apart
       const b = el('div', 'rh-group rh-bonus')
-      for (const t of game.bonus[w]) b.appendChild(tile(t, 'rh', true))
+      for (const x of game.bonus[w]) b.appendChild(tile(x, 'rh', true))
       hand.appendChild(b)
     }
     card.appendChild(hand)
@@ -198,9 +205,9 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
   const cols = el('div', 'result-cols')
   if (w !== null) {
     const faan = el('div', 'faan-list')
-    faan.appendChild(el('h4', '', 'Faan'))
+    faan.appendChild(el('h4', '', t('Faan')))
     if (r.items.length === 0) {
-      const row = [el('span', '', 'No special patterns'), el('strong', '', '0')]
+      const row = [el('span', '', t('No special patterns')), el('strong', '', '0')]
       for (const e of row) at(e, FIRST)
       faan.append(...row)
     }
@@ -209,10 +216,10 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
     const show = (item: FaanItem | null) => {
       faanPicked = item ? `${handKey(r)}|${item.name}` : ''
       for (const row of rows) { const on = row.item === item; row.name.classList.toggle('on', on); row.why.hidden = !on }
-      for (const t of lit) t.el.classList.toggle('lit', !!item && earns(item, t))
+      for (const shown of lit) shown.el.classList.toggle('lit', !!item && earns(item, shown))
     }
     r.items.forEach((item, i) => {
-      const name = el('button', 'faan-name', item.name)
+      const name = el('button', 'faan-name', faanName(item.name))
       name.setAttribute('aria-expanded', 'false')
       const why = el('div', 'faan-why', faanMeaning(item.name) ?? '')
       why.hidden = true
@@ -229,15 +236,15 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
     })
     const picked = r.items.find(item => faanPicked === `${handKey(r)}|${item.name}`)
     if (picked) queueMicrotask(() => show(picked))     // (after the tiles are in the card: a redraw keeps it)
-    const total = [el('span', 'total', r.limit ? 'Total (limit hand)' : 'Total'), el('strong', 'total', `${r.faan} faan`)]
+    const total = [el('span', 'total', r.limit ? t('Total (limit hand)') : t('Total')), el('strong', 'total', `${r.faan} faan`)]
     for (const e of total) at(e, totalAt, 'rv-pop', 0.5)
     faan.append(el('div', 'faan-rule'), ...total)
     // Hong Kong style: the faan climb the payout ladder; Family style: the minimum was reached, that's the win
     const worth = el('div', 'paid')
     if (isFamily(match)) {
-      worth.appendChild(el('span', 'pl-say', match.minFaan > 0 ? `Minimum ${match.minFaan} faan reached — a win` : 'A finished hand — a win'))
+      worth.appendChild(el('span', 'pl-say', match.minFaan > 0 ? t('Minimum {min} faan reached — a win', { min: match.minFaan }) : t('A finished hand — a win')))
     } else {
-      worth.append(payLadder(r.faan, ladderAt), el('span', 'pl-say', `${r.faan} faan = ${fmt(payout(r.faan))} points`))
+      worth.append(payLadder(r.faan, ladderAt), el('span', 'pl-say', t('{faan} faan = {points} points', { faan: r.faan, points: fmt(payout(r.faan)) })))
     }
     at(worth, ladderAt - 0.1, 'rv-in', 0.3)
     faan.appendChild(worth)
@@ -245,8 +252,8 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
     lightTiles(lit, r.items, FIRST)
   }
   const scores = el('div', 'score-box')
-  if (isFamily(match)) scores.append(el('h4', '', 'Hands won'), winsTable(w))
-  else scores.append(el('h4', '', 'Scores'), scoreTable(r.deltas))
+  if (isFamily(match)) scores.append(el('h4', '', t('Hands won')), winsTable(w))
+  else scores.append(el('h4', '', t('Scores')), scoreTable(r.deltas))
   at(scores, w === null ? 0 : isFamily(match) ? ladderAt + 0.4 : payAt + 1.4)
   cols.appendChild(scores)
   card.appendChild(cols)
@@ -259,15 +266,19 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
   if (skip && elapsed < revealEnd) {
     card.classList.add('revealing')
     card.addEventListener('click', e => { if (!(e.target as HTMLElement).closest('button')) skip() })
-    card.appendChild(el('div', 'rv-skip', 'Tap to see it all'))
+    card.appendChild(el('div', 'rv-skip', t('Tap to see it all')))
   }
 
   // what happens next
   let next: string
-  if (match.bust !== null) next = `${match.bust === HUMAN ? 'You have' : `${NAMES[match.bust]} has`} fallen ${fmt(match.startPoints)} points behind — the game ends here.`
-  else if (match.over) next = 'That was the last hand of the game.'
-  else if (r.dealerStays) next = `${NAMES[game.dealer]} ${game.dealer === HUMAN ? 'stay' : 'stays'} dealer for the next hand.`
-  else next = `Next hand: ${NAMES[match.dealer]} ${match.dealer === HUMAN ? 'deal' : 'deals'}${match.roundWind !== game.roundWind ? ` — the ${SEATS[match.roundWind]} round begins` : ''}.`
+  if (match.bust !== null) next = t(match.bust === HUMAN ? 'You have fallen {n} points behind — the game ends here.' : '{name} has fallen {n} points behind — the game ends here.', { name: NAMES[match.bust], n: fmt(match.startPoints) })
+  else if (match.over) next = t('That was the last hand of the game.')
+  else if (r.dealerStays) next = t(game.dealer === HUMAN ? 'You stay dealer for the next hand.' : '{name} stays dealer for the next hand.', { name: NAMES[game.dealer] })
+  else {
+    next = t(match.dealer === HUMAN ? 'Next hand: you deal' : 'Next hand: {name} deals', { name: NAMES[match.dealer] })
+    if (match.roundWind !== game.roundWind) next += t(' — the {round} begins', { round: t('{wind} round', { wind: t(SEATS[match.roundWind]) }) })
+    next += '.'
+  }
   card.appendChild(el('div', 'result-next', next))
 
   const actions = el('div', 'result-actions')
@@ -284,27 +295,29 @@ export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HT
   const leader = soleLeader(match)
   const youFirst = leader === HUMAN
   const top = order.filter(p => ahead(match, p, order[0]) === 0)
-  const sub = youFirst ? (isFamily(match) ? 'Congratulations — the most hands won!' : 'Congratulations — top score!')
-    : leader !== null ? `${NAMES[leader]} wins the game`
-    : top.length === 4 ? (isFamily(match) ? 'All square — nobody is ahead' : 'All square — nobody won or lost any points')
-    : `It’s a tie: ${top.map(p => (p === HUMAN ? 'you' : NAMES[p])).join(top.length === 2 ? ' and ' : ', ')} share the top ${isFamily(match) ? 'place' : 'score'}`
+  const tied = top.map(p => (p === HUMAN ? t('you') : NAMES[p]))
+  const names = tied.length === 2 ? tied.join(` ${t('and')} `) : tied.join(', ')
+  const sub = youFirst ? (isFamily(match) ? t('Congratulations — the most hands won!') : t('Congratulations — top score!'))
+    : leader !== null ? t('{name} wins the game', { name: NAMES[leader] })
+    : top.length === 4 ? (isFamily(match) ? t('All square — nobody is ahead') : t('All square — nobody won or lost any points'))
+    : t(isFamily(match) ? 'It’s a tie: {names} share the top place' : 'It’s a tie: {names} share the top score', { names })
   const card = el('div', 'result-card final' + (youFirst ? ' you' : ''))
-  card.append(el('div', 'result-title', youFirst ? 'You win the game' : 'Game over'), el('div', 'result-sub', sub))
+  card.append(el('div', 'result-title', youFirst ? t('You win the game') : t('Game over')), el('div', 'result-sub', sub))
   const list = el('div', 'standings')
-  const places = ['1st', '2nd', '3rd', '4th']
+  const places = [t('1st'), t('2nd'), t('3rd'), t('4th')]
   order.forEach(p => {
     const row = el('div', 'standing' + (p === HUMAN ? ' you' : '') + (placeOf(match, p) === 1 ? ' first' : ''))   // (a tie shares its place)
     const gain = match.scores[p] - match.startPoints
     row.append(el('span', 'place', places[placeOf(match, p) - 1]), el('span', 'who', NAMES[p]), isFamily(match)
       ? el('span', 'pts', winsText(match, p))
-      : el('span', 'pts ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), `${signed(gain)} pts`))
+      : el('span', 'pts ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), t('{n} pts', { n: signed(gain) })))
     list.appendChild(row)
   })
-  const ended = match.bust === null ? '' : ` — ${match.bust === HUMAN ? 'you' : NAMES[match.bust]} fell ${fmt(match.startPoints)} points behind, so the game ended early`
+  const ended = match.bust === null ? '' : t(match.bust === HUMAN ? ' — you fell {n} points behind, so the game ended early' : ' — {name} fell {n} points behind, so the game ended early', { name: NAMES[match.bust], n: fmt(match.startPoints) })
   const n = match.endedAfter
-  const played = n === undefined ? `${match.hand} hand${match.hand === 1 ? '' : 's'} played${ended}`
-    : n === 0 ? 'Ended before the first hand finished' : `Ended early after ${n} hand${n === 1 ? '' : 's'}`
-  card.append(list, el('div', 'result-next', isFamily(match) ? `${played}. Most hands won wins; a tie goes to more faan.` : `${played}. Everyone started at 0.`))
+  const played = n === undefined ? t(match.hand === 1 ? '{n} hand played' : '{n} hands played', { n: match.hand }) + ended
+    : n === 0 ? t('Ended before the first hand finished') : t(n === 1 ? 'Ended early after {n} hand' : 'Ended early after {n} hands', { n })
+  card.append(list, el('div', 'result-next', `${played}. ${isFamily(match) ? t('Most hands won wins; a tie goes to more faan.') : t('Everyone started at 0.')}`))
   if (rating) card.appendChild(rating)
   const actions = el('div', 'result-actions')
   actions.append(...buttons)

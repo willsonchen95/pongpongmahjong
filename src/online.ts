@@ -7,6 +7,7 @@ import type { Rules, Phase, Match, TableEvent } from './table'
 import { makeTile, type GameState, type Tile } from './engine'
 import { myClips, prepare, type Clip, type VoiceSlot } from './voice'
 import { VOICE_SLOTS } from '../server/room-core'
+import { t } from './i18n'
 
 export type { SeatInfo }
 export { REACTIONS, PHRASES, TURN_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan } from '../server/room-core'
@@ -176,11 +177,11 @@ export class OnlineRoom {
   // The seats turned round so you're first, with you called "You".
   names(): string[] {
     const r = this.room
-    if (!r || r.you === null) return ['You', 'Mei', 'Kai', 'Lin']
+    if (!r || r.you === null) return [t('You'), 'Mei', 'Kai', 'Lin']
     // someone who's dropped out is played by a bot until they're back
     // (and someone who arrived mid-game is played by one until the next hand)
-    return rot(r.seats, r.you).map((s, i) => (i === 0 ? 'You' : s.person && (!s.connected || s.away) ? `${s.name} (away)`
-      : s.joining ? `${s.name} (next hand)` : s.name))
+    return rot(r.seats, r.you).map((s, i) => (i === 0 ? t('You') : s.person && (!s.connected || s.away) ? t('{name} (away)', { name: s.name })
+      : s.joining ? t('{name} (next hand)', { name: s.name }) : s.name))
   }
 
   // Whether you timed out too often and a bot is playing your seat until you say you're back.
@@ -230,7 +231,7 @@ export class OnlineRoom {
       } else if (m.type === 'react') {
         if (this.seat !== null) this.onReact(seat(m.seat, this.seat), m.emoji)
       } else if (m.type === 'closed') this.onClosed(m.host)
-      else if (m.type === 'error') this.onError(m.message)
+      else if (m.type === 'error') this.onError(t(m.message))   // (the server's messages are in English; known ones are translated)
     }
     ws.onclose = () => {
       if (this.ws !== ws) return

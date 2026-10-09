@@ -13,6 +13,7 @@ import { CHANGELOG } from './changelog'
 import { TIPS, type CoachStep, type Steps } from './tips'
 import { mahjongBurst, turnGlow, notice } from './fx'
 import { emote, emoteArt } from './emotes'
+import { t, lang, setLang, locale, faanName, type Lang } from './i18n'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
 import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, score, fmt, pageTitle } from './ui'
@@ -29,10 +30,11 @@ import { renderVoicePage } from './voice-page'
 // Mei on your right, Kai across, Lin on your left. Seat winds move as the deal passes round.
 const HUMAN = 0
 declare const __APP_VERSION__: string        // filled in at build time (vite.config.ts)
-const BOT_NAMES = ['You', 'Mei', 'Kai', 'Lin']
+const BOT_NAMES = [t('You'), 'Mei', 'Kai', 'Lin']
 let NAMES = BOT_NAMES                     // online: the room's players, turned round so you're first
 const WIND_CHARS = ['東', '南', '西', '北']
-const possessive = (p: number) => (p === HUMAN ? 'your' : `${NAMES[p]}’s`)
+// "East round" / "Putaran Timur"
+const roundName = (w: number) => t('{wind} round', { wind: t(SEATS[w]) })
 
 // ---------- The match ----------
 // The rules of play — the turn flow, claims, scoring, the match moving on — live in table.ts; this
@@ -167,7 +169,7 @@ function playEvents(events: TableEvent[] = table.takeEvents()) {
     else if (e.type === 'flowers') announceFlowers(e.seat, e.tiles)
     else if (e.type === 'discard') { sfx.discard(); if (e.seat !== HUMAN) explainShortWin(e.tile) }
     else if (e.type === 'call') announceCall(e.seat, e.kind, e.meld)
-    else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: 'Your turn', kind: 'turn', seat: null }); sfx.yourTurn(); explainShortWin(null) }
+    else if (e.type === 'yourTurn' && e.seat === HUMAN) { banners.push({ text: t('Your turn'), kind: 'turn', seat: null }); sfx.yourTurn(); explainShortWin(null) }
     else if (e.type === 'win') { burst = e.seat; revealUntil = performance.now() + REVEAL_MS; sayOrPlay('win', e.seat, () => sfx.win(), () => sfx.win(false)) }
   }
   sync()
@@ -185,8 +187,8 @@ function explainShortWin(tile: Tile | null) {
   const key = `${gen}:${match.hand}:${tile ? tile.category + tile.value : 'own'}`
   if (faan >= min || explained.includes(key)) return
   explained += key + ';'
-  const what = tile ? `That ${tileName(tile.category, tile.value)} would finish your hand` : 'Your hand is complete'
-  notice(`${what}, but it only scores ${faan} faan — this game needs ${min} to win. Keep going for a bigger hand!`)
+  const what = tile ? t('That {tile} would finish your hand', { tile: tileName(tile.category, tile.value) }) : t('Your hand is complete')
+  notice(t('{what}, but it only scores {faan} faan — this game needs {min} to win. Keep going for a bigger hand!', { what, faan, min }))
 }
 
 // The scoring helpers the hints use, for the current table.
@@ -195,8 +197,9 @@ const faanOf = (seat: number, concealed: Tile[], selfDrawn: boolean, now = true)
 // "Kai: Flower!" banner and a bell — "Own flower! +1 faan" when one matches the player's seat.
 function announceFlowers(seat: number, tiles: Tile[]) {
   const own = tiles.filter(t => t.value === seatWind(game, seat)).length
-  const what = tiles.every(t => t.category === 'season') ? 'Season' : 'Flower'
-  const text = own ? `${NAMES[seat]}: Own ${what.toLowerCase()}! +${own} faan` : `${NAMES[seat]}: ${what}${tiles.length > 1 ? 's' : ''}!`
+  const season = tiles.every(x => x.category === 'season'), name = NAMES[seat]
+  const text = own ? t(season ? '{name}: Own season! +{own} faan' : '{name}: Own flower! +{own} faan', { name, own })
+    : t(season ? (tiles.length > 1 ? '{name}: Seasons!' : '{name}: Season!') : (tiles.length > 1 ? '{name}: Flowers!' : '{name}: Flower!'), { name })
   banners.push({ text, kind: 'flower', seat, tiles })
   sfx.flower()
 }
@@ -307,7 +310,7 @@ function goOnline(code: string, name: string) {
   room.onReact = (seat, emoji) => { if (!lobbyShowing()) showReaction(seat, emoji) }
   room.onClosed = host => {                           // the host left: back to the menu, saying why
     leaveRoom(false)
-    void dialog('The room has closed', `${host} (the host) left the room, so the game has ended.`, [{ label: 'OK', value: true, cls: 'primary' }])
+    void dialog(t('The room has closed'), t('{host} (the host) left the room, so the game has ended.', { host }), [{ label: t('OK'), value: true, cls: 'primary' }])
   }
   room.connect()
   renderLobby()
@@ -321,9 +324,9 @@ function announceSeatChanges(before: SeatInfo[] | null, now: SeatInfo[], you: nu
   now.forEach((s, i) => {
     const was = before[i]
     if (i === you) return
-    if (was.person && was.connected && (!s.person || !s.connected)) notice(`${was.name} left — a bot plays their seat until they’re back`)
-    else if (s.person && s.connected && was.person && !was.connected && was.name === s.name) notice(`${s.name} is back`)
-    else if (s.person && !was.person) notice(s.joining ? `${s.name} joined — they play from the next hand` : `${s.name} joined`)
+    if (was.person && was.connected && (!s.person || !s.connected)) notice(t('{name} left — a bot plays their seat until they’re back', { name: was.name }))
+    else if (s.person && s.connected && was.person && !was.connected && was.name === s.name) notice(t('{name} is back', { name: s.name }))
+    else if (s.person && !was.person) notice(t(s.joining ? '{name} joined — they play from the next hand' : '{name} joined', { name: s.name }))
   })
 }
 
@@ -614,19 +617,19 @@ async function openPause() {
   if (online) {                                        // an online game can't pause for everyone
     const room = online.room
     const youHost = !!room?.seats[online.seat ?? -1]?.host
-    const hostName = room?.seats.find(s => s.host)?.name ?? 'The host'
+    const hostName = room?.seats.find(s => s.host)?.name ?? t('The host')
     const choice = youHost
-      ? await dialog('Finished playing?', match.over
-        ? 'Leaving closes the room, and everyone goes back to the main menu.'
-        : 'End the game now and everyone sees the final scores — the room stays open to play again. Leaving closes the room for everyone.', [
-        { label: 'Keep playing', value: 'stay', cls: 'primary' },
-        ...(match.over ? [] : [{ label: 'End game for everyone', value: 'end', cls: '' }]),
-        { label: 'Leave room', value: 'leave', cls: 'danger' },
+      ? await dialog(t('Finished playing?'), match.over
+        ? t('Leaving closes the room, and everyone goes back to the main menu.')
+        : t('End the game now and everyone sees the final scores — the room stays open to play again. Leaving closes the room for everyone.'), [
+        { label: t('Keep playing'), value: 'stay', cls: 'primary' },
+        ...(match.over ? [] : [{ label: t('End game for everyone'), value: 'end', cls: '' }]),
+        { label: t('Leave room'), value: 'leave', cls: 'danger' },
       ])
-      : await dialog('Leave the room?', `The game carries on without you — a bot plays your seat. To come back, use the code ${online.code}.` +
-        (match.over ? '' : ` (Want to stop for everyone? ${hostName} can end the game from their menu.)`), [
-        { label: 'Stay', value: 'stay', cls: 'primary' },
-        { label: 'Leave room', value: 'leave', cls: 'danger' },
+      : await dialog(t('Leave the room?'), t('The game carries on without you — a bot plays your seat. To come back, use the code {code}.', { code: online.code }) +
+        (match.over ? '' : ' ' + t('(Want to stop for everyone? {host} can end the game from their menu.)', { host: hostName })), [
+        { label: t('Stay'), value: 'stay', cls: 'primary' },
+        { label: t('Leave room'), value: 'leave', cls: 'danger' },
       ])
     if (choice === 'end' && (await confirmEnd()) && !match.over) online?.endGame()
     if (choice === 'leave') leaveOnline()
@@ -634,11 +637,11 @@ async function openPause() {
   }
   paused = true
   music.duck(true)
-  const where = `${SEATS[match.roundWind]} round · Hand ${match.hand} · ${match.style === 'family' ? 'Your wins' : 'Your score'} ${standingText(HUMAN)}`
-  const choice = await dialog('Game paused', where, [
-    { label: 'Keep playing', value: 'play', cls: 'primary' },
-    { label: 'Main menu', value: 'menu', cls: '' },
-    { label: 'End game — see scores', value: 'end', cls: 'danger' },
+  const where = `${roundName(match.roundWind)} · ${t('Hand {n}', { n: match.hand })} · ${match.style === 'family' ? t('Your wins') : t('Your score')} ${standingText(HUMAN)}`
+  const choice = await dialog(t('Game paused'), where, [
+    { label: t('Keep playing'), value: 'play', cls: 'primary' },
+    { label: t('Main menu'), value: 'menu', cls: '' },
+    { label: t('End game — see scores'), value: 'end', cls: 'danger' },
   ])
   if (choice === 'end' && !(await confirmEnd())) return void resumeFromPause()
   paused = false
@@ -663,20 +666,20 @@ function endGameNow() {
 function resumeFromPause() { paused = false; render() }
 
 function confirmEnd(): Promise<boolean> {
-  return dialog('End the game now?', match.style === 'family'
-    ? 'The hand being played won’t count. The final standings are the hands won so far.'
-    : 'The hand being played won’t count. The final scores are everyone’s points so far.', [
-    { label: 'No, keep playing', value: false, cls: 'primary' },
-    { label: 'Yes, end it', value: true, cls: 'danger' },
+  return dialog(t('End the game now?'), match.style === 'family'
+    ? t('The hand being played won’t count. The final standings are the hands won so far.')
+    : t('The hand being played won’t count. The final scores are everyone’s points so far.'), [
+    { label: t('No, keep playing'), value: false, cls: 'primary' },
+    { label: t('Yes, end it'), value: true, cls: 'danger' },
   ])
 }
 
 // Before starting a new game: if one is under way, check first that it's OK to end it.
 async function okToEndCurrentGame(): Promise<boolean> {
   if (!gameInProgress()) return true
-  return dialog('Start a new game?', 'Your current game and its scores will end.', [
-    { label: 'No, go back', value: false, cls: '' },
-    { label: 'Yes, start new', value: true, cls: 'primary' },
+  return dialog(t('Start a new game?'), t('Your current game and its scores will end.'), [
+    { label: t('No, go back'), value: false, cls: '' },
+    { label: t('Yes, start new'), value: true, cls: 'primary' },
   ])
 }
 
@@ -744,9 +747,9 @@ function showCoachStep(step: CoachStep, i: number, n: number): Promise<'next' | 
     const foot = el('div', 'coach-foot')
     const finish = (v: 'next' | 'off') => { layer.remove(); resolve(v) }
     foot.append(
-      button('Turn off tips', () => finish('off'), 'coach-off'),
-      el('span', 'coach-count', n > 1 ? `${i + 1} of ${n}` : ''),
-      button(i < n - 1 ? 'Next ›' : 'Got it', () => finish('next'), 'act primary coach-next'),
+      button(t('Turn off tips'), () => finish('off'), 'coach-off'),
+      el('span', 'coach-count', n > 1 ? t('{i} of {n}', { i: i + 1, n }) : ''),
+      button(i < n - 1 ? t('Next ›') : t('Got it'), () => finish('next'), 'act primary coach-next'),
     )
     card.append(el('div', 'coach-title', step.title), body, foot)
     const spot = el('div', 'coach-spot')
@@ -867,7 +870,7 @@ function menuHero(): HTMLElement {
   title.append(top, el('span', 'mt-line mt-big', ''))
   title.lastElementChild!.appendChild(el('span', 'mt-word', 'Mahjong!'))
   const tagline = el('p', 'menu-tagline')
-  tagline.append('Classic Hong Kong mahjong · a game of skill, played for fun')
+  tagline.append(t('Classic Hong Kong mahjong · a game of skill, played for fun'))
   hero.append(fan, title, el('div', 'menu-cn', '麻雀'), tagline)
   return hero
 }
@@ -877,7 +880,7 @@ function renderMenu() {
   app.innerHTML = ''
   const page = el('div', 'menu-page')
   const sound = el('div', 'menu-sound')
-  sound.append(...soundButtons(renderMenu))
+  sound.append(...soundButtons(renderMenu), languageSwitch())
 
   // two ways to play, each under its own heading: on your own against bots (works offline), or
   // online with friends; then the rules and installing, as small buttons underneath
@@ -887,33 +890,33 @@ function renderMenu() {
     h.append(el('span', 'ms-title', title), el('span', 'ms-sub', sub))
     return h
   }
-  cards.appendChild(heading('Play on your own', 'Computer players · works offline'))
+  cards.appendChild(heading(t('Play on your own'), t('Computer players · works offline')))
   if (started && !match.over) {
-    cards.appendChild(menuCard(MENU_ICONS.resume, 'Continue game',
-      `${SEATS[match.roundWind]} round · Hand ${match.hand} · ${match.style === 'family' ? 'Your wins' : 'Your score'} ${standingText(HUMAN)}`, continueGame, 'primary'))
+    cards.appendChild(menuCard(MENU_ICONS.resume, t('Continue game'),
+      `${roundName(match.roundWind)} · ${t('Hand {n}', { n: match.hand })} · ${match.style === 'family' ? t('Your wins') : t('Your score')} ${standingText(HUMAN)}`, continueGame, 'primary'))
   }
   const fresh = !(started && !match.over)
   cards.append(
-    menuCard(MENU_ICONS.play, 'New game', 'Play at your own pace — choose the rules', renderStylePick, fresh ? 'primary' : ''),
-    menuCard(MENU_ICONS.learn, 'Learn to play', 'A gentle guided game — tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
-      tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
-    menuCard(MENU_ICONS.record, 'Your record', recordLine(), openRecord, 'record-card'),
-    heading('Play with friends', 'Online · share a room code'),
+    menuCard(MENU_ICONS.play, t('New game'), t('Play at your own pace — choose the rules'), renderStylePick, fresh ? 'primary' : ''),
+    menuCard(MENU_ICONS.learn, t('Learn to play'), t('A gentle guided game — tips explain every step'), () => void startNewIfOk(startGuidedGame), 'learn',
+      tipsSeen.size === 0 ? t('New to mahjong? Start here') : ''),
+    menuCard(MENU_ICONS.record, t('Your record'), recordLine(), openRecord, 'record-card'),
+    heading(t('Play with friends'), t('Online · share a room code')),
     onlineMenuCard(),
-    menuCard(MENU_ICONS.voice, 'Your voice', 'Say the calls in your own voice', () => openVoicePage(renderMenu), 'voice-card'),
+    menuCard(MENU_ICONS.voice, t('Your voice'), t('Say the calls in your own voice'), () => openVoicePage(renderMenu), 'voice-card'),
   )
   const extras = el('div', 'menu-extras')
   const rules = el('button', 'menu-extra')
   rules.innerHTML = MENU_ICONS.book
-  rules.append(el('span', '', 'How to play'))
+  rules.append(el('span', '', t('How to play')))
   rules.onclick = renderRulesPage
   const feedback = el('button', 'menu-extra')
   feedback.innerHTML = MENU_ICONS.feedback
-  feedback.append(el('span', '', 'Feedback'))
+  feedback.append(el('span', '', t('Feedback')))
   feedback.onclick = () => openFeedback(renderMenu, 'menu')
   const about = el('button', 'menu-extra')
   about.innerHTML = MENU_ICONS.about
-  about.append(el('span', '', 'About'))
+  about.append(el('span', '', t('About')))
   about.onclick = renderAboutPage
   extras.append(rules, feedback, about)
   const install = installButton()
@@ -926,35 +929,50 @@ function renderMenu() {
   const side = el('div', 'menu-side')
   side.append(menuHero(), extras)
   // said plainly on the menu, so nobody has to wonder (the About page has the details)
-  const promise = el('p', 'menu-promise', 'Free to play · No money, bets or prizes · No sign-up')
-  page.append(side, sound, cards, promise, el('p', 'menu-version', `${version} · © 2026 Wilson Chen. All rights reserved.`))
+  const promise = el('p', 'menu-promise', t('Free to play · No money, bets or prizes · No sign-up'))
+  page.append(side, sound, cards, promise, el('p', 'menu-version', `${version} · ${t('© 2026 Wilson Chen. All rights reserved.')}`))
   app.appendChild(page)
+}
+
+// English | Indonesia, beside the sound buttons. Switching reloads the page, so every word on every
+// screen is in the new language (the game in progress is saved, and carries on).
+function languageSwitch(): HTMLElement {
+  const box = el('div', 'lang-switch')
+  box.setAttribute('role', 'group')
+  box.setAttribute('aria-label', t('Language'))
+  for (const [code, label] of [['en', 'EN'], ['id', 'ID']] as [Lang, string][]) {
+    const b = button(label, () => { if (code !== lang) { setLang(code); location.reload() } }, 'lang-btn' + (code === lang ? ' on' : ''))
+    b.title = code === 'en' ? 'English' : 'Bahasa Indonesia'
+    b.setAttribute('aria-pressed', String(code === lang))
+    box.appendChild(b)
+  }
+  return box
 }
 
 // "Play online" — or, while you're in a room, the way back to it (also after a reload).
 function onlineMenuCard(): HTMLElement {
-  if (!ROOM_SERVER) return menuCard(MENU_ICONS.online, 'Play online', 'Play with friends and family', null, 'soon', 'Coming soon')
+  if (!ROOM_SERVER) return menuCard(MENU_ICONS.online, t('Play online'), t('Play with friends and family'), null, 'soon', t('Coming soon'))
   const room = online
   if (room) {
-    return menuCard(MENU_ICONS.online, `Back to room ${room.code}`, room.room?.started ? 'Your online game is still going' : 'Your friends are in the room', () => {
+    return menuCard(MENU_ICONS.online, t('Back to room {code}', { code: room.code }), room.room?.started ? t('Your online game is still going') : t('Your friends are in the room'), () => {
       if (room.room?.started && room.view) { inMenu = false; render() } else renderLobby()
     }, 'primary')
   }
   // still in a room from before (closed the tab, or left to the menu): rejoin it, or leave it and start fresh
   const session = savedSession()
   if (session) {
-    return menuCard(MENU_ICONS.online, 'Play online', `You’re still in room ${session.code} — rejoin it, or start fresh`, async () => {
-      const choice = await dialog(`You’re still in room ${session.code}`,
-        `You left a game there as ${session.name}. Go back to it, or leave that room and start a new online game?`, [
-          { label: `Rejoin room ${session.code}`, value: 'rejoin', cls: 'primary' },
-          { label: 'Leave it and start fresh', value: 'fresh', cls: 'danger' },
-          { label: 'Cancel', value: 'cancel', cls: '' },
+    return menuCard(MENU_ICONS.online, t('Play online'), t('You’re still in room {code} — rejoin it, or start fresh', { code: session.code }), async () => {
+      const choice = await dialog(t('You’re still in room {code}', { code: session.code }),
+        t('You left a game there as {name}. Go back to it, or leave that room and start a new online game?', { name: session.name }), [
+          { label: t('Rejoin room {code}', { code: session.code }), value: 'rejoin', cls: 'primary' },
+          { label: t('Leave it and start fresh'), value: 'fresh', cls: 'danger' },
+          { label: t('Cancel'), value: 'cancel', cls: '' },
         ], 'cancel')
       if (choice === 'rejoin') goOnline(session.code, session.name)
       else if (choice === 'fresh') { leaveSavedRoom(session.code); renderOnlineHome() }
-    }, '', 'In a room')
+    }, '', t('In a room'))
   }
-  return menuCard(MENU_ICONS.online, 'Play online', 'Gather friends at one table with a room code', renderOnlineHome)
+  return menuCard(MENU_ICONS.online, t('Play online'), t('Gather friends at one table with a room code'), renderOnlineHome)
 }
 
 // The full rules guide as its own page, opened from the menu.
@@ -962,16 +980,16 @@ function renderRulesPage() {
   inMenu = true
   app.innerHTML = ''
   const page = el('div', 'rules-page')
-  const head = pageTitle('How to play', renderMenu, 'Back to the menu')
+  const head = pageTitle(t('How to play'), renderMenu, t('Back to the menu'))
   const intro = el('section', 'rules-intro')
   intro.append(
-    para('Mahjong is played by four players with 144 tiles. You sit at the bottom of the table; play goes round counter-clockwise — you, then Mei, Kai and Lin.'),
-    para('On your turn you take a tile from the wall, then throw one away. The first to complete a winning hand calls ', el('strong', '', 'Mahjong!')),
+    para(t('Mahjong is played by four players with 144 tiles. You sit at the bottom of the table; play goes round counter-clockwise — you, then Mei, Kai and Lin.')),
+    para(t('On your turn you take a tile from the wall, then throw one away. The first to complete a winning hand calls '), el('strong', '', 'Mahjong!')),
   )
   const body = el('div', 'rules-body help')
   body.append(intro, ...rulesSections(null))
   const foot = el('div', 'rules-foot')
-  foot.append(button('Try it — Learn to play', () => void startNewIfOk(startGuidedGame), 'act primary big'), button('Back to menu', renderMenu, 'act'))
+  foot.append(button(t('Try it — Learn to play'), () => void startNewIfOk(startGuidedGame), 'act primary big'), button(t('Back to menu'), renderMenu, 'act'))
   page.append(head, body, foot)
   app.appendChild(page)
   window.scrollTo(0, 0)
@@ -983,45 +1001,46 @@ function renderAboutPage() {
   inMenu = true
   app.innerHTML = ''
   const page = el('div', 'rules-page')
-  const head = pageTitle('About', renderMenu, 'Back to the menu')
+  const head = pageTitle(t('About'), renderMenu, t('Back to the menu'))
   const fun = el('section', 'about-promise')
   const list = el('ul')
-  fun.append(el('h3', '', 'A game played for fun — never for money'), list)
+  fun.append(el('h3', '', t('A game played for fun — never for money')), list)
   for (const line of [
     'Free to play, with nothing to buy and no ads.',
     'No real money, no betting and no prizes. Points only keep score, like on a scoresheet — or play Family style with no points at all.',
     'No sign-up or account. It never asks for passwords, card details or anything personal.',
     'No download needed: it runs in your browser. Installing it on a phone is optional.',
-  ]) list.appendChild(el('li', '', line))
+  ]) list.appendChild(el('li', '', t(line)))
 
   const privacy = el('section')
-  privacy.append(el('h3', '', 'What it keeps, and what it sends'),
-    para(el('strong', '', 'On your device:'), ' your saved game, your settings and your record (history, best hand and challenges). Nothing else.'),
-    para(el('strong', '', 'Play counts:'), ' when a game starts or ends, a count is sent with a random id for this browser — no name, no cookies — just to see how many people play.'),
-    para(el('strong', '', 'Online rooms:'), ' the nickname you type and, if you record them, your Pong!, Chi!, Kong! and Mahjong! calls, shared only with the players in your room.'),
-    para(el('strong', '', 'Feedback:'), ' only what you write in it (an email address is optional).'))
+  privacy.append(el('h3', '', t('What it keeps, and what it sends')),
+    para(el('strong', '', t('On your device:')), ' ' + t('your saved game, your settings and your record (history, best hand and challenges). Nothing else.')),
+    para(el('strong', '', t('Play counts:')), ' ' + t('when a game starts or ends, a count is sent with a random id for this browser — no name, no cookies — just to see how many people play.')),
+    para(el('strong', '', t('Online rooms:')), ' ' + t('the nickname you type and, if you record them, your Pong!, Chi!, Kong! and Mahjong! calls, shared only with the players in your room.')),
+    para(el('strong', '', t('Feedback:')), ' ' + t('only what you write in it (an email address is optional).')))
 
   const why = el('section')
-  why.append(el('h3', '', 'Why it was made'),
-    para('Pong Pong Mahjong! is a personal project by Wilson Chen: a way to learn how a real product is built end to end — designing it, testing it carefully (QA), listening to players’ feedback, improving it, and running it online.'),
-    para('Found a bug or have an idea? Use ', el('strong', '', 'Feedback'), ' on the main menu — every message is read.'))
+  why.append(el('h3', '', t('Why it was made')),
+    para(t('Pong Pong Mahjong! is a personal project by Wilson Chen: a way to learn how a real product is built end to end — designing it, testing it carefully (QA), listening to players’ feedback, improving it, and running it online.')),
+    para(t('Found a bug or have an idea? Use '), el('strong', '', t('Feedback')), t(' on the main menu — every message is read.')))
 
   const how = el('section')
-  how.append(el('h3', '', 'How it’s built'),
-    para('Written from scratch in TypeScript — no game engine — and it runs in any browser.'),
-    para(el('strong', '', 'Any device, together:'), ' the same game runs on iPhone, Android and computers, and everyone at a table can be on a different one.'),
-    para(el('strong', '', 'Online rooms'), ' run on Cloudflare: each room is its own small server that deals the tiles and checks every move, so nobody can peek at another player’s hand.'),
-    para(el('strong', '', 'The bots'), ' work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.'),
-    para(el('strong', '', 'On phones'), ' it installs like an app and plays against the bots offline.'))
+  how.append(el('h3', '', t('How it’s built')),
+    para(t('Written from scratch in TypeScript — no game engine — and it runs in any browser.')),
+    para(el('strong', '', t('Any device, together:')), ' ' + t('the same game runs on iPhone, Android and computers, and everyone at a table can be on a different one.')),
+    para(el('strong', '', t('Online rooms')), ' ' + t('run on Cloudflare: each room is its own small server that deals the tiles and checks every move, so nobody can peek at another player’s hand.')),
+    para(el('strong', '', t('The bots')), ' ' + t('work out how close each hand is to winning, aim for the hands that score, and throw safe tiles when someone else looks close.')),
+    para(el('strong', '', t('On phones')), ' ' + t('it installs like an app and plays against the bots offline.')))
 
   // what changed in each version, newest first (changelog.ts)
   const changes = el('section', 'about-changes')
-  changes.appendChild(el('h3', '', 'What’s new'))
+  changes.appendChild(el('h3', '', t('What’s new')))
   for (const r of CHANGELOG) {
     const release = el('div', 'release')
-    release.appendChild(el('h4', '', `Version ${r.version} · ${r.date}`))
+    const date = new Date(`${r.date}T12:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' })
+    release.appendChild(el('h4', '', t('Version {v} · {date}', { v: r.version, date })))
     const list = el('ul')
-    for (const n of r.notes) list.appendChild(el('li', '', n))
+    for (const n of r.notes) list.appendChild(el('li', '', t(n)))
     release.appendChild(list)
     changes.appendChild(release)
   }
@@ -1029,8 +1048,8 @@ function renderAboutPage() {
   const body = el('div', 'rules-body help about-body')
   body.append(fun, privacy, why, how, changes)
   const foot = el('div', 'rules-foot')
-  foot.append(button('Back to menu', renderMenu, 'act'))
-  const credit = el('p', 'credit', 'Music: “Moonlit Whispers” by kaazoom, from Pixabay.')
+  foot.append(button(t('Back to menu'), renderMenu, 'act'))
+  const credit = el('p', 'credit', t('Music: “Moonlit Whispers” by kaazoom, from Pixabay.'))
   page.append(head, body, foot, credit)
   app.appendChild(page)
   window.scrollTo(0, 0)
@@ -1050,14 +1069,14 @@ function choiceRow<T>(options: { value: T; label: string; sub: string }[], curre
 
 // New game, first: which style — Hong Kong (minimum faan and points) or Family (minimum faan only).
 const STYLES: Record<Style, { title: string; sub: string }> = {
-  hk: { title: 'Hong Kong style', sub: 'Reach the minimum faan to win, and score points: bigger hands win more' },
-  family: { title: 'Family style', sub: 'No points — just reach the minimum faan to win. Choose any minimum you like' },
+  hk: { title: t('Hong Kong style'), sub: t('Reach the minimum faan to win, and score points: bigger hands win more') },
+  family: { title: t('Family style'), sub: t('No points — just reach the minimum faan to win. Choose any minimum you like') },
 }
 function renderStylePick() {
   inMenu = true
   app.innerHTML = ''
   const page = el('div', 'setup')
-  page.append(pageTitle('New game', renderMenu, 'Back to the menu'), el('p', 'setup-intro', 'How does your table play?'))
+  page.append(pageTitle(t('New game'), renderMenu, t('Back to the menu')), el('p', 'setup-intro', t('How does your table play?')))
   const cards = el('div', 'menu-cards style-cards')
   for (const style of ['hk', 'family'] as Style[]) {
     cards.appendChild(menuCard(style === 'hk' ? MENU_ICONS.points : MENU_ICONS.play, STYLES[style].title, STYLES[style].sub,
@@ -1072,12 +1091,12 @@ function renderSetup() {
   inMenu = true
   app.innerHTML = ''
   const card = el('div', 'setup')
-  card.append(pageTitle(STYLES[settings.style].title, renderStylePick, 'Back to choosing a style'),
-    el('p', 'setup-intro', 'Agree the house rules before you start — just like at a real table.'))
+  card.append(pageTitle(STYLES[settings.style].title, renderStylePick, t('Back to choosing a style')),
+    el('p', 'setup-intro', t('Agree the house rules before you start — just like at a real table.')))
 
   ruleChoices(card, renderSetup, true)
   const actions = el('div', 'setup-actions')
-  actions.append(button('‹ Back', renderStylePick, 'act'), button('Start game', () => void startNewIfOk(() => startMatch()), 'act primary big'))
+  actions.append(button(t('‹ Back'), renderStylePick, 'act'), button(t('Start game'), () => void startNewIfOk(() => startMatch()), 'act primary big'))
   card.appendChild(actions)
   app.appendChild(card)
 }
@@ -1089,53 +1108,53 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
 
   // (New game picks the style on its own page first; an online room asks here)
   if (!withTips) {
-    card.append(el('h2', 'setup-q', 'Style'),
+    card.append(el('h2', 'setup-q', t('Style')),
       choiceRow((['hk', 'family'] as Style[]).map(s => ({ value: s, label: STYLES[s].title, sub: STYLES[s].sub })), settings.style, v => pick({ style: v })))
   }
 
   if (settings.style === 'family') {
-    card.append(el('h2', 'setup-q', 'Minimum to win'),
-      el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. There are no points — the player who wins the most hands wins the game.'),
+    card.append(el('h2', 'setup-q', t('Minimum to win')),
+      el('p', 'setup-help', t('A finished hand must score at least this many faan before you can call Mahjong. There are no points — the player who wins the most hands wins the game.')),
       faanStepper(settings.familyMinFaan, v => pick({ familyMinFaan: v })))
   } else {
-    card.append(el('h2', 'setup-q', 'Minimum to win'),
-      el('p', 'setup-help', 'A finished hand must score at least this many faan before you can call Mahjong. Higher makes winning harder but each win worth more.'),
+    card.append(el('h2', 'setup-q', t('Minimum to win')),
+      el('p', 'setup-help', t('A finished hand must score at least this many faan before you can call Mahjong. Higher makes winning harder but each win worth more.')),
       choiceRow([
-        { value: 0, label: 'Any hand', sub: '0 faan — every finished hand wins' },
-        { value: 1, label: '1 faan', sub: 'Good for learning' },
-        { value: 3, label: '3 faan', sub: 'Hong Kong standard' },
+        { value: 0, label: t('Any hand'), sub: t('0 faan — every finished hand wins') },
+        { value: 1, label: '1 faan', sub: t('Good for learning') },
+        { value: 3, label: '3 faan', sub: t('Hong Kong standard') },
       ], settings.minFaan, v => pick({ minFaan: v })))
   }
 
-  card.append(el('h2', 'setup-q', 'How good are the bots?'),
-    el('p', 'setup-help', withTips ? 'The three players at the table with you.' : 'They take any seats your friends leave empty.'),
+  card.append(el('h2', 'setup-q', t('How good are the bots?')),
+    el('p', 'setup-help', withTips ? t('The three players at the table with you.') : t('They take any seats your friends leave empty.')),
     choiceRow([
-      { value: 'easy', label: 'Easy', sub: 'Still learning · easy to beat' },
-      { value: 'normal', label: 'Normal', sub: 'Steady, but slip up now and then' },
-      { value: 'hard', label: 'Hard', sub: 'Sharp · big hands, safe throws' },
+      { value: 'easy', label: t('Easy'), sub: t('Still learning · easy to beat') },
+      { value: 'normal', label: t('Normal'), sub: t('Steady, but slip up now and then') },
+      { value: 'hard', label: t('Hard'), sub: t('Sharp · big hands, safe throws') },
     ] as { value: BotLevel; label: string; sub: string }[], settings.bots, v => pick({ bots: v })))
 
-  card.append(el('h2', 'setup-q', 'How long to play'),
+  card.append(el('h2', 'setup-q', t('How long to play')),
     choiceRow([
-      { value: 1, label: 'Quick game', sub: 'One round · at least 4 hands' },
-      { value: 4, label: 'Full game', sub: 'All four wind rounds · 16+ hands' },
+      { value: 1, label: t('Quick game'), sub: t('One round · at least 4 hands') },
+      { value: 4, label: t('Full game'), sub: t('All four wind rounds · 16+ hands') },
     ], settings.rounds, v => pick({ rounds: v })))
 
   if (withTips) {
-    card.append(el('h2', 'setup-q', 'Beginner tips'),
+    card.append(el('h2', 'setup-q', t('Beginner tips')),
       choiceRow([
-        { value: true, label: 'On', sub: 'Short pop-ups explain each new step' },
-        { value: false, label: 'Off', sub: 'I know how to play' },
+        { value: true, label: t('On'), sub: t('Short pop-ups explain each new step') },
+        { value: false, label: t('Off'), sub: t('I know how to play') },
       ], settings.tips, v => pick({ tips: v })))
   }
 
   if (settings.style === 'family') return                  // no points, so no point limit
-  card.append(el('h2', 'setup-q', 'Point limit'),
-    el('p', 'setup-help', 'Everyone starts at 0. Winners collect points from whoever pays; if anyone falls this far behind, the game ends early. Highest score at the end wins.'),
+  card.append(el('h2', 'setup-q', t('Point limit')),
+    el('p', 'setup-help', t('Everyone starts at 0. Winners collect points from whoever pays; if anyone falls this far behind, the game ends early. Highest score at the end wins.')),
     choiceRow([
-      { value: 1000, label: '1,000', sub: 'Lively — one big hand can end it' },
-      { value: 2000, label: '2,000', sub: 'Room for a few bad hands' },
-      { value: 5000, label: '5,000', sub: 'Plays to the end almost always' },
+      { value: 1000, label: fmt(1000), sub: t('Lively — one big hand can end it') },
+      { value: 2000, label: fmt(2000), sub: t('Room for a few bad hands') },
+      { value: 5000, label: fmt(5000), sub: t('Plays to the end almost always') },
     ], settings.startPoints, v => pick({ startPoints: v })))
 }
 
@@ -1144,14 +1163,14 @@ function faanStepper(value: number, onPick: (v: number) => void): HTMLElement {
   const row = el('div', 'faan-stepper')
   const step = (d: number, label: string) => {
     const b = button(label, () => onPick(value + d), 'stepper-btn')
-    b.setAttribute('aria-label', d < 0 ? 'Fewer faan' : 'More faan')
+    b.setAttribute('aria-label', d < 0 ? t('Fewer faan') : t('More faan'))
     b.toggleAttribute('disabled', value + d < FAMILY_MIN_FAAN.min || value + d > FAMILY_MIN_FAAN.max)
     return b
   }
   const shown = el('div', 'stepper-value')
   shown.append(el('strong', '', String(value)), el('span', '', ' faan'))
   row.append(step(-1, '−'), shown, step(1, '+'),
-    el('span', 'stepper-sub', value === 0 ? 'Every finished hand wins' : `A hand needs at least ${value} faan to win`))
+    el('span', 'stepper-sub', value === 0 ? t('Every finished hand wins') : t('A hand needs at least {n} faan to win', { n: value })))
   return row
 }
 
@@ -1173,11 +1192,11 @@ function openVoicePage(back: () => void) {
 function voiceLink(back: () => void): HTMLElement {
   const clips = myClips()
   const calls = CALL_SLOTS.filter(s => clips[s]).length
-  const made = calls ? `${calls} call${calls === 1 ? '' : 's'} recorded` : 'Say your own Pong! — your friends hear it'
+  const made = calls ? t(calls === 1 ? '{n} call recorded' : '{n} calls recorded', { n: calls }) : t('Say your own Pong! — your friends hear it')
   const b = button('', () => openVoicePage(back), 'voice-link')
   b.innerHTML = MENU_ICONS.voice
   const text = el('span', 'vl-text')
-  text.append(el('strong', '', 'Your voice'), el('span', '', made))
+  text.append(el('strong', '', t('Your voice')), el('span', '', made))
   b.append(text, el('span', 'vl-go', '›'))
   return b
 }
@@ -1193,12 +1212,12 @@ function renderOnlineHome() {
   inMenu = true
   app.innerHTML = ''
   const card = el('div', 'setup online-home')
-  card.append(pageTitle('Play online', renderMenu, 'Back to the menu'),
-    el('p', 'setup-intro', 'Play with friends: one of you creates a room and shares its code. Bots fill any empty seats.'))
+  card.append(pageTitle(t('Play online'), renderMenu, t('Back to the menu')),
+    el('p', 'setup-intro', t('Play with friends: one of you creates a room and shares its code. Bots fill any empty seats.')))
 
   const nameInput = el('input', 'text-input') as HTMLInputElement
   nameInput.maxLength = 16
-  nameInput.placeholder = 'Your name'
+  nameInput.placeholder = t('Your name')
   nameInput.value = savedName()
   nameInput.autocomplete = 'nickname' as AutoFill
   const codeInput = el('input', 'text-input code-input') as HTMLInputElement
@@ -1211,26 +1230,26 @@ function renderOnlineHome() {
 
   const go = (code: string) => {
     const name = nameInput.value.trim()
-    if (!name) { message.textContent = 'Enter your name first.'; nameInput.focus(); return }
+    if (!name) { message.textContent = t('Enter your name first.'); nameInput.focus(); return }
     try { localStorage.setItem(NAME_KEY, name) } catch { /* fine */ }
     inviteCode = ''
     goOnline(code, name)
   }
   codeInput.oninput = () => { codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }
 
-  const create = button('Create a room', () => { track('room-create'); go(newRoomCode()) }, 'act primary big')
-  const join = button('Join', () => {
+  const create = button(t('Create a room'), () => { track('room-create'); go(newRoomCode()) }, 'act primary big')
+  const join = button(t('Join'), () => {
     const code = codeInput.value.trim().toUpperCase()
-    if (!ROOM_CODE.test(code)) { message.textContent = 'A room code is 5 letters and numbers, like K7Q2M.'; codeInput.focus(); return }
+    if (!ROOM_CODE.test(code)) { message.textContent = t('A room code is 5 letters and numbers, like K7Q2M.'); codeInput.focus(); return }
     track('room-join')
     go(code)
   }, 'act')
   const joinRow = el('div', 'join-row')
   joinRow.append(codeInput, join)
 
-  card.append(el('h2', 'setup-q', 'Your name'), nameInput,
-    el('h2', 'setup-q', 'Start a room'), el('p', 'setup-help', 'You’ll get a code to send to your friends.'), create,
-    el('h2', 'setup-q', 'Or join one'), el('p', 'setup-help', 'Type the code a friend sent you.'), joinRow,
+  card.append(el('h2', 'setup-q', t('Your name')), nameInput,
+    el('h2', 'setup-q', t('Start a room')), el('p', 'setup-help', t('You’ll get a code to send to your friends.')), create,
+    el('h2', 'setup-q', t('Or join one')), el('p', 'setup-help', t('Type the code a friend sent you.')), joinRow,
     message, voiceLink(renderOnlineHome))
   const actions = el('div', 'setup-actions')
   actions.append(button('‹ Back', renderMenu, 'act'))
@@ -1248,34 +1267,34 @@ function renderLobby() {
   app.innerHTML = ''
   const card = el('div', 'setup lobby')
   const r = room.room
-  card.append(pageTitle('Your room', leaveOnline, 'Leave the room'))
+  card.append(pageTitle(t('Your room'), leaveOnline, t('Leave the room')))
 
   const codeBox = el('div', 'room-code')
-  codeBox.append(el('span', 'room-code-label', 'Room code'), el('span', 'room-code-value', room.code))
+  codeBox.append(el('span', 'room-code-label', t('Room code')), el('span', 'room-code-value', room.code))
   const link = `${location.origin}${location.pathname}?room=${room.code}`
-  const copy = button('Copy invite link', async () => {
+  const copy = button(t('Copy invite link'), async () => {
     try {
-      if (navigator.share && touchScreen.matches) await navigator.share({ title: 'Pong Pong Mahjong!', text: `Join my mahjong room: ${room.code}`, url: link })
-      else { await navigator.clipboard.writeText(link); copy.textContent = 'Link copied ✓' }
+      if (navigator.share && touchScreen.matches) await navigator.share({ title: 'Pong Pong Mahjong!', text: t('Join my mahjong room: {code}', { code: room.code }), url: link })
+      else { await navigator.clipboard.writeText(link); copy.textContent = t('Link copied ✓') }
     } catch { /* closed the share sheet */ }
   }, 'act')
   codeBox.appendChild(copy)
   card.appendChild(codeBox)
 
-  if (!room.connected) card.appendChild(el('p', 'form-message', r ? 'Connection lost — reconnecting…' : 'Connecting…'))
+  if (!room.connected) card.appendChild(el('p', 'form-message', r ? t('Connection lost — reconnecting…') : t('Connecting…')))
   // never got through after a while: most often the network (or a blocker) doesn't let it reach the server
   if (!room.everConnected && Date.now() - room.since > CANT_CONNECT_MS) {
-    card.appendChild(el('p', 'setup-help cant-connect', 'Still can’t reach the game server. Check your internet connection. Some Wi-Fi networks, mobile data plans, ad blockers and “Private DNS” settings block it — try switching between Wi-Fi and mobile data, or turn the blocker off for this site.'))
+    card.appendChild(el('p', 'setup-help cant-connect', t('Still can’t reach the game server. Check your internet connection. Some Wi-Fi networks, mobile data plans, ad blockers and “Private DNS” settings block it — try switching between Wi-Fi and mobile data, or turn the blocker off for this site.')))
   }
   if (onlineError) card.appendChild(el('p', 'form-message', onlineError))
 
   if (r) {
-    card.appendChild(el('h2', 'setup-q', 'Players'))
+    card.appendChild(el('h2', 'setup-q', t('Players')))
     const list = el('div', 'seat-list')
     r.seats.forEach((s, i) => {
       const row = el('div', 'seat-row' + (i === r.you ? ' you' : '') + (s.person ? '' : ' bot'))
-      row.append(el('span', 'seat-wind', WIND_CHARS[i]), el('span', 'seat-name', s.name + (i === r.you ? ' (you)' : '')))
-      const tag = !s.person ? 'Bot' : s.host ? 'Host' : s.connected ? '' : 'Away'
+      row.append(el('span', 'seat-wind', WIND_CHARS[i]), el('span', 'seat-name', s.name + (i === r.you ? ' ' + t('(you)') : '')))
+      const tag = !s.person ? t('Bot') : s.host ? t('Host') : s.connected ? '' : t('Away')
       if (tag) row.appendChild(el('span', 'seat-tag', tag))
       list.appendChild(row)
     })
@@ -1289,7 +1308,7 @@ function renderLobby() {
       card.appendChild(actions)
     } else {
       const host = r.seats.find(s => s.host)
-      card.appendChild(el('p', 'setup-help lobby-wait', `Waiting for ${host?.name ?? 'the host'} to start the game…`))
+      card.appendChild(el('p', 'setup-help lobby-wait', t('Waiting for {host} to start the game…', { host: host?.name ?? t('the host') })))
       const actions = el('div', 'setup-actions')
       actions.append(button('Leave', leaveOnline, 'act'))
       card.appendChild(actions)
@@ -1310,11 +1329,14 @@ const handStopped = () => match.endedAfter !== undefined && match.endedAfter < m
 
 // One sentence describing how the hand ended.
 function resultLine(): string {
-  if (game.winner === null) return handStopped() ? 'The game was ended during this hand — it doesn’t count.' : 'The wall ran out — nobody won this hand.'
-  const who = game.winner === HUMAN ? 'You win' : `${NAMES[game.winner]} wins`
-  const how = winFrom === null ? 'by drawing the winning tile'
-    : wonByRobbing() ? `by robbing ${possessive(winFrom)} kong` : `with ${possessive(winFrom)} thrown-away tile`
-  return `${who} ${how}!`
+  if (game.winner === null) return handStopped() ? t('The game was ended during this hand — it doesn’t count.') : t('The wall ran out — nobody won this hand.')
+  const who = game.winner === HUMAN ? t('You') : NAMES[game.winner]
+  if (winFrom === null) return t(game.winner === HUMAN ? 'You win by drawing the winning tile!' : '{who} wins by drawing the winning tile!', { who })
+  const from = NAMES[winFrom]
+  if (winFrom === HUMAN) return t(wonByRobbing() ? '{who} wins by robbing your kong!' : '{who} wins with your thrown-away tile!', { who })
+  return wonByRobbing()
+    ? t(game.winner === HUMAN ? 'You win by robbing {from}’s kong!' : '{who} wins by robbing {from}’s kong!', { who, from })
+    : t(game.winner === HUMAN ? 'You win with {from}’s thrown-away tile!' : '{who} wins with {from}’s thrown-away tile!', { who, from })
 }
 
 // The status pill in the top bar: a badge for whose move it is (their seat wind), a bold headline
@@ -1324,42 +1346,43 @@ function statusEl(): HTMLElement {
   let mood = 'wait', badge = windChar(game.current), hint = ''
   const title = el('div', 'status-title')
   if (game.winner === HUMAN) {
-    mood = 'win'; badge = '🏆'; title.textContent = 'You win!'; hint = 'Mahjong!'
+    mood = 'win'; badge = '🏆'; title.textContent = t('You win!'); hint = 'Mahjong!'
   } else if (game.winner !== null) {
-    mood = 'done'; badge = windChar(game.winner); title.textContent = `${NAMES[game.winner]} wins`
-    hint = winFrom === null ? 'Drew the winning tile'
-      : wonByRobbing() ? `Robbed ${possessive(winFrom)} kong` : `On ${possessive(winFrom)} thrown-away tile`
+    mood = 'done'; badge = windChar(game.winner); title.textContent = t('{name} wins', { name: NAMES[game.winner] })
+    hint = winFrom === null ? t('Drew the winning tile')
+      : winFrom === HUMAN ? (wonByRobbing() ? t('Robbed your kong') : t('On your thrown-away tile'))
+      : wonByRobbing() ? t('Robbed {from}’s kong', { from: NAMES[winFrom] }) : t('On {from}’s thrown-away tile', { from: NAMES[winFrom] })
   } else if (game.over && handStopped()) {
-    mood = 'done'; badge = '–'; title.textContent = 'Game ended'; hint = 'Stopped before this hand finished'
+    mood = 'done'; badge = '–'; title.textContent = t('Game ended'); hint = t('Stopped before this hand finished')
   } else if (game.over) {
-    mood = 'done'; badge = '–'; title.textContent = 'Draw'; hint = 'The wall ran out'
+    mood = 'done'; badge = '–'; title.textContent = t('Draw'); hint = t('The wall ran out')
   } else if (online?.away) {
-    badge = '🤖'; title.textContent = 'A bot is playing for you'; hint = 'Tap “I’m back” to play again'
+    badge = '🤖'; title.textContent = t('A bot is playing for you'); hint = t('Tap “I’m back” to play again')
   } else if (online?.joining) {
-    badge = '👋'; title.textContent = 'You’re in!'; hint = 'Watch this hand — you play from the next one'
+    badge = '👋'; title.textContent = t('You’re in!'); hint = t('Watch this hand — you play from the next one')
   } else if (offer) {
     mood = 'mine'; badge = windChar(offer.from)
-    title.append(`${NAMES[offer.from]} ${offer.robbing ? 'adds to a pong' : 'threw away'}`, mini(offer.tile))
-    hint = offer.robbing ? 'Rob the kong, or pass' : 'Take it, or pass'
+    title.append(t(offer.robbing ? '{name} adds to a pong' : '{name} threw away', { name: NAMES[offer.from] }) + ' ', mini(offer.tile))
+    hint = offer.robbing ? t('Rob the kong, or pass') : t('Take it, or pass')
   } else if (mustDiscard) {
-    mood = 'mine'; badge = windChar(HUMAN); title.textContent = 'Your turn'
-    hint = touchScreen.matches ? 'Tap a tile, then tap it again to throw it' : 'Tap a tile to throw it away'
+    mood = 'mine'; badge = windChar(HUMAN); title.textContent = t('Your turn')
+    hint = touchScreen.matches ? t('Tap a tile, then tap it again to throw it') : t('Tap a tile to throw it away')
   } else if (intro) {
     badge = windChar(game.dealer)
-    const roller = game.dealer === HUMAN ? 'You' : NAMES[game.dealer]
-    const breaker = intro.breakSide === HUMAN ? 'you' : NAMES[intro.breakSide]
-    if (intro.phase === 'dice' && intro.rolling) { title.textContent = `${roller} ${game.dealer === HUMAN ? 'roll' : 'rolls'} the dice…`; hint = 'Get ready…' }
-    else if (intro.phase === 'dice') { title.textContent = `${roller} rolled ${diceTotal(intro)}`; hint = `The wall is opened in front of ${breaker}` }
-    else if (intro.phase === 'deal') { title.textContent = 'Dealing the tiles'; hint = 'Four at a time, then one more each' }
-    else { title.textContent = 'Flowers and seasons'; hint = 'Bonus tiles are put aside and replaced' }
+    const you = game.dealer === HUMAN, roller = NAMES[game.dealer]
+    const breaker = intro.breakSide === HUMAN ? t('you') : NAMES[intro.breakSide]
+    if (intro.phase === 'dice' && intro.rolling) { title.textContent = you ? t('You roll the dice…') : t('{name} rolls the dice…', { name: roller }); hint = t('Get ready…') }
+    else if (intro.phase === 'dice') { title.textContent = you ? t('You rolled {n}', { n: diceTotal(intro) }) : t('{name} rolled {n}', { name: roller, n: diceTotal(intro) }); hint = t('The wall is opened in front of {name}', { name: breaker }) }
+    else if (intro.phase === 'deal') { title.textContent = t('Dealing the tiles'); hint = t('Four at a time, then one more each') }
+    else { title.textContent = t('Flowers and seasons'); hint = t('Bonus tiles are put aside and replaced') }
   } else {
-    title.textContent = `${NAMES[game.current]} is playing…`; hint = 'Please wait'
+    title.textContent = t('{name} is playing…', { name: NAMES[game.current] }); hint = t('Please wait')
   }
   const s = el('div', 'status ' + mood)
   const pill = el('div', 'status-pill')
   const text = el('div', 'status-text')
   const hintEl = el('div', 'status-hint', hint)
-  if (online && !online.connected) hintEl.textContent = 'Connection lost — reconnecting…'
+  if (online && !online.connected) hintEl.textContent = t('Connection lost — reconnecting…')
   else if (online && (offer || mustDiscard)) { hintEl.dataset.base = hint; showCountdown(hintEl) }
   text.append(title, hintEl)
   pill.append(el('div', 'status-badge', badge), text)
@@ -1489,7 +1512,7 @@ function sideLabel(seat: number): HTMLElement {
   const label = el('div', labelCls)
   const w = seatWind(game, seat)
   const name = el('div', 'wl-name', `${NAMES[seat]} · ${standingText(seat)}`)
-  label.append(name, el('div', 'wl-wind', `${SEATS[w]} ${WIND_CHARS[w]}${seat === game.dealer ? ' · Dealer' : ''}`))
+  label.append(name, el('div', 'wl-wind', `${t(SEATS[w])} ${WIND_CHARS[w]}${seat === game.dealer ? ' · ' + t('Dealer') : ''}`))
   if (seat !== HUMAN) label.style.transform = 'rotate(180deg)'   // read from the middle of the table, like a real cloth
   // online, the time left on their turn: beside the name, not under it — the others' labels are turned
   // round, so "under" would reach into the discards in the middle
@@ -1579,8 +1602,8 @@ function showDiscards() {
   const close = () => { document.removeEventListener('keydown', onKey); layer.remove() }
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close() } }
   const actions = el('div', 'dialog-actions')
-  actions.appendChild(button('Close', close, 'act primary'))
-  card.append(el('div', 'dialog-title', `Discards · ${pool.length}`), grid, actions)
+  actions.appendChild(button(t('Close'), close, 'act primary'))
+  card.append(el('div', 'dialog-title', t('Discards · {n}', { n: pool.length })), grid, actions)
   layer.appendChild(card)
   layer.onclick = e => { if (e.target === layer) close() }
   document.body.appendChild(layer)
@@ -1590,12 +1613,12 @@ function showDiscards() {
 // The button that moves the match on once a hand is over.
 // Online the next hand starts once everyone has pressed it.
 const continueButton = () => {
-  if (match.over) return button('Final results', showStandings, 'act primary')
-  if (!online) return button('Next hand', nextHand, 'act primary')
+  if (match.over) return button(t('Final results'), showStandings, 'act primary')
+  if (!online) return button(t('Next hand'), nextHand, 'act primary')
   const people = online.room?.seats.filter(x => x.person && x.connected).length ?? 1
   const ready = online.view?.readyCount ?? 0
   const pressed = pressedNext === match.hand
-  const b = button(pressed ? `Waiting for others… (${ready}/${people})` : 'Next hand', () => {
+  const b = button(pressed ? t('Waiting for others… ({ready}/{people})', { ready, people }) : t('Next hand'), () => {
     pressedNext = match.hand
     online?.send({ type: 'ready' })
     refresh()
@@ -1623,10 +1646,10 @@ function handMeter(): HTMLElement {
   // the score pill; hover (or tap, on touch screens) opens the "what you have / go for next" card
   const wrap = el('div', 'hm-total-wrap' + (faanCardOpen ? ' open' : '') + (faanPointed ? ' pointed' : ''))
   const head = el('button', 'hm-total' + (enough ? ' ok' : ''))
-  head.append(el('span', 'hm-label', 'Your hand'), el('span', 'hm-faan', `${total} faan`),
-    el('span', 'hm-need', enough ? `✓ minimum ${match.minFaan} reached` : `${match.minFaan - total} more to reach minimum ${match.minFaan}`),
+  head.append(el('span', 'hm-label', t('Your hand')), el('span', 'hm-faan', `${total} faan`),
+    el('span', 'hm-need', enough ? t('✓ minimum {min} reached', { min: match.minFaan }) : t('{n} more to reach minimum {min}', { n: match.minFaan - total, min: match.minFaan })),
     el('span', 'hm-more', 'ⓘ'))
-  head.setAttribute('aria-label', 'Your hand score — show details')
+  head.setAttribute('aria-label', t('Your hand score — show details'))
   head.onclick = () => { faanCardOpen = !faanCardOpen; render() }
   const card = faanCard(have, close, total, plans, match.minFaan)
   card.onclick = () => { if (faanCardOpen) { faanCardOpen = false; render() } }   // tap the card to put it away
@@ -1636,23 +1659,23 @@ function handMeter(): HTMLElement {
   // short of the minimum: point straight at the easiest way to reach it (details in the card)
   if (!enough && plans.length) {
     const way = el('button', 'hm-way')
-    way.append(el('span', 'hm-way-label', `Way to ${match.minFaan} faan:`), el('span', '', planSummary(headlinePlan(plans))))
-    way.title = 'See every way your hand could reach the minimum'
+    way.append(el('span', 'hm-way-label', t('Way to {min} faan:', { min: match.minFaan })), el('span', '', planSummary(headlinePlan(plans))))
+    way.title = t('See every way your hand could reach the minimum')
     way.onclick = () => { faanCardOpen = !faanCardOpen; render() }
     m.appendChild(way)
   }
 
   const chips = el('div', 'hm-chips')
   for (const item of have) {
-    const c = el('span', 'hm-chip have', item.name)
+    const c = el('span', 'hm-chip have', faanName(item.name))
     if (item.tile) c.appendChild(mini(item.tile))
     c.appendChild(el('b', '', `+${item.faan}`))
     chips.appendChild(c)
   }
   for (const c of close.slice(0, enough ? 2 : 1)) {    // the best one or two; the card lists them all
-    const chip = el('span', 'hm-chip close', `Close: ${c.name}`)
-    chip.append(el('b', '', `+${c.faan}`), el('small', '', `${c.off} tile${c.off > 1 ? 's' : ''} off`))
-    chip.title = `Change ${c.off} more tile${c.off > 1 ? 's' : ''} to get ${c.name} (+${c.faan} faan)`
+    const chip = el('span', 'hm-chip close', t('Close: {name}', { name: faanName(c.name) }))
+    chip.append(el('b', '', `+${c.faan}`), el('small', '', t(c.off > 1 ? '{n} tiles off' : '{n} tile off', { n: c.off })))
+    chip.title = t(c.off > 1 ? 'Change {n} more tiles to get {name} (+{faan} faan)' : 'Change {n} more tile to get {name} (+{faan} faan)', { n: c.off, name: faanName(c.name), faan: c.faan })
     chips.appendChild(chip)
   }
   m.appendChild(chips)
@@ -1662,13 +1685,14 @@ function handMeter(): HTMLElement {
     const wins = winningTiles(hand, melds.length)
     if (wins.length) {
       const ready = el('div', 'hm-ready')
-      ready.appendChild(el('span', 'hm-ready-label', 'Ready! Win with'))
-      for (const t of wins) {
-        const f = faanOf(HUMAN, [...hand, t], false, false)
+      ready.appendChild(el('span', 'hm-ready-label', t('Ready! Win with')))
+      for (const tile of wins) {
+        const f = faanOf(HUMAN, [...hand, tile], false, false)
         const w = el('span', 'hm-win' + (f >= match.minFaan ? '' : ' short'))
-        w.append(mini(t), el('span', '', `${f} faan`))
-        w.title = f >= match.minFaan ? `Winning on ${tileName(t.category, t.value)} scores ${f} faan (more if you draw it yourself)`
-          : `${tileName(t.category, t.value)} would complete your hand but only scores ${f} faan — not enough to win`
+        w.append(mini(tile), el('span', '', `${f} faan`))
+        const name = tileName(tile.category, tile.value)
+        w.title = f >= match.minFaan ? t('Winning on {tile} scores {f} faan (more if you draw it yourself)', { tile: name, f })
+          : t('{tile} would complete your hand but only scores {f} faan — not enough to win', { tile: name, f })
         ready.appendChild(w)
       }
       m.appendChild(ready)
@@ -1685,9 +1709,9 @@ function actionBar(): HTMLElement {
   if (game.over) {
     // the result card carries these buttons; they appear here only once it's been closed
     if (resultClosed && !showFinal) bar.appendChild(continueButton())
-    if (resultClosed) bar.appendChild(button(showFinal ? 'Show standings' : 'Show result', () => { resultClosed = false; render() }, 'act'))
+    if (resultClosed) bar.appendChild(button(showFinal ? t('Show standings') : t('Show result'), () => { resultClosed = false; render() }, 'act'))
   } else if (mustDiscard && !offer) {
-    for (const t of kongOptions(game, HUMAN)) bar.appendChild(button('Kong', () => humanKong(t), 'act primary', [t]))
+    for (const k of kongOptions(game, HUMAN)) bar.appendChild(button('Kong', () => humanKong(k), 'act primary', [k]))
   }
   return bar
 }
@@ -1709,9 +1733,9 @@ function claimEffectsEl(kind: ClaimKind, tile: Tile, run?: number[]): HTMLElemen
   const { lost, ruined, gained } = claimEffects(progressInput(game, HUMAN), kind, tile, run)
   if (!lost.length && !ruined.length && !gained.length) return null
   const box = el('span', 'claim-effects')
-  for (const i of lost) box.appendChild(el('span', 'ce-bad', `✗ Lose ${i.name} −${i.faan}`))
-  for (const c of ruined) box.appendChild(el('span', 'ce-bad', `✗ Ruins ${c.name} (+${c.faan})`))
-  for (const i of gained) box.appendChild(el('span', 'ce-good', `✓ ${i.name} +${i.faan}`))
+  for (const i of lost) box.appendChild(el('span', 'ce-bad', t('✗ Lose {name} −{faan}', { name: faanName(i.name), faan: i.faan })))
+  for (const c of ruined) box.appendChild(el('span', 'ce-bad', t('✗ Ruins {name} (+{faan})', { name: faanName(c.name), faan: c.faan })))
+  for (const i of gained) box.appendChild(el('span', 'ce-good', `✓ ${faanName(i.name)} +${i.faan}`))
   return box
 }
 
@@ -1719,9 +1743,9 @@ function claimEffectsEl(kind: ClaimKind, tile: Tile, run?: number[]): HTMLElemen
 function awayCard(): HTMLElement {
   const card = el('div', 'claim-card away-card')
   card.append(
-    el('div', 'claim-head', 'You were away, so a bot is playing for you'),
-    el('p', 'away-text', 'Your time ran out twice in a row. Tap below when you’re ready to play again.'),
-    button('I’m back', () => online?.back(), 'act primary big'),
+    el('div', 'claim-head', t('You were away, so a bot is playing for you')),
+    el('p', 'away-text', t('Your time ran out twice in a row. Tap below when you’re ready to play again.')),
+    button(t('I’m back'), () => online?.back(), 'act primary big'),
   )
   return card
 }
@@ -1731,19 +1755,19 @@ function claimCard(o: Offer): HTMLElement {
   if (o.win) return winCard(o)
   const card = el('div', 'claim-card')
   const head = el('div', 'claim-head')
-  head.append(el('span', '', `${NAMES[o.from]} ${o.robbing ? 'is adding to a pong to make a kong:' : 'threw away'}`), tileEl(o.tile, 'claim-tile'))
+  head.append(el('span', '', t(o.robbing ? '{name} is adding to a pong to make a kong:' : '{name} threw away', { name: NAMES[o.from] })), tileEl(o.tile, 'claim-tile'))
   const opts = el('div', 'claim-options')
   // taking a tile exposes a set, which can cost patterns you have or are building — say which
-  if (o.kong) opts.appendChild(claimButton('Kong', 'Take it: four of a kind', () => humanClaim('kong'), '', [o.tile],
+  if (o.kong) opts.appendChild(claimButton('Kong', t('Take it: four of a kind'), () => humanClaim('kong'), '', [o.tile],
     claimEffectsEl('kong', o.tile)))
-  if (o.pong) opts.appendChild(claimButton('Pong', 'Take it: three of a kind', () => humanClaim('pong'), '', [o.tile],
+  if (o.pong) opts.appendChild(claimButton('Pong', t('Take it: three of a kind'), () => humanClaim('pong'), '', [o.tile],
     claimEffectsEl('pong', o.tile)))
   for (const run of o.chows) {
     const tiles = run.map(v => makeTile(o.tile.category, v))
-    opts.appendChild(claimButton('Chi', 'Take it: three in a row', () => humanClaim('chow', run), '', tiles,
+    opts.appendChild(claimButton('Chi', t('Take it: three in a row'), () => humanClaim('chow', run), '', tiles,
       claimEffectsEl('chow', o.tile, run)))
   }
-  opts.appendChild(claimButton('Pass', o.robbing ? 'Let them make the kong' : "Don't take it", humanPass, 'pass'))
+  opts.appendChild(claimButton(t('Pass'), o.robbing ? t('Let them make the kong') : t('Don’t take it'), humanPass, 'pass'))
   card.append(head, opts)
   return card
 }
@@ -1754,17 +1778,17 @@ function winCard(o: Offer): HTMLElement {
   const card = el('div', 'claim-card win-card')
   const faan = table.faanOf(HUMAN, [...game.hands[HUMAN], o.tile], false, true, !!o.robbing)
   const head = el('div', 'claim-head')
-  head.append(el('span', '', o.robbing ? `${NAMES[o.from]} is adding this to a pong — it finishes your hand:` : `${NAMES[o.from]} threw away the tile you need:`),
+  head.append(el('span', '', t(o.robbing ? '{name} is adding this to a pong — it finishes your hand:' : '{name} threw away the tile you need:', { name: NAMES[o.from] })),
     tileEl(o.tile, 'claim-tile'))
-  const win = claimButton('Mahjong!', (match.style === 'family' ? `Win now — ${faan} faan` : `Win now — ${faan} faan, ${fmt(payout(faan))} points`), () => humanClaim('win'), 'win big-win')
-  const pass = button('Not now', async () => {
-    const choice = await dialog('Give up the win?', 'If you pass, this tile goes on and you keep playing for a later win. Most players take it.', [
-      { label: 'Take the win', value: 'win', cls: 'primary' },
-      { label: 'Pass', value: 'pass', cls: 'danger' },
+  const win = claimButton('Mahjong!', (match.style === 'family' ? t('Win now — {faan} faan', { faan }) : t('Win now — {faan} faan, {points} points', { faan, points: fmt(payout(faan)) })), () => humanClaim('win'), 'win big-win')
+  const pass = button(t('Not now'), async () => {
+    const choice = await dialog(t('Give up the win?'), t('If you pass, this tile goes on and you keep playing for a later win. Most players take it.'), [
+      { label: t('Take the win'), value: 'win', cls: 'primary' },
+      { label: t('Pass'), value: 'pass', cls: 'danger' },
     ])
     if (choice === 'pass') humanPass(); else humanClaim('win')
   }, 'win-pass')
-  card.append(el('div', 'win-card-title', 'You can win!'), head, win, pass)
+  card.append(el('div', 'win-card-title', t('You can win!')), head, win, pass)
   return card
 }
 
@@ -1818,38 +1842,39 @@ const winsFor = (concealed: Tile[]) =>
 // "Right now": what you should do at this moment, plus hints toward a win.
 function nowSection(): HTMLElement {
   const s = el('section', 'now')
-  s.appendChild(el('h3', '', 'Right now'))
+  s.appendChild(el('h3', '', t('Right now')))
   const hand = game.hands[HUMAN], melds = game.melds[HUMAN].length
   if (game.over) {
-    s.append(para(resultLine()), para(match.over ? 'That was the last hand — press “Final results”.' : 'Press “Next hand” to carry on.'))
+    s.append(para(resultLine()), para(match.over ? t('That was the last hand — press “Final results”.') : t('Press “Next hand” to carry on.')))
   } else if (intro) {
-    s.append(para(`${game.dealer === HUMAN ? 'You are' : `${NAMES[game.dealer]} is`} the dealer this hand. The dice decide where the wall is opened, then everyone gets 13 tiles — four at a time.`),
-      para('Flowers and seasons are put aside and replaced automatically.'))
+    s.append(para(game.dealer === HUMAN ? t('You are the dealer this hand. The dice decide where the wall is opened, then everyone gets 13 tiles — four at a time.')
+      : t('{name} is the dealer this hand. The dice decide where the wall is opened, then everyone gets 13 tiles — four at a time.', { name: NAMES[game.dealer] })),
+      para(t('Flowers and seasons are put aside and replaced automatically.')))
   } else if (offer) {
-    s.append(para(offer.robbing
-      ? `${NAMES[offer.from]} is adding a tile to their pong — and that tile would finish your hand! Press Mahjong! to rob the kong, or Pass.`
-      : `${NAMES[offer.from]} threw away a tile you can use. Choose a big button in the box, or press Pass.`))
+    s.append(para(t(offer.robbing
+      ? '{name} is adding a tile to their pong — and that tile would finish your hand! Press Mahjong! to rob the kong, or Pass.'
+      : '{name} threw away a tile you can use. Choose a big button in the box, or press Pass.', { name: NAMES[offer.from] })))
   } else if (mustDiscard) {
     s.append(para(touchScreen.matches
-      ? 'Your turn. You have one tile too many — tap a tile in your hand to lift it, then tap it again to throw it away.'
-      : 'Your turn. You have one tile too many — tap a tile in your hand to throw it away.'))
+      ? t('Your turn. You have one tile too many — tap a tile in your hand to lift it, then tap it again to throw it away.')
+      : t('Your turn. You have one tile too many — tap a tile in your hand to throw it away.')))
     if (isWinningHand(hand, melds)) {               // complete, but below the agreed minimum
       const f = faanOf(HUMAN, hand, true)
-      s.append(para(`Your hand is complete but scores only ${f} faan — you need ${match.minFaan} to win. Keep going for a better hand!`))
+      s.append(para(t('Your hand is complete but scores only {f} faan — you need {min} to win. Keep going for a better hand!', { f, min: match.minFaan })))
     }
     const keepReady = uniqueTiles(hand).filter(t => winsFor(hand.filter(h => h !== t)).length > 0)
     if (keepReady.length) {
-      const p = para('Tip: throw away one of these and you’ll be just one tile from winning: ')
+      const p = para(t('Tip: throw away one of these and you’ll be just one tile from winning: '))
       for (const t of keepReady) p.appendChild(mini(t))
       s.appendChild(p)
     }
     const plan = bestPlanPara()
     if (plan) s.appendChild(plan)
   } else {
-    s.append(para(`Waiting for ${NAMES[game.current]} to play…`))
+    s.append(para(t('Waiting for {name} to play…', { name: NAMES[game.current] })))
     const wins = winsFor(hand)
     if (wins.length) {
-      const p = para('You’re one tile from winning! You need: ')
+      const p = para(t('You’re one tile from winning! You need: '))
       for (const t of wins) p.appendChild(mini(t))
       s.appendChild(p)
     }
@@ -1863,22 +1888,22 @@ function nowSection(): HTMLElement {
 function bestPlanPara(): HTMLElement | null {
   const { base, plans } = planToMinimum(progressInput(game, HUMAN), match.minFaan)
   if (base >= match.minFaan) return null
-  const p = para(el('strong', '', `To reach ${match.minFaan} faan: `))
-  if (!plans.length) { p.append('try keeping just one suit, plus winds and dragons (+3).'); return p }
+  const p = para(el('strong', '', t('To reach {min} faan: ', { min: match.minFaan })))
+  if (!plans.length) { p.append(t('try keeping just one suit, plus winds and dragons (+3).')); return p }
   const best = headlinePlan(plans)
   p.append(`${planSummary(best)} (→ ${best.total} faan)`)
   for (const item of best.items) {
-    p.append(item.action === 'need' ? ' — need ' : ' — throw away ')
+    p.append(item.action === 'need' ? t(' — need ') : t(' — throw away '))
     for (const t of item.tiles) p.appendChild(mini(t))
   }
-  p.append(matchMedia('(hover: hover)').matches ? '. Hover over “Your hand” for more plans.' : '. Tap “Your hand” for more plans.')
+  p.append(matchMedia('(hover: hover)').matches ? t('. Hover over “Your hand” for more plans.') : t('. Tap “Your hand” for more plans.'))
   return p
 }
 
 function helpPanel(): HTMLElement {
   const p = el('aside', 'help')
   const head = el('div', 'help-head')
-  head.append(el('h2', '', 'How to play'), button('✕', toggleHelp, 'close-btn'))
+  head.append(el('h2', '', t('How to play')), button('✕', toggleHelp, 'close-btn'))
   p.append(head, nowSection(), ...rulesSections(match))
   return p
 }
@@ -1920,22 +1945,22 @@ let shell: Shell | null = null
 // Make `container`'s children exactly `wanted`, in order, touching only the ones that differ.
 // A player's standing, as shown by their name: points won or lost, or in Family style hands won.
 const standingText = (seat: number) => match.style === 'family'
-  ? `${winsOf(match, seat)} win${winsOf(match, seat) === 1 ? '' : 's'}`
+  ? t(winsOf(match, seat) === 1 ? '{n} win' : '{n} wins', { n: winsOf(match, seat) })
   : score(match.scores[seat], match.startPoints)
 
 // ---------- Your record (record.ts) ----------
 // "Best hand 5 faan · 4 of 17 challenges" — the menu card's line
 function recordLine(): string {
   const done = CHALLENGES.filter(c => record.challenges[c.id]).length
-  if (!record.handsPlayed && !record.games.length) return 'Best hand, history and challenges to collect'
-  return `${record.best ? `Best hand ${record.best.faan} faan · ` : ''}${done} of ${CHALLENGES.length} challenges`
+  if (!record.handsPlayed && !record.games.length) return t('Best hand, history and challenges to collect')
+  return (record.best ? t('Best hand {faan} faan', { faan: record.best.faan }) + ' · ' : '') + t('{done} of {all} challenges', { done, all: CHALLENGES.length })
 }
 function openRecord() {
   inMenu = true
   renderRecordPage(app, record, renderMenu, async () => {
-    const sure = await dialog('Clear your record?', 'Your history, best hand and challenges on this device are wiped. This can’t be undone.', [
-      { label: 'No, keep it', value: false, cls: 'primary' },
-      { label: 'Yes, clear it', value: true, cls: 'danger' },
+    const sure = await dialog(t('Clear your record?'), t('Your history, best hand and challenges on this device are wiped. This can’t be undone.'), [
+      { label: t('No, keep it'), value: false, cls: 'primary' },
+      { label: t('Yes, clear it'), value: true, cls: 'danger' },
     ])
     // (it still remembers which hands it has seen, so a result on screen isn't counted again)
     if (sure) { clearRecord(); record = { ...emptyRecord(), counted: record.counted }; saveRecord(record) }
@@ -1966,7 +1991,7 @@ function noteRecords() {
     }))
   }
   if (JSON.stringify(record) !== before) saveRecord(record)
-  for (const c of done) notice(`Challenge complete · ${c.title}`)
+  for (const c of done) notice(t('Challenge complete · {title}', { title: t(c.title) }))
 }
 
 // The end-of-hand and final cards are rebuilt on every redraw; only their first appearance fades in,
@@ -1999,15 +2024,15 @@ function placeAll(container: HTMLElement, wanted: HTMLElement[]) {
 
 function renderTable() {
   inMenu = false
-  let t = performance.now()
+  let clock = performance.now()
   motion.capture(app)                                 // where every tile is now, to glide them after the rebuild
-  stage('capture', t); t = performance.now()
+  stage('capture', clock); clock = performance.now()
   if (!shell || !app.contains(shell.layout)) {
     app.innerHTML = ''
     const layout = el('div', 'layout'), main = el('div', 'main-col')
     const scene = el('div', 'scene'), table = el('div', 'table')   // the scene supplies the perspective for the tilted table
     const sides = [0, 1, 2, 3].map(sideLayer), poolEl = el('div', 'pool')
-    poolEl.title = 'See all the discards up close'
+    poolEl.title = t('See all the discards up close')
     poolEl.onclick = showDiscards
     const glow = turnGlow()
     table.append(glow.el, ...sides, poolEl)
@@ -2024,24 +2049,24 @@ function renderTable() {
   // mid-deal, tiles not yet handed out still count as being in the wall
   const tilesLeft = game.wall.length + (intro && intro.phase !== 'flowers' ? 52 - intro.shown.reduce((a, b) => a + b, 0) : 0)
   const round = chip(WIND_CHARS[game.roundWind], null, null, 'info round')
-  round.title = `${SEATS[game.roundWind]} round, hand ${match.hand} — ${tilesLeft} tiles left in the wall`
+  round.title = t('{round}, hand {n} — {left} tiles left in the wall', { round: roundName(game.roundWind), n: match.hand, left: tilesLeft })
   const roundText = el('span', 'chip-stack')
   const tilesLine = el('span', 'chip-small')
-  tilesLine.append(el('strong', '', String(tilesLeft)), ' tiles left')
-  roundText.append(el('span', '', `${SEATS[game.roundWind]} round · Hand ${match.hand}`), tilesLine)
+  tilesLine.append(el('strong', '', String(tilesLeft)), ' ' + t('tiles left'))
+  roundText.append(el('span', '', `${roundName(game.roundWind)} · ${t('Hand {n}', { n: match.hand })}`), tilesLine)
   round.appendChild(roundText)
   // three columns: menu | status (centred over the table) | game info and settings
   const leftGroup = el('div', 'tb-left')
-  leftGroup.appendChild(chip(ICONS.menu, 'Menu', () => void openPause()))
+  leftGroup.appendChild(chip(ICONS.menu, t('Menu'), () => void openPause()))
   if (online) {                                       // quick reactions for the others at the table
     const react = chip(emoteArt('👍'), null, () => toggleReactions(react), 'react-chip')
-    react.title = 'Send a reaction'
+    react.title = t('Send a reaction')
     leftGroup.appendChild(react)
   }
   const rightGroup = el('div', 'tb-right')
   // the gold outline shows when the rules are open, so the label can stay short
-  const rules = chip(ICONS.book, 'Rules', toggleHelp, 'rules-chip' + (helpOpen ? ' on' : ''))
-  rules.title = helpOpen ? 'Hide the rules panel' : 'Show the rules panel'
+  const rules = chip(ICONS.book, t('Rules'), toggleHelp, 'rules-chip' + (helpOpen ? ' on' : ''))
+  rules.title = helpOpen ? t('Hide the rules panel') : t('Show the rules panel')
   rightGroup.append(round, rules, ...soundButtons(render))
   top.append(leftGroup, statusEl(), rightGroup)
   if (sh.top) sh.top.replaceWith(top)
@@ -2091,17 +2116,17 @@ function renderTable() {
   if (sh.help) sh.layout.appendChild(sh.help)
   const main = sh.main, scene = sh.scene
   partsBefore = partsNow
-  stage('build', t); t = performance.now()
+  stage('build', clock); clock = performance.now()
   void app.offsetHeight                               // (lay the page out now, so the timing below is the animations alone)
   // (upright phones stand the pong/chi/kong pop-up just above your hand: see .claim-card in style.css)
   if ((offer || online?.away) && sh.rack) main.style.setProperty('--above-rack', `${Math.round(main.getBoundingClientRect().bottom - sh.rack.getBoundingClientRect().top)}px`)
-  stage('layout', t); t = performance.now()
+  stage('layout', clock); clock = performance.now()
   motion.play(app, motionHooks)
-  stage('play', t)
+  stage('play', clock)
   music.start()                                      // carries on (or resumes, e.g. via Continue game)
   if (!coachOpen && !paused) music.duck(game.over && !resultClosed)   // quieter while the result card is showing
   if (burst !== null) {
-    mahjongBurst(scene, burst === HUMAN ? 'You win!' : `${NAMES[burst]} wins`, burst === HUMAN)
+    mahjongBurst(scene, burst === HUMAN ? t('You win!') : t('{name} wins', { name: NAMES[burst] }), burst === HUMAN)
     burst = null
   }
   for (const b of banners) showBanner(b, scene)
@@ -2179,18 +2204,18 @@ function showBanner(b: Banner, over: HTMLElement) {
 // ---------- End of a hand, end of the game ----------
 // The cards themselves are in result-cards.ts; these are what they show and the buttons they carry.
 const resultContext = (): ResultContext => ({ match, game, names: NAMES, winTile })
-const seeTable = () => button('See the table', () => { resultClosed = true; render() }, 'act')
+const seeTable = () => button(t('See the table'), () => { resultClosed = true; render() }, 'act')
 const handOverButtons = () => [continueButton(), seeTable()]
 function finalButtons(): HTMLElement[] {
   const actions: HTMLElement[] = []
   if (online) {                                        // the host starts the next game; everyone else waits
     const room = online.room, host = room?.seats[online.seat ?? -1]?.host
     const hostName = room?.seats.find(s => s.host)?.name
-    if (host && room) actions.push(button('Play again', () => { track('online-game'); online?.start(room.rules) }, 'act primary'))   // same rules as this game
-    else actions.push(el('div', 'result-next', `${hostName ?? 'The host'} can start another game — friends can join with code ${online.code} until then.`))
-    actions.push(button('Leave room', leaveOnline, 'act'))
+    if (host && room) actions.push(button(t('Play again'), () => { track('online-game'); online?.start(room.rules) }, 'act primary'))   // same rules as this game
+    else actions.push(el('div', 'result-next', t('{host} can start another game — friends can join with code {code} until then.', { host: hostName ?? t('The host'), code: online.code })))
+    actions.push(button(t('Leave room'), leaveOnline, 'act'))
   } else {
-    actions.push(button('Play again', () => startMatch(), 'act primary'), button('Main menu', renderMenu, 'act'))
+    actions.push(button(t('Play again'), () => startMatch(), 'act primary'), button(t('Main menu'), renderMenu, 'act'))
   }
   actions.push(seeTable())
   return actions

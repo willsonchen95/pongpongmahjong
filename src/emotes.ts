@@ -3,6 +3,8 @@
 // REACTIONS), so nothing changes there — each emoji is just shown as its character. They move only
 // while floating up from a player's place (.reaction in style.css); in the tray they keep still.
 
+import { t } from './i18n'
+
 const INK = '#2f3b40', RED = '#a8402f', KOI = '#c4553f', CREAM = '#fbf8f2', CHEEK = '#e7a99a', TEAR = '#7fb3cf'
 
 const svg = (body: string) => `<svg viewBox="0 0 64 64" aria-hidden="true">${body}</svg>`
@@ -115,8 +117,8 @@ export function emote(emoji: string): HTMLElement | null {
   const e = document.createElement('span')
   e.className = 'emote'
   e.setAttribute('role', 'img')
-  e.setAttribute('aria-label', c.name)
-  e.title = c.name
+  e.setAttribute('aria-label', t(c.name))
+  e.title = t(c.name)
   e.innerHTML = c.art
   return e
 }

@@ -1,12 +1,13 @@
 // What changed in each version, newest first — shown at the end of the About page. When releasing,
 // add an entry here and set the same version in package.json (npm version <x.y.z> --no-git-tag-version).
 
-export interface Release { version: string; date: string; notes: string[] }
+export interface Release { version: string; date: string; notes: string[] }   // date: YYYY-MM-DD; notes in English (translated where shown)
 
 export const CHANGELOG: Release[] = [
   {
-    version: '1.1.0', date: '9 October 2026',
+    version: '1.1.0', date: '2026-10-09',
     notes: [
+      'Bahasa Indonesia: switch between English and Indonesian on the main menu (EN | ID). Phones set to Indonesian start in Indonesian.',
       'A calm new look: a tea-house table with a printed mat, brush-lettered tiles in soft colours, and a quiet tea room around the game.',
       'Family style: no points — just reach the minimum faan to win (choose any minimum from 0 to 10). The most hands won wins the game.',
       'See how a hand scored: each faan pattern appears in turn and lights up the tiles that earned it. Tap a pattern to see what it means.',
@@ -18,7 +19,7 @@ export const CHANGELOG: Release[] = [
     ],
   },
   {
-    version: '1.0.0', date: '8 October 2026',
+    version: '1.0.0', date: '2026-10-08',
     notes: [
       'The first version: Hong Kong mahjong in the browser, on phones and computers.',
       'Play against bots at three levels, or learn with a guided game and beginner tips.',

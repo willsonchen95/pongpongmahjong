@@ -1187,6 +1187,12 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   align-items: center;
 }
 .menu-sound { position: fixed; top: 16px; right: 16px; z-index: 5; display: flex; gap: 10px; }
+/* English | Indonesia, beside the sound buttons */
+.lang-switch { display: inline-flex; align-items: center; padding: 3px; border-radius: 999px; border: 2px solid var(--line); background: var(--card); box-shadow: 0 2px 6px rgba(60, 50, 40, 0.08); }
+.lang-btn { min-width: 40px; height: 40px; padding: 0 10px; border-radius: 999px; background: transparent; color: var(--ink-soft); font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em; }
+.lang-btn.on { background: var(--jade); color: #fff; }
+.lang-btn:not(.on):hover { color: var(--ink); }
+.lang-btn:focus-visible { outline: 3px solid var(--clay); outline-offset: 1px; }
 /* the version: at the end of the menu (on phones, pinned to the bottom of the screen) */
 .menu-side { display: contents; }
 .menu-extras { order: 1; }

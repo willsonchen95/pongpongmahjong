@@ -3,6 +3,7 @@
 import { type Tile, makeTile, payout, MAX_FAAN } from './engine'
 import type { Style } from './table'
 import { el, tileEl, para, exampleTiles, fmt } from './ui'
+import { t } from './i18n'
 
 interface InGame { minFaan: number; startPoints: number; style?: Style }
 
@@ -10,36 +11,36 @@ interface InGame { minFaan: number; startPoints: number; style?: Style }
 // In a game, `inGame` carries its rules, for the reminders of its minimum faan and starting points.
 export function rulesSections(inGame: InGame | null): HTMLElement[] {
   const win = el('section')
-  win.append(el('h3', '', 'How to win'),
-    para('Collect ', el('strong', '', '4 sets and 1 pair'), ' — 14 tiles. For example:'))
+  win.append(el('h3', '', t('How to win')),
+    para(t('Collect '), el('strong', '', t('4 sets and 1 pair')), t(' — 14 tiles. For example:')))
   const hand = el('div', 'example-hand')
   for (const spec of ['123m', '555p', '111z', '789s', '66z']) hand.appendChild(exampleTiles(spec))
   win.appendChild(hand)
 
   const sets = el('section')
-  sets.appendChild(el('h3', '', 'The sets'))
+  sets.appendChild(el('h3', '', t('The sets')))
   const grid = el('div', 'set-grid')
   const row = (name: string, spec: string, what: string) => grid.append(el('strong', '', name), exampleTiles(spec), el('span', 'set-what', what))
-  row('Pong', '555p', 'three the same')
-  row('Kong', '7777s', 'four the same')
-  row('Chi', '345m', 'three in a row, same suit (numbers only)')
-  row('Pair', '66z', 'two the same — you need one')
+  row('Pong', '555p', t('three the same'))
+  row('Kong', '7777s', t('four the same'))
+  row('Chi', '345m', t('three in a row, same suit (numbers only)'))
+  row(t('Pair'), '66z', t('two the same — you need one'))
   sets.appendChild(grid)
 
   const take = el('section')
-  take.append(el('h3', '', 'Taking a thrown-away tile'),
-    para('When someone throws away a tile you can use, a box pops up:'),
-    para(el('strong', '', 'Pong / Kong'), ' — from anyone, if you hold 2 / 3 of that tile.'),
-    para(el('strong', '', 'Chi'), ' — only from Lin, the player on your left (just before you).'),
-    para(el('strong', '', 'Mahjong!'), ' — from anyone, if it finishes your hand.'),
-    para('Taken sets are laid face-up on the table; then you throw away a tile.'))
+  take.append(el('h3', '', t('Taking a thrown-away tile')),
+    para(t('When someone throws away a tile you can use, a box pops up:')),
+    para(el('strong', '', 'Pong / Kong'), t(' — from anyone, if you hold 2 / 3 of that tile.')),
+    para(el('strong', '', 'Chi'), t(' — only from Lin, the player on your left (just before you).')),
+    para(el('strong', '', 'Mahjong!'), t(' — from anyone, if it finishes your hand.')),
+    para(t('Taken sets are laid face-up on the table; then you throw away a tile.')))
 
   const kinds = el('section')
-  kinds.append(el('h3', '', 'The tiles'))
+  kinds.append(el('h3', '', t('The tiles')))
   const kgrid = el('div', 'set-grid')
   const kind = (name: string, spec: string) => kgrid.append(el('strong', '', name), exampleTiles(spec), el('span'))
-  kind('Characters', '159m'); kind('Circles', '159p'); kind('Bamboo', '159s'); kind('Winds', '1234z'); kind('Dragons', '567z')
-  kinds.append(kgrid, para('Flowers and seasons are bonus tiles — they’re put aside for you automatically.'))
+  kind(t('Characters'), '159m'); kind(t('Circles'), '159p'); kind(t('Bamboo'), '159s'); kind(t('Winds'), '1234z'); kind(t('Dragons'), '567z')
+  kinds.append(kgrid, para(t('Flowers and seasons are bonus tiles — they’re put aside for you automatically.')))
 
   return [win, sets, take, scoringSection(inGame), kinds]
 }
@@ -77,51 +78,52 @@ const WIND_PONGS: Record<string, string> = {
 }
 export function faanMeaning(name: string): string | undefined {
   const base = name.replace(/ ×\d+$/, '')
-  return WIND_PONGS[base] ?? PATTERNS.find(p => p.name === base || p.name === base.replace(/s$/, '') || `${p.name}s` === base)?.what
+  const what = WIND_PONGS[base] ?? PATTERNS.find(p => p.name === base || p.name === base.replace(/s$/, '') || `${p.name}s` === base)?.what
+  return what && t(what)
 }
 
 function scoringSection(inGame: InGame | null): HTMLElement {
   const s = el('section')
   const family = inGame?.style === 'family'
-  s.append(el('h3', '', family ? 'How to score faan' : 'How to earn points'),
-    para('Every winning hand scores ', el('strong', '', 'faan'), ' for the patterns in it. Add them up',
-      family ? ' — a hand needs the agreed minimum to win.' : ' — more faan, more points.'),
+  s.append(el('h3', '', family ? t('How to score faan') : t('How to earn points')),
+    para(t('Every winning hand scores '), el('strong', '', 'faan'), t(' for the patterns in it. Add them up'),
+      family ? t(' — a hand needs the agreed minimum to win.') : t(' — more faan, more points.')),
     para(el('strong', 'min-note', inGame
-      ? `This game: you need at least ${inGame.minFaan} faan to win.`
-      : 'Before a game you choose the minimum faan needed to win: 0, 1 or 3 in Hong Kong style, any number in Family style.')))
+      ? t('This game: you need at least {min} faan to win.', { min: inGame.minFaan })
+      : t('Before a game you choose the minimum faan needed to win: 0, 1 or 3 in Hong Kong style, any number in Family style.'))))
 
   for (const pt of PATTERNS) {
     const card = el('div', 'pattern-card')
     const head = el('div', 'pattern-head')
-    const badge = pt.faan.includes('limit') ? pt.faan
-      : pt.faan.includes('each') ? `${pt.faan.replace(' each', '')} faan each` : `${pt.faan} faan`
-    head.append(el('strong', '', pt.name), el('span', 'faan-badge', badge))
-    card.append(head, el('div', 'pattern-what', pt.what))
+    const badge = pt.faan.includes('limit') ? t('{n} (limit)', { n: MAX_FAAN })
+      : pt.faan.includes('each') ? t('{n} faan each', { n: pt.faan.replace(' each', '') }) : `${pt.faan} faan`
+    head.append(el('strong', '', t(pt.name)), el('span', 'faan-badge', badge))
+    card.append(head, el('div', 'pattern-what', t(pt.what)))
     if (pt.tiles || pt.bonus) {
       const row = el('div', 'pattern-tiles')
       for (const spec of pt.tiles?.split(' ') ?? []) row.appendChild(exampleTiles(spec, 'ex sm'))
-      if (pt.bonus) { const g = el('span', 'tiles-row'); for (const t of pt.bonus) g.appendChild(tileEl(t, 'ex sm')); row.appendChild(g) }
+      if (pt.bonus) { const g = el('span', 'tiles-row'); for (const b of pt.bonus) g.appendChild(tileEl(b, 'ex sm')); row.appendChild(g) }
       card.appendChild(row)
     }
     s.appendChild(card)
   }
 
   // what the faan are worth: points in Hong Kong style; in Family style, only the minimum matters
-  const dealer = 'The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.'
-  s.appendChild(el('h3', 'sub-h', 'What faan are worth'))
+  const dealer = t('The dealer (East) keeps the deal after winning or a draw; otherwise it passes on.')
+  s.appendChild(el('h3', 'sub-h', t('What faan are worth')))
   if (inGame?.style === 'family') {
-    s.append(para('This game is ', el('strong', '', 'Family style'), ': there are no points. A hand just has to reach the minimum faan to win, and whoever wins the most hands wins the game (a tie goes to the one whose wins added up to more faan).'),
+    s.append(para(t('This game is '), el('strong', '', t('Family style')), t(': there are no points. A hand just has to reach the minimum faan to win, and whoever wins the most hands wins the game (a tie goes to the one whose wins added up to more faan).')),
       para(dealer))
     return s
   }
   const table = el('div', 'payout-table')
   for (let f = 0; f <= MAX_FAAN; f++) table.append(el('span', 'pf', `${f}`), el('span', 'pp', fmt(payout(f))))
   s.append(table,
-    para('If you win on someone’s thrown-away tile, ', el('strong', '', 'they pay'), ' the full amount. If you draw it yourself, ',
-      el('strong', '', 'all three pay half'), ' each.'),
-    para('Everyone starts at 0. If anyone falls ',
-      el('strong', '', inGame ? fmt(inGame.startPoints) : '1,000, 2,000 or 5,000'),
-      ' points behind, the game ends early. ', dealer))
-  if (!inGame) s.appendChild(para('That’s ', el('strong', '', 'Hong Kong style'), '. In ', el('strong', '', 'Family style'), ' (chosen in New game) there are no points at all: reach the minimum faan to win, and the most hands won wins the game.'))
+    para(t('If you win on someone’s thrown-away tile, '), el('strong', '', t('they pay')), t(' the full amount. If you draw it yourself, '),
+      el('strong', '', t('all three pay half')), t(' each.')),
+    para(t('Everyone starts at 0. If anyone falls '),
+      el('strong', '', inGame ? fmt(inGame.startPoints) : `${fmt(1000)}, ${fmt(2000)} ${t('or')} ${fmt(5000)}`),
+      t(' points behind, the game ends early. '), dealer))
+  if (!inGame) s.appendChild(para(t('That’s '), el('strong', '', t('Hong Kong style')), t('. In '), el('strong', '', t('Family style')), t(' (chosen in New game) there are no points at all: reach the minimum faan to win, and the most hands won wins the game.')))
   return s
 }

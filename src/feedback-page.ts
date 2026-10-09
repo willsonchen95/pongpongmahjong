@@ -2,6 +2,7 @@
 // the owner's stats page (stats.ts). No account needed.
 
 import { el, button, pageTitle } from './ui'
+import { t } from './i18n'
 import { MAX_COMMENT } from '../server/stats-core'
 import { sendFeedback } from './stats'
 
@@ -18,7 +19,7 @@ export function quickRating(more: () => void): HTMLElement | null {
   if (justRated === null && ratedLately()) return null
   const box = el('div', 'quick-rate')
   if (justRated !== null) {
-    box.append(el('span', 'qr-thanks', `Thanks for the ${'★'.repeat(justRated)}!`), button('Tell us more ›', more, 'qr-more'))
+    box.append(el('span', 'qr-thanks', t('Thanks for the {stars}!', { stars: '★'.repeat(justRated) })), button(t('Tell us more ›'), more, 'qr-more'))
     return box
   }
   const stars = el('div', 'qr-stars')
@@ -29,10 +30,10 @@ export function quickRating(more: () => void): HTMLElement | null {
       void sendFeedback({ rating: n, comment: '', email: '', where: 'game-end' })
       box.replaceWith(quickRating(more)!)
     }, 'qr-star')
-    b.setAttribute('aria-label', `${n} star${n === 1 ? '' : 's'}`)
+    b.setAttribute('aria-label', t(n === 1 ? '{n} star' : '{n} stars', { n }))
     stars.appendChild(b)
   }
-  box.append(el('div', 'qr-q', 'How do you like the game?'), stars)
+  box.append(el('div', 'qr-q', t('How do you like the game?')), stars)
   return box
 }
 
@@ -40,18 +41,18 @@ export function quickRating(more: () => void): HTMLElement | null {
 export function renderFeedbackPage(app: HTMLElement, back: () => void, where: string) {
   app.innerHTML = ''
   const card = el('div', 'setup feedback-page')
-  card.append(pageTitle('Send feedback', back, 'Back'),
-    el('p', 'setup-intro', 'What do you think of Pong Pong Mahjong? Tell me what you enjoy, what’s confusing, or what went wrong — every message is read.'))
+  card.append(pageTitle(t('Send feedback'), back, t('Back')),
+    el('p', 'setup-intro', t('What do you think of Pong Pong Mahjong? Tell me what you enjoy, what’s confusing, or what went wrong — every message is read.')))
 
   // the stars: tap one to rate, tap it again to take the rating away
   let rating: number | null = null
   const stars = el('div', 'fb-stars')
   stars.setAttribute('role', 'radiogroup')
-  stars.setAttribute('aria-label', 'Your rating')
+  stars.setAttribute('aria-label', t('Your rating'))
   const starButtons = [1, 2, 3, 4, 5].map(n => {
     const b = button('★', () => { rating = rating === n ? null : n; show() }, 'fb-star')
     b.setAttribute('role', 'radio')
-    b.setAttribute('aria-label', `${n} star${n === 1 ? '' : 's'}`)
+    b.setAttribute('aria-label', t(n === 1 ? '{n} star' : '{n} stars', { n }))
     return b
   })
   const show = () => starButtons.forEach((b, i) => {
@@ -64,7 +65,7 @@ export function renderFeedbackPage(app: HTMLElement, back: () => void, where: st
   const comment = el('textarea', 'text-input fb-comment') as HTMLTextAreaElement
   comment.maxLength = MAX_COMMENT
   comment.rows = 5
-  comment.placeholder = 'I liked… / I got stuck when… / It would be great if…'
+  comment.placeholder = t('I liked… / I got stuck when… / It would be great if…')
   const email = el('input', 'text-input') as HTMLInputElement
   email.type = 'email'
   email.autocomplete = 'email'
@@ -72,23 +73,23 @@ export function renderFeedbackPage(app: HTMLElement, back: () => void, where: st
   email.placeholder = 'you@example.com'
   const message = el('p', 'form-message')
 
-  const send = button('Send feedback', async () => {
+  const send = button(t('Send feedback'), async () => {
     const text = comment.value.trim(), mail = email.value.trim()
-    if (rating === null && !text) { message.textContent = 'Pick some stars or write a few words first.'; return }
-    if (mail && !email.checkValidity()) { message.textContent = 'That email doesn’t look right — or leave it empty.'; email.focus(); return }
+    if (rating === null && !text) { message.textContent = t('Pick some stars or write a few words first.'); return }
+    if (mail && !email.checkValidity()) { message.textContent = t('That email doesn’t look right — or leave it empty.'); email.focus(); return }
     send.setAttribute('disabled', '')
-    message.textContent = 'Sending…'
+    message.textContent = t('Sending…')
     if (await sendFeedback({ rating, comment: text, email: mail, where })) { if (rating !== null) markRated(); return thanks() }
     send.removeAttribute('disabled')
-    message.textContent = 'It couldn’t be sent — check your connection and try again.'
+    message.textContent = t('It couldn’t be sent — check your connection and try again.')
   }, 'act primary big')
 
   card.append(
-    el('h2', 'setup-q', 'How do you like it?'), stars,
-    el('h2', 'setup-q', 'Anything to say?'), comment,
-    el('h2', 'setup-q', 'Your email (optional)'), el('p', 'setup-help', 'Only if you’d like a reply. It’s used for nothing else.'), email,
+    el('h2', 'setup-q', t('How do you like it?')), stars,
+    el('h2', 'setup-q', t('Anything to say?')), comment,
+    el('h2', 'setup-q', t('Your email (optional)')), el('p', 'setup-help', t('Only if you’d like a reply. It’s used for nothing else.')), email,
     message, send,
-    el('p', 'fb-privacy', 'No account needed. The game counts plays anonymously — no names, no cookies — just to know how many people play.'),
+    el('p', 'fb-privacy', t('No account needed. The game counts plays anonymously — no names, no cookies — just to know how many people play.')),
   )
   app.appendChild(card)
   window.scrollTo(0, 0)
@@ -96,9 +97,9 @@ export function renderFeedbackPage(app: HTMLElement, back: () => void, where: st
   function thanks() {
     app.innerHTML = ''
     const done = el('div', 'setup feedback-page')
-    done.append(pageTitle('Thank you!', back, 'Back'),
-      el('p', 'setup-intro', 'Your feedback is on its way. Thanks for playing Pong Pong Mahjong!'),
-      button(where === 'menu' ? 'Back to the menu' : 'Back', back, 'act primary big'))
+    done.append(pageTitle(t('Thank you!'), back, t('Back')),
+      el('p', 'setup-intro', t('Your feedback is on its way. Thanks for playing Pong Pong Mahjong!')),
+      button(where === 'menu' ? t('Back to the menu') : t('Back'), back, 'act primary big'))
     app.appendChild(done)
   }
 }

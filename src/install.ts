@@ -1,5 +1,6 @@
 // Installing the game as an app: the offline helper, and the menu's Install button.
 import { el, MENU_ICONS } from './ui'
+import { t } from './i18n'
 
 // The offline helper (built into dist/sw.js) keeps the game on the device, so the home-screen app
 // opens instantly and plays against bots with no connection. Not on the dev server, where it
@@ -30,8 +31,8 @@ export function installButton(): HTMLElement | null {
   if (installed() || (!installPrompt && !isIos())) return null
   const b = el('button', 'menu-extra install' + (iosHowTo ? ' how' : ''))
   b.innerHTML = MENU_ICONS.install
-  b.append(el('span', '', iosHowTo ? 'Tap Share, then “Add to Home Screen”' : 'Install the app'))
-  b.title = 'Put it on your home screen — opens full screen, plays offline'
+  b.append(el('span', '', iosHowTo ? t('Tap Share, then “Add to Home Screen”') : t('Install the app')))
+  b.title = t('Put it on your home screen — opens full screen, plays offline')
   const prompt = installPrompt
   b.onclick = prompt
     ? () => { installPrompt = null; void prompt.prompt().finally(menuChanged) }   // a prompt can only be shown once

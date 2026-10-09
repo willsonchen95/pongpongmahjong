@@ -2,6 +2,7 @@
 // Faces are drawn on a 60×80 canvas; the tile element supplies the ivory body around it.
 
 import type { Category } from './engine'
+import { t } from './i18n'
 
 const GREEN = '#2f6048'
 const RED = '#a8402f'
@@ -193,7 +194,7 @@ export function tileSVG(category: Category, value: number): string {
   return s
 }
 
-const SUIT_NAMES: Record<string, string> = { man: 'Characters', pin: 'Circles', sou: 'Bamboo' }
+const SUIT_NAMES: Record<string, string> = { man: '{n} Characters', pin: '{n} Circles', sou: '{n} Bamboo' }
 const HONOR_NAMES: Record<string, string[]> = {
   wind: ['East wind', 'South wind', 'West wind', 'North wind'],
   dragon: ['Red dragon', 'Green dragon', 'White dragon'],
@@ -202,5 +203,5 @@ const HONOR_NAMES: Record<string, string[]> = {
 }
 
 export function tileName(category: Category, value: number): string {
-  return SUIT_NAMES[category] ? `${value} ${SUIT_NAMES[category]}` : HONOR_NAMES[category][value]
+  return SUIT_NAMES[category] ? t(SUIT_NAMES[category], { n: value }) : t(HONOR_NAMES[category][value])
 }

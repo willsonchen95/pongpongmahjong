@@ -4,8 +4,9 @@ import type { Tile } from './engine'
 import { parse } from './engine'
 import { tileSVG, tileName } from './tiles'
 import { music, isMuted, setMuted } from './sfx'
+import { t, locale } from './i18n'
 
-export const fmt = (n: number) => n.toLocaleString('en-US')
+export const fmt = (n: number) => n.toLocaleString(locale())
 export const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
 export const score = (total: number, start: number) => signed(total - start)   // points won or lost: everyone starts at 0
 
@@ -49,9 +50,9 @@ export const ICONS = {
 // The two sound buttons: music, and sound effects (tile clacks, calls). `redraw` repaints the screen they're on.
 export function soundButtons(redraw: () => void): HTMLElement[] {
   const m = chip(music.isOn() ? ICONS.musicOn : ICONS.musicOff, null, () => { music.toggle(); redraw() }, 'icon-only' + (music.isOn() ? '' : ' off'))
-  m.title = music.isOn() ? 'Music is on — tap to turn off' : 'Music is off — tap to turn on'
+  m.title = music.isOn() ? t('Music is on — tap to turn off') : t('Music is off — tap to turn on')
   const s = chip(isMuted() ? ICONS.soundOff : ICONS.soundOn, null, () => { setMuted(!isMuted()); redraw() }, 'icon-only' + (isMuted() ? ' off' : ''))
-  s.title = isMuted() ? 'Sound effects are off — tap to turn on' : 'Sound effects are on — tap to turn off'
+  s.title = isMuted() ? t('Sound effects are off — tap to turn on') : t('Sound effects are on — tap to turn off')
   for (const b of [m, s]) b.setAttribute('aria-label', b.title)
   return [m, s]
 }
