@@ -20,6 +20,8 @@ const faanWonOf = (m: Match, p: number) => m.faanWon?.[p] ?? 0
 const ahead = (m: Match, a: number, b: number) =>
   isFamily(m) ? winsOf(m, b) - winsOf(m, a) || faanWonOf(m, b) - faanWonOf(m, a) : m.scores[b] - m.scores[a]
 export const standingsOf = (m: Match) => [0, 1, 2, 3].sort((a, b) => ahead(m, a, b))
+// A player's place, 1 – 4; a shared place counts as the higher one.
+export const placeOf = (m: Match, p: number) => 1 + [0, 1, 2, 3].filter(q => ahead(m, q, p) < 0).length
 // Who is ahead on their own — null when the top place is shared (a game ended early often is).
 export const soleLeader = (m: Match): number | null => {
   const [first, second] = standingsOf(m)
@@ -290,10 +292,10 @@ export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HT
   card.append(el('div', 'result-title', youFirst ? 'You win the game' : 'Game over'), el('div', 'result-sub', sub))
   const list = el('div', 'standings')
   const places = ['1st', '2nd', '3rd', '4th']
-  order.forEach((p, i) => {
-    const row = el('div', 'standing' + (p === HUMAN ? ' you' : '') + (i === 0 ? ' first' : ''))
+  order.forEach(p => {
+    const row = el('div', 'standing' + (p === HUMAN ? ' you' : '') + (placeOf(match, p) === 1 ? ' first' : ''))   // (a tie shares its place)
     const gain = match.scores[p] - match.startPoints
-    row.append(el('span', 'place', places[i]), el('span', 'who', NAMES[p]), isFamily(match)
+    row.append(el('span', 'place', places[placeOf(match, p) - 1]), el('span', 'who', NAMES[p]), isFamily(match)
       ? el('span', 'pts', winsText(match, p))
       : el('span', 'pts ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), `${signed(gain)} pts`))
     list.appendChild(row)

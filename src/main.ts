@@ -6,7 +6,9 @@ import {
 } from './engine'
 import { tileName } from './tiles'
 import { rulesSections } from './rules-guide'
-import { resultCard, finalCard, wonByRobbingIn, winsOf, type ResultContext } from './result-cards'
+import { resultCard, finalCard, wonByRobbingIn, winsOf, placeOf, type ResultContext } from './result-cards'
+import { loadRecord, saveRecord, clearRecord, emptyRecord, noteHand, noteGame, CHALLENGES } from './record'
+import { renderRecordPage } from './record-page'
 import { TIPS, type CoachStep, type Steps } from './tips'
 import { mahjongBurst, turnGlow, notice } from './fx'
 import { emote, emoteArt } from './emotes'
@@ -894,6 +896,7 @@ function renderMenu() {
     menuCard(MENU_ICONS.play, 'New game', 'Play at your own pace — choose the rules', renderStylePick, fresh ? 'primary' : ''),
     menuCard(MENU_ICONS.learn, 'Learn to play', 'A gentle guided game — tips explain every step', () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? 'New to mahjong? Start here' : ''),
+    menuCard(MENU_ICONS.record, 'Your record', recordLine(), openRecord, 'record-card'),
     heading('Play with friends', 'Online · share a room code'),
     onlineMenuCard(),
     menuCard(MENU_ICONS.voice, 'Your voice', 'Say the calls in your own voice', () => openVoicePage(renderMenu), 'voice-card'),
@@ -992,7 +995,7 @@ function renderAboutPage() {
 
   const privacy = el('section')
   privacy.append(el('h3', '', 'What it keeps, and what it sends'),
-    para(el('strong', '', 'On your device:'), ' your saved game and settings. Nothing else.'),
+    para(el('strong', '', 'On your device:'), ' your saved game, your settings and your record (history, best hand and challenges). Nothing else.'),
     para(el('strong', '', 'Play counts:'), ' when a game starts or ends, a count is sent with a random id for this browser — no name, no cookies — just to see how many people play.'),
     para(el('strong', '', 'Online rooms:'), ' the nickname you type and, if you record them, your Pong!, Chi!, Kong! and Mahjong! calls, shared only with the players in your room.'),
     para(el('strong', '', 'Feedback:'), ' only what you write in it (an email address is optional).'))
@@ -1907,6 +1910,52 @@ const standingText = (seat: number) => match.style === 'family'
   ? `${winsOf(match, seat)} win${winsOf(match, seat) === 1 ? '' : 's'}`
   : score(match.scores[seat], match.startPoints)
 
+// ---------- Your record (record.ts) ----------
+// "Best hand 5 faan · 4 of 17 challenges" — the menu card's line
+function recordLine(): string {
+  const done = CHALLENGES.filter(c => record.challenges[c.id]).length
+  if (!record.handsPlayed && !record.games.length) return 'Best hand, history and challenges to collect'
+  return `${record.best ? `Best hand ${record.best.faan} faan · ` : ''}${done} of ${CHALLENGES.length} challenges`
+}
+function openRecord() {
+  inMenu = true
+  renderRecordPage(app, record, renderMenu, async () => {
+    const sure = await dialog('Clear your record?', 'Your history, best hand and challenges on this device are wiped. This can’t be undone.', [
+      { label: 'No, keep it', value: false, cls: 'primary' },
+      { label: 'Yes, clear it', value: true, cls: 'danger' },
+    ])
+    // (it still remembers which hands it has seen, so a result on screen isn't counted again)
+    if (sure) { clearRecord(); record = { ...emptyRecord(), counted: record.counted }; saveRecord(record) }
+    openRecord()
+  })
+}
+// Each finished hand and game is noted once (the record remembers which), as its result first
+// shows; a challenge completed by it gets a quiet notice at the top of the screen.
+let record = loadRecord()
+function noteRecords() {
+  const r = match.result
+  if (!game.over || !r || match.hand === 0) return
+  if (online?.joining || online?.away) return                         // a bot was playing your seat: not your hand
+  const id = match.id ?? `${match.style}:${match.startPoints}`            // (older saves have no id)
+  const before = JSON.stringify(record)
+  // (a game ended in the middle of a hand still shows the hand before's result: that one's counted already)
+  const midHandEnd = match.endedAfter !== undefined && match.endedAfter < match.hand
+  const done = midHandEnd ? [] : noteHand(record, `${id}:hand${match.hand}:${match.roundWind}`, {
+    winner: r.winner === null ? 'nobody' : r.winner === HUMAN ? 'you' : 'other',
+    faan: r.faan, limit: r.limit, items: r.items, online: !!online,
+    groups: r.winner === HUMAN ? [...game.melds[HUMAN], sortHand(game.hands[HUMAN]), ...(game.bonus[HUMAN].length ? [game.bonus[HUMAN]] : [])] : [],
+  })
+  if (match.over) {
+    done.push(...noteGame(record, `${id}:game`, {
+      style: match.style ?? 'hk', bots: match.bots ?? 'normal', online: !!online, minFaan: match.minFaan, rounds: match.rounds,
+      hands: match.endedAfter ?? match.hand, early: match.endedAfter !== undefined, place: placeOf(match, HUMAN),
+      wins: winsOf(match, HUMAN), points: match.style === 'family' ? null : match.scores[HUMAN] - match.startPoints,
+    }))
+  }
+  if (JSON.stringify(record) !== before) saveRecord(record)
+  for (const c of done) notice(`Challenge complete · ${c.title}`)
+}
+
 // The end-of-hand and final cards are rebuilt on every redraw; only their first appearance fades in,
 // so a tap or an online tick doesn't make them blink.
 let endCardKey = '', endCardAt = 0
@@ -2014,6 +2063,7 @@ function renderTable() {
   const o = offer
   if (online?.away) extras.push(part('away', 'away', awayCard))
   else if (o) extras.push(part('claim', JSON.stringify(o), () => claimCard(o)))
+  if (game.over && !revealing()) noteRecords()
   if (game.over && !resultClosed && !revealing()) {
     const key = `${showFinal ? 'final' : 'hand'}:${match.roundWind}:${match.hand}:${match.scores.join()}:${(match.wins ?? []).join()}`
     extras.push(settled(showFinal ? finalCard(resultContext(), finalButtons(), quickRating(() => openFeedback(() => { inMenu = false; render() }, 'game-end')))

@@ -48,6 +48,7 @@ export interface HandResult {
 }
 
 export interface Match extends Rules {
+  id?: string                          // tells one game from another (older saves: missing)
   scores: number[]                     // each player's points now (Family style: they stay at the start)
   wins?: number[]                      // hands each player has won (older saves: missing — none counted)
   faanWon?: number[]                   // the faan of those wins added up (Family style's tie-break)
@@ -62,6 +63,7 @@ export interface Match extends Rules {
 }
 
 export const newMatch = (r: Rules): Match => ({
+  id: Math.random().toString(36).slice(2, 10),
   rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', style: r.style ?? 'hk', scores: [0, 0, 0, 0].map(() => r.startPoints),
   wins: [0, 0, 0, 0], faanWon: [0, 0, 0, 0],
   bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,

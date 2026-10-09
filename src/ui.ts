@@ -110,6 +110,8 @@ export const MENU_ICONS = {
   install: svgIcon('<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7.5M9 11.5l3 3 3-3"/><path d="M10.5 18.5h3"/>'),
   // a square table with a seat on each side
   online: svgIcon('<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3.5h4M10 20.5h4M3.5 10v4M20.5 10v4"/>'),
+  // a seal with a tick: your record and challenges
+  record: svgIcon('<rect x="5" y="3.5" width="14" height="11" rx="2"/><path d="M9 9.2l2 2 4-4"/><path d="M9.5 14.5v3M14.5 14.5v3M5.5 20.5h13"/>'),
   about: svgIcon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.6" r="1.2" fill="currentColor" stroke="none"/>'),
   feedback: svgIcon('<path d="M4 5.5h16v10H10l-4.5 4v-4H4z"/><path d="M12 8.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 10.3l2-.3z" fill="currentColor" stroke="none"/>'),
   voice: svgIcon('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
