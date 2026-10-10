@@ -35,6 +35,7 @@ export interface Rules {
   startPoints: number                  // the point limit: falling this far behind ends the game
   bots?: BotLevel                      // how well the bots play (older saves and rooms: normal)
   style?: Style                        // older saves and rooms: Hong Kong
+  hands?: number                       // a short game: it ends after this many hands (the guided first game; never online)
 }
 
 export interface HandResult {
@@ -64,7 +65,7 @@ export interface Match extends Rules {
 
 export const newMatch = (r: Rules): Match => ({
   id: Math.random().toString(36).slice(2, 10),
-  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', style: r.style ?? 'hk', scores: [0, 0, 0, 0].map(() => r.startPoints),
+  rounds: r.rounds, minFaan: r.minFaan, startPoints: r.startPoints, bots: r.bots ?? 'normal', style: r.style ?? 'hk', ...(r.hands ? { hands: r.hands } : {}), scores: [0, 0, 0, 0].map(() => r.startPoints),
   wins: [0, 0, 0, 0], faanWon: [0, 0, 0, 0],
   bust: null, roundWind: 0, dealer: 0, passes: 0, hand: 0, result: null, over: false,
 })
@@ -509,6 +510,6 @@ export class Table {
     // below zero is bust (the lowest, if a self-drawn win sinks two at once): the game stops here
     const broke = [0, 1, 2, 3].filter(p => m.scores[p] < 0).sort((a, b) => m.scores[a] - m.scores[b])
     m.bust = broke[0] ?? null
-    m.over = m.roundWind >= m.rounds || m.bust !== null
+    m.over = m.roundWind >= m.rounds || m.bust !== null || (m.hands !== undefined && m.hand >= m.hands)
   }
 }

@@ -5,7 +5,10 @@
 // What the game reports, each once when it happens.
 export const EVENTS = {
   open: 'Opened the game',
+  'guided-game': 'Guided games started',
   'bot-game': 'Games vs bots started',
+  'hand-done': 'Hands vs bots played',
+  'hand-won': 'Hands vs bots won',
   'bot-game-done': 'Games vs bots finished',
   'room-create': 'Rooms created',
   'room-join': 'Rooms joined',

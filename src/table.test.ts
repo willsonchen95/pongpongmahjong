@@ -57,6 +57,16 @@ describe('a table of four bots', () => {
       expect(t.match.over).toBe(true)
     }
   })
+  it('a short game of one hand ends after that hand, whoever wins it', () => {
+    for (let n = 0; n < 5; n++) {
+      const t = new Table({ ...RULES, hands: 1 }, [false, false, false, false])
+      t.newHand()
+      t.begin()
+      expect(playOn(t).kind).toBe('over')
+      expect(t.match.hand).toBe(1)
+      expect(t.match.over).toBe(true)
+    }
+  })
 })
 
 describe('a person at the table', () => {

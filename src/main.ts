@@ -408,11 +408,12 @@ document.addEventListener('visibilitychange', () => {
 })
 
 // `bots`: how well they play; the guided game always has easy ones, whatever's chosen for New game.
-function startMatch(bots: BotLevel = settings.bots) {
+// `hands`: a short game of just that many hands (the guided game is one).
+function startMatch(bots: BotLevel = settings.bots, hands?: number) {
   if (online) { online.leave(); online = null; NAMES = BOT_NAMES }   // a game against the bots instead
   music.start()                                       // the Start click is the gesture browsers want before playing audio
   saveSettings()
-  table = new Table(rulesNow(bots), SEAT_IS_PERSON)
+  table = new Table({ ...rulesNow(bots), ...(hands ? { hands } : {}) }, SEAT_IS_PERSON)
   started = true
   finishCounted = false
   track('bot-game')
@@ -548,7 +549,7 @@ function tableDice(it: Intro): HTMLElement {
 
 let finishCounted = false                 // this game against the bots has been counted as played to the end
 function showStandings() {
-  if (!online && !finishCounted && match.endedAfter === undefined) { finishCounted = true; track('bot-game-done') }
+  if (!online && !finishCounted && match.endedAfter === undefined && !match.hands) { finishCounted = true; track('bot-game-done') }
   showFinal = true
   resultClosed = false
   render()
@@ -791,13 +792,16 @@ async function coachForState() {
   if (document.querySelector('.hm-ready')) return coach('ready', TIPS.ready)
 }
 
-// A quick game with every tip shown again from the start.
+// A single hand against easy bots, with every tip shown again from the start: short enough to finish
+// before a newcomer gives up, and then "Another hand" or a whole East round.
+const GUIDED_HANDS = 1
 function startGuidedGame() {
   tipsSeen = new Set()
   saveTipsSeen()
   helpOpen = false                                    // the table first; a coachmark shows where the rule book is
   settings = { ...settings, tips: true, rounds: 1 }
-  startMatch('easy')
+  track('guided-game')
+  startMatch('easy', GUIDED_HANDS)
 }
 
 
@@ -898,7 +902,7 @@ function renderMenu() {
   const fresh = !(started && !match.over)
   cards.append(
     menuCard(MENU_ICONS.play, t('New game'), t('Play at your own pace — choose the rules'), renderStylePick, fresh ? 'primary' : ''),
-    menuCard(MENU_ICONS.learn, t('Learn to play'), t('A gentle guided game — tips explain every step'), () => void startNewIfOk(startGuidedGame), 'learn',
+    menuCard(MENU_ICONS.learn, t('Learn to play'), t('One short guided hand — tips explain every step'), () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? t('New to mahjong? Start here') : ''),
     menuCard(MENU_ICONS.record, t('Your record'), recordLine(), openRecord, 'record-card'),
     heading(t('Play with friends'), t('Online · share a room code')),
@@ -1978,12 +1982,17 @@ function noteRecords() {
   const before = JSON.stringify(record)
   // (a game ended in the middle of a hand still shows the hand before's result: that one's counted already)
   const midHandEnd = match.endedAfter !== undefined && match.endedAfter < match.hand
-  const done = midHandEnd ? [] : noteHand(record, `${id}:hand${match.hand}:${match.roundWind}`, {
+  const handKey = `${id}:hand${match.hand}:${match.roundWind}`
+  if (!online && !midHandEnd && !record.counted.includes(handKey)) {   // (counted once, like the record)
+    track('hand-done')
+    if (r.winner === HUMAN) track('hand-won')
+  }
+  const done = midHandEnd ? [] : noteHand(record, handKey, {
     winner: r.winner === null ? 'nobody' : r.winner === HUMAN ? 'you' : 'other',
     faan: r.faan, limit: r.limit, items: r.items, online: !!online,
     groups: r.winner === HUMAN ? [...game.melds[HUMAN], sortHand(game.hands[HUMAN]), ...(game.bonus[HUMAN].length ? [game.bonus[HUMAN]] : [])] : [],
   })
-  if (match.over) {
+  if (match.over && !match.hands) {                   // (a short guided game is a lesson, not a game for the record)
     done.push(...noteGame(record, `${id}:game`, {
       style: match.style ?? 'hk', bots: match.bots ?? 'normal', online: !!online, minFaan: match.minFaan, rounds: match.rounds,
       hands: match.endedAfter ?? match.hand, early: match.endedAfter !== undefined, place: placeOf(match, HUMAN),
@@ -2214,6 +2223,10 @@ function finalButtons(): HTMLElement[] {
     if (host && room) actions.push(button(t('Play again'), () => { track('online-game'); online?.start(room.rules) }, 'act primary'))   // same rules as this game
     else actions.push(el('div', 'result-next', t('{host} can start another game — friends can join with code {code} until then.', { host: hostName ?? t('The host'), code: online.code })))
     actions.push(button(t('Leave room'), leaveOnline, 'act'))
+  } else if (match.hands) {                          // after the guided hand: another, or a whole round
+    actions.push(button(t('Another hand'), () => startMatch('easy', GUIDED_HANDS), 'act primary'),
+      button(t('Play a whole East round'), () => startMatch('easy'), 'act'),   // (the guided game set one round)
+      button(t('Main menu'), renderMenu, 'act'))
   } else {
     actions.push(button(t('Play again'), () => startMatch(), 'act primary'), button(t('Main menu'), renderMenu, 'act'))
   }
