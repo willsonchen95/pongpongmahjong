@@ -1,6 +1,6 @@
 // The beginner tips: what each one says, and what on screen it points at. main.ts decides when
 // each is shown (only the first time, and only with tips on).
-import { el, para, exampleTiles } from './ui'
+import { el, para, exampleTiles, phoneScreen } from './ui'
 import { t } from './i18n'
 
 // One step of a tip: a title and text, pointing at `target` (a CSS selector) if given.
@@ -33,11 +33,19 @@ export const TIPS = {
           : t('Tap the tile you need least to throw it away.')] },
       { target: '.hm-total', title: t('Your hand’s score'),
         body: [t('This shows the faan your hand already has.'), t('Hover over it — or tap it — to see what you have and what to aim for next.')] },
-      { target: '.status-pill', title: t('What’s happening'),
-        body: [t('This tells you whose turn it is. It lights up whenever it’s your move.')] },
-      { target: '.rules-chip', title: t('The rule book'),
-        body: [t('Stuck? Tap here any time to open the rule book — every set and every scoring pattern, with pictures.'),
-          t('Tap it again to close it and get back to the table.')] },
+      // (a phone has no status pill, and keeps the rule book behind ⋯)
+      phoneScreen.matches
+        ? { target: '.wind-label.active .wl-name', title: t('What’s happening'),
+            body: [t('Whoever’s turn it is has their name lit up on the table — like yours now.')] }
+        : { target: '.status-pill', title: t('What’s happening'),
+            body: [t('This tells you whose turn it is. It lights up whenever it’s your move.')] },
+      phoneScreen.matches
+        ? { target: '.more-chip', title: t('The rule book'),
+            body: [t('Stuck? Tap ⋯ any time, then the book, to open the rule book — every set and every scoring pattern, with pictures.'),
+              t('The round, music and sound buttons are there too.')] }
+        : { target: '.rules-chip', title: t('The rule book'),
+            body: [t('Stuck? Tap here any time to open the rule book — every set and every scoring pattern, with pictures.'),
+              t('Tap it again to close it and get back to the table.')] },
     ]
   },
   claim: (): CoachStep[] => [{

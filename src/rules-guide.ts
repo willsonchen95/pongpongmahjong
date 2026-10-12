@@ -121,9 +121,9 @@ function scoringSection(inGame: InGame | null): HTMLElement {
   s.append(table,
     para(t('If you win on someone’s thrown-away tile, '), el('strong', '', t('they pay')), t(' the full amount. If you draw it yourself, '),
       el('strong', '', t('all three pay half')), t(' each.')),
-    para(t('Everyone starts at 0. If anyone falls '),
+    para(t('Everyone starts with '),
       el('strong', '', inGame ? fmt(inGame.startPoints) : `${fmt(1000)}, ${fmt(2000)} ${t('or')} ${fmt(5000)}`),
-      t(' points behind, the game ends early. '), dealer))
+      t(' points. If anyone runs out, the game ends early. '), dealer))
   if (!inGame) s.appendChild(para(t('That’s '), el('strong', '', t('Hong Kong style')), t('. In '), el('strong', '', t('Family style')), t(' (chosen in New game) there are no points at all: reach the minimum faan to win, and the most hands won wins the game.')))
   return s
 }

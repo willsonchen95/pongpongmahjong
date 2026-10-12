@@ -8,7 +8,6 @@ import { t, locale } from './i18n'
 
 export const fmt = (n: number) => n.toLocaleString(locale())
 export const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0')
-export const score = (total: number, start: number) => signed(total - start)   // points won or lost: everyone starts at 0
 
 export function el(tag: string, cls = '', text = ''): HTMLElement {
   const e = document.createElement(tag)
@@ -40,6 +39,7 @@ export const svgIcon = (body: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 export const ICONS = {
   menu: svgIcon('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  more: svgIcon('<circle cx="5.5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18.5" cy="12" r="1.2" fill="currentColor"/>'),
   book: svgIcon('<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5v13"/>'),
   soundOn: svgIcon('<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
   soundOff: svgIcon('<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 10l5 5M21 10l-5 5"/>'),
@@ -94,6 +94,7 @@ export function box(kind: string, w: number, d: number, h: number, cls = '', fac
 // Phones draw the tiles players read — discards, sets, flowers, the others' hands — a size bigger
 // (the wall stays: its 18 stacks a side have to fit along the table's edge).
 export const phoneScreen = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
+export const sidewaysPhone = matchMedia('(orientation: landscape) and (max-height: 600px)')
 export const tileScale = () => (phoneScreen.matches ? 1.16 : 1)
 export const lyingTile = (t: Tile, cls = '') => box('up', 1.15 * tileScale(), 1.54 * tileScale(), 0.8, cls, t)
 

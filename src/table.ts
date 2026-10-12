@@ -32,7 +32,7 @@ export type Style = 'hk' | 'family'
 export interface Rules {
   rounds: number                       // 1 = East round only, 4 = full game
   minFaan: number                      // the agreed minimum to declare a win
-  startPoints: number                  // the point limit: falling this far behind ends the game
+  startPoints: number                  // everyone's points at the start; running out ends the game
   bots?: BotLevel                      // how well the bots play (older saves and rooms: normal)
   style?: Style                        // older saves and rooms: Hong Kong
   hands?: number                       // a short game: it ends after this many hands (the guided first game; never online)

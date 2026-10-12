@@ -3,7 +3,7 @@
 // In Family style there are no points: the cards show the faan and count hands won instead.
 import { type Tile, type GameState, type FaanItem, SEATS, sortHand, payout, MAX_FAAN } from './engine'
 import type { Match, HandResult } from './table'
-import { el, tileEl, fmt, signed, score } from './ui'
+import { el, tileEl, fmt, signed } from './ui'
 import { faanMeaning } from './rules-guide'
 import { t, faanName } from './i18n'
 
@@ -104,7 +104,7 @@ function scoreTable(deltas: number[]): HTMLElement {
     table.append(
       el('span', 'st-name' + (p === HUMAN ? ' you' : ''), NAMES[p]),
       el('span', 'st-delta ' + (d > 0 ? 'up' : d < 0 ? 'down' : ''), d === 0 ? '—' : signed(d)),
-      el('span', 'st-total' + (match.scores[p] < 0 ? ' bust' : ''), score(match.scores[p], match.startPoints)),
+      el('span', 'st-total' + (match.scores[p] < 0 ? ' bust' : ''), fmt(match.scores[p])),
     )
   }
   return table
@@ -271,7 +271,7 @@ export function resultCard(ctx: ResultContext, buttons: HTMLElement[], since = I
 
   // what happens next
   let next: string
-  if (match.bust !== null) next = t(match.bust === HUMAN ? 'You have fallen {n} points behind — the game ends here.' : '{name} has fallen {n} points behind — the game ends here.', { name: NAMES[match.bust], n: fmt(match.startPoints) })
+  if (match.bust !== null) next = t(match.bust === HUMAN ? 'You have run out of points — the game ends here.' : '{name} has run out of points — the game ends here.', { name: NAMES[match.bust] })
   else if (match.over) next = t('That was the last hand of the game.')
   else if (r.dealerStays) next = t(game.dealer === HUMAN ? 'You stay dealer for the next hand.' : '{name} stays dealer for the next hand.', { name: NAMES[game.dealer] })
   else {
@@ -310,14 +310,14 @@ export function finalCard(ctx: ResultContext, buttons: HTMLElement[], rating: HT
     const gain = match.scores[p] - match.startPoints
     row.append(el('span', 'place', places[placeOf(match, p) - 1]), el('span', 'who', NAMES[p]), isFamily(match)
       ? el('span', 'pts', winsText(match, p))
-      : el('span', 'pts ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), t('{n} pts', { n: signed(gain) })))
+      : el('span', 'pts ' + (gain > 0 ? 'up' : gain < 0 ? 'down' : ''), t('{n} pts', { n: fmt(match.scores[p]) })))
     list.appendChild(row)
   })
-  const ended = match.bust === null ? '' : t(match.bust === HUMAN ? ' — you fell {n} points behind, so the game ended early' : ' — {name} fell {n} points behind, so the game ended early', { name: NAMES[match.bust], n: fmt(match.startPoints) })
+  const ended = match.bust === null ? '' : t(match.bust === HUMAN ? ' — you ran out of points, so the game ended early' : ' — {name} ran out of points, so the game ended early', { name: NAMES[match.bust] })
   const n = match.endedAfter
   const played = n === undefined ? t(match.hand === 1 ? '{n} hand played' : '{n} hands played', { n: match.hand }) + ended
     : n === 0 ? t('Ended before the first hand finished') : t(n === 1 ? 'Ended early after {n} hand' : 'Ended early after {n} hands', { n })
-  card.append(list, el('div', 'result-next', `${played}. ${isFamily(match) ? t('Most hands won wins; a tie goes to more faan.') : t('Everyone started at 0.')}`))
+  card.append(list, el('div', 'result-next', `${played}. ${isFamily(match) ? t('Most hands won wins; a tie goes to more faan.') : t('Everyone started with {n} points.', { n: fmt(match.startPoints) })}`))
   if (rating) card.appendChild(rating)
   const actions = el('div', 'result-actions')
   actions.append(...buttons)

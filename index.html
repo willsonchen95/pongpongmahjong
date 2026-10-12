@@ -63,8 +63,20 @@
       })()
     </script>
     <script>
-      // Phones and tablets draw the table flat (see .lite3d in style.css); ?lite previews it on a computer.
-      if (matchMedia('(pointer: coarse)').matches || /[?&]lite\b/.test(location.search)) document.documentElement.classList.add('lite3d')
+      // Touch screens get real 3D tiles with only the sides you can see drawn, which halves the work
+      // (see style.css: phones always; tablets and an opened Fold through .cull3d) — flat tiles on the
+      // tilted table look like stickers. ?lite previews the old flat tiles (.lite3d) on a computer.
+      (function () {
+        var touch = matchMedia('(pointer: coarse)').matches
+        var lite = /[?&]lite\b/.test(location.search)
+        var phone = matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 600px)')
+        function pick() {
+          document.documentElement.classList.toggle('lite3d', lite && !phone.matches)
+          document.documentElement.classList.toggle('cull3d', touch && !lite && !phone.matches)
+        }
+        pick()
+        phone.addEventListener('change', pick)
+      })()
     </script>
     <title>Pong Pong Mahjong!</title>
     <!-- The brush font for the tile faces, with only the characters they use, so the download stays tiny -->

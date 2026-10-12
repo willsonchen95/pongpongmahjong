@@ -10,7 +10,7 @@ import { VOICE_SLOTS } from '../server/room-core'
 import { t } from './i18n'
 
 export type { SeatInfo }
-export { REACTIONS, PHRASES, TURN_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan } from '../server/room-core'
+export { REACTIONS, PHRASES, TURN_MS, CLAIM_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan } from '../server/room-core'
 
 // Where the room server is: while developing on this computer or its home network, the local
 // `npm run server:dev` on port 8787; otherwise the live one on Cloudflare (`npm run server:deploy`),

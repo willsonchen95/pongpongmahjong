@@ -16,13 +16,13 @@ import { emote, emoteArt } from './emotes'
 import { t, lang, setLang, locale, faanName, type Lang } from './i18n'
 import { faanCard, headlinePlan, planSummary } from './faan-card'
 import { initInstall, installButton } from './install'
-import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, tileScale, lyingTile, para, uniqueTiles, score, fmt, pageTitle } from './ui'
+import { el, tag, tileEl, ICONS, MENU_ICONS, soundButtons, chip, mini, button, box, phoneScreen, sidewaysPhone, tileScale, lyingTile, para, uniqueTiles, fmt, pageTitle } from './ui'
 import { sfx, music } from './sfx'
 import * as motion from './motion'
 import { Table, type Match, type Rules, type Style, type Offer, type TableData, type Phase, type Draw, type TableEvent } from './table'
 import { track } from './stats'
 import { renderFeedbackPage, quickRating } from './feedback-page'
-import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
+import { OnlineRoom, ROOM_SERVER, ROOM_CODE, REACTIONS, PHRASES, TURN_MS, CLAIM_MS, FAMILY_MIN_FAAN, RULE_CHOICES, isFamilyMinFaan, newRoomCode, savedSession, leaveSavedRoom, type LocalView, type SeatInfo } from './online'
 import { myClips, playClip, CALL_SLOTS, type VoiceSlot } from './voice'
 import { renderVoicePage } from './voice-page'
 
@@ -109,6 +109,7 @@ let burst: number | null = null   // a winner whose burst is still to be shown
 let revealTimer = 0
 const revealing = () => game.over && performance.now() < revealUntil
 let faanCardOpen = false          // the "Your hand" details card, tapped open (it also opens on hover)
+let moreOpen = false              // sideways phones: the round, rules and sound buttons, folded behind ⋯
 // a tap anywhere else puts the "Your hand" card away (the pill and "Way to" chip toggle it themselves)
 document.addEventListener('pointerdown', e => {
   if (!faanCardOpen || (e.target as Element).closest?.('.hm-total-wrap, .hm-way')) return
@@ -518,13 +519,24 @@ const PIPS: Record<number, number[]> = {           // which cells of a 3×3 grid
   1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8],
 }
 // A die face. Like Chinese dice, the 1 and the 4 have red pips.
+function pipFace(v: number, face: HTMLElement) {
+  face.innerHTML = ''
+  for (let c = 0; c < 9; c++) face.appendChild(el('span', PIPS[v].includes(c) ? 'pip' + (v === 1 || v === 4 ? ' red' : '') + (v === 1 ? ' big' : '') : ''))
+}
+// A die showing `v` on top, with pips on its sides too (seen from a low angle, as on a sideways
+// phone), laid out like a real die: opposite faces add up to 7.
 function dieFace(v: number, die: HTMLElement) {
-  die.innerHTML = ''
-  for (let c = 0; c < 9; c++) die.appendChild(el('span', PIPS[v].includes(c) ? 'pip' + (v === 1 || v === 4 ? ' red' : '') + (v === 1 ? ' big' : '') : ''))
+  const side = [1, 2, 3, 4, 5, 6].filter(n => n !== v && n !== 7 - v)   // the four around the top
+  const front = side[0], right = side.find(n => n !== front && n !== 7 - front)!
+  const faces: [string, number][] = [['top', v], ['front', front], ['back', 7 - front], ['right', right], ['left', 7 - right]]
+  for (const [name, n] of faces) {
+    const f = die.querySelector<HTMLElement>(`.face.${name}`)
+    if (f) pipFace(n, f)
+  }
 }
 // While rolling, flick the faces directly rather than re-rendering the whole table.
 function showDiceFaces(values: number[]) {
-  document.querySelectorAll<HTMLElement>('.table-dice .face.top').forEach((d, i) => dieFace(values[i], d))
+  document.querySelectorAll<HTMLElement>('.table-dice .box.die').forEach((d, i) => dieFace(values[i], d))
 }
 
 const diceTotal = (it: Intro) => it.dice.reduce((a, b) => a + b, 0)
@@ -539,7 +551,7 @@ function tableDice(it: Intro): HTMLElement {
   const row = el('div', 'dice-row')
   for (const v of it.dice) {
     const d = box('die', 1.5, 1.5, 1.5)
-    dieFace(v, d.querySelector<HTMLElement>('.face.top')!)
+    dieFace(v, d)
     row.appendChild(d)
   }
   wrap.appendChild(row)
@@ -666,10 +678,16 @@ function endGameNow() {
 }
 function resumeFromPause() { paused = false; render() }
 
-function confirmEnd(): Promise<boolean> {
-  return dialog(t('End the game now?'), match.style === 'family'
-    ? t('The hand being played won’t count. The final standings are the hands won so far.')
-    : t('The hand being played won’t count. The final scores are everyone’s points so far.'), [
+// (`betweenHands`: asked from the result card, where the hand just played does count)
+function confirmEnd(betweenHands = false): Promise<boolean> {
+  const text = betweenHands
+    ? match.style === 'family'
+      ? t('The final standings are the hands won so far, this one included.')
+      : t('The final scores are everyone’s points so far, this hand included.')
+    : match.style === 'family'
+      ? t('The hand being played won’t count. The final standings are the hands won so far.')
+      : t('The hand being played won’t count. The final scores are everyone’s points so far.')
+  return dialog(t('End the game now?'), text, [
     { label: t('No, keep playing'), value: false, cls: 'primary' },
     { label: t('Yes, end it'), value: true, cls: 'danger' },
   ])
@@ -1152,9 +1170,9 @@ function ruleChoices(card: HTMLElement, redraw: () => void, withTips: boolean) {
       ], settings.tips, v => pick({ tips: v })))
   }
 
-  if (settings.style === 'family') return                  // no points, so no point limit
-  card.append(el('h2', 'setup-q', t('Point limit')),
-    el('p', 'setup-help', t('Everyone starts at 0. Winners collect points from whoever pays; if anyone falls this far behind, the game ends early. Highest score at the end wins.')),
+  if (settings.style === 'family') return                  // no points, so no starting points
+  card.append(el('h2', 'setup-q', t('Starting points')),
+    el('p', 'setup-help', t('Everyone starts with this many points. Winners collect points from whoever pays; if anyone runs out, the game ends early. Most points at the end wins.')),
     choiceRow([
       { value: 1000, label: fmt(1000), sub: t('Lively — one big hand can end it') },
       { value: 2000, label: fmt(2000), sub: t('Room for a few bad hands') },
@@ -1382,7 +1400,7 @@ function statusEl(): HTMLElement {
   } else {
     title.textContent = t('{name} is playing…', { name: NAMES[game.current] }); hint = t('Please wait')
   }
-  const s = el('div', 'status ' + mood)
+  const s = el('div', 'status ' + mood + (online && !online.connected ? ' alert' : ''))   // (sideways phones show the status only for this)
   const pill = el('div', 'status-pill')
   const text = el('div', 'status-text')
   const hintEl = el('div', 'status-hint', hint)
@@ -1410,6 +1428,11 @@ setInterval(() => {
     const secs = Math.max(0, Math.ceil((Number(s.dataset.deadline) - Date.now()) / 1000))
     s.textContent = String(secs)
     s.classList.toggle('hurry', secs <= 5)
+  }
+  for (const c of document.querySelectorAll<HTMLElement>('.table-clock[data-deadline]')) {
+    const secs = Math.max(0, Math.ceil((Number(c.dataset.deadline) - Date.now()) / 1000))
+    c.querySelector('.tc-secs')!.textContent = String(secs)
+    c.classList.toggle('hurry', secs <= 5)
   }
   document.querySelectorAll<HTMLElement>('.next-secs[data-deadline]').forEach(updateNextSecs)
   // your hand's border flashes for your last few seconds
@@ -1548,48 +1571,106 @@ function turnTimer(deadline: number): HTMLElement {
   return row
 }
 
+// Online: the time left, big, over the middle of the table — yours when the room is waiting on you
+// (your turn, or a tile you could take), otherwise whoever's turn it is. A ring runs down around the
+// seconds (a CSS animation, like the bar above); it turns red and pulses for the last 5 seconds.
+function clockInfo(): { deadline: number; total: number; who: string; mine: boolean } | null {
+  const v = online?.view
+  if (!v || game.over || intro || online?.away) return null
+  if (v.deadline) return { deadline: v.deadline, total: offer ? CLAIM_MS : TURN_MS, who: offer ? t('Your call') : t('Your turn'), mine: true }
+  const turn = turnDeadlineOf(game.current)
+  return turn ? { deadline: turn, total: TURN_MS, who: NAMES[game.current], mine: false } : null
+}
+function tableClock(c: NonNullable<ReturnType<typeof clockInfo>>): HTMLElement {
+  const left = Math.max(0, c.deadline - Date.now())
+  const secs = Math.ceil(left / 1000)
+  const clock = el('div', 'table-clock' + (c.mine ? ' mine' : '') + (secs <= 5 ? ' hurry' : ''))
+  clock.dataset.deadline = String(c.deadline)       // (kept up to date by the countdown above)
+  clock.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="tc-track" cx="20" cy="20" r="17"/>'
+    + '<circle class="tc-ring" cx="20" cy="20" r="17" pathLength="100"/></svg>'
+  const ring = clock.querySelector<SVGElement>('.tc-ring')!
+  ring.style.setProperty('--from', String(100 - 100 * Math.min(1, left / c.total)))
+  ring.style.setProperty('--left', `${left}ms`)
+  clock.append(el('span', 'tc-secs', String(secs)), el('span', 'tc-who', c.who))
+  return clock
+}
+
 // The player's rack: their hand (standing, or laid face-up once the hand is over), sets and flowers.
+// The others' racks have two lines: the hand standing at the table's edge, and in front of it what
+// they've laid open (sets and flowers), lined up from the same end. Once the hand is over, their hand
+// is laid down face-up and everything is in the one line. (Yours: just your sets and flowers.)
 function sideRack(seat: number): HTMLElement {
-  const rack = el('div', 'rack-row' + (seat === game.winner ? ' winner' : ''))
+  const rack = el('div', 'rack-row' + (seat === HUMAN ? '' : ' split') + (seat === game.winner ? ' winner' : ''))
+  let open = rack
   if (seat !== HUMAN) {                                // your own hand is on the big rack below the table
+    const line = el('div', 'rack-line')
+    rack.appendChild(line)
     const hand = sortHand(game.hands[seat])
-    if (game.over) {                                   // at the end of the hand it's laid down face-up
+    if (game.over) {                                   // at the end of the hand it's laid down face-up, where it stood
       const g = el('div', 'group')
       for (const t of hand) g.appendChild(lyingTile(t, t === winTile ? 'win-tile' : ''))   // the tile that won it, lit up
-      rack.appendChild(g)
+      line.appendChild(g)
+      rack.classList.add('revealed')
+      open = el('div', 'rack-line')                    // (the sets still in front: in one line with the hand
+      rack.appendChild(open)                           // they'd run off the table on a phone)
     } else {                                           // otherwise it stands on edge, backs toward the table
       const n = handCount(seat)
       if (n > 0) {
         const b = box('stand', 1.15 * tileScale() * n, 0.8, 1.54 * tileScale())
         b.style.setProperty('--ts', String(tileScale()))   // for the seams between its tiles (style.css)
-        rack.appendChild(b)
+        line.appendChild(b)
       }
+      open = el('div', 'rack-line')
+      rack.appendChild(open)
     }
   }
   for (const meld of game.melds[seat]) {
     const g = el('div', 'group')
     const hidden = isConcealedKong(game, seat, meld)   // declared from the hand: its end tiles lie face down
     meld.forEach((t, i) => g.appendChild(tag(hidden && (i === 0 || i === 3) ? box('up', 1.15 * tileScale(), 1.54 * tileScale(), 0.8, 'facedown') : lyingTile(t), t, `meld-${seat}`)))
-    rack.appendChild(g)
+    open.appendChild(g)
   }
   if (game.bonus[seat].length && flowersVisible(seat)) {
     const g = el('div', 'group')
     for (const t of game.bonus[seat]) g.appendChild(tag(lyingTile(t, 'bonus'), t, `bonus-${seat}`))
-    rack.appendChild(g)
+    open.appendChild(g)
   }
   return rack
 }
 
+// Upright, the discards are 8.4 wide (5 a row, a size up) and get the table's depth less the names at
+// either end, which come in from the ends on a long table (--pull in style.css), all in units of its --u.
+function uprightRoom(tw: number, t: number): [number, number] {
+  const u = Math.min(tw / 25, t / 30)
+  return [8.4, (t - 2 * Math.min((t - tw) * 0.16, tw * 0.2)) / u - 20.1]
+}
+
 // All discards, pooled in the middle of the table in the order they were thrown, facing you. Each
 // tile is its own part, so a new discard adds one tile rather than redrawing the pile.
-// On a phone they're the same size as the sets round the edge (rows of 9, not 11), so they can be read.
+// On a phone they're the same size as the sets round the edge, so they can be read.
 function poolTiles(): HTMLElement[] {
   const big = phoneScreen.matches
   shell?.pool.classList.toggle('big', big)
-  // (a long hand's seventh row of 9 would reach the names: then they go back to 10 a row, a little smaller)
-  const crowded = big && pool.length > 54
-  shell?.pool.classList.toggle('crowded', crowded)
-  const [w, d] = crowded ? [1.15, 1.54] : big ? [1.15 * tileScale(), 1.54 * tileScale()] : [1.02, 1.37]
+  const upright = big && !sidewaysPhone.matches
+  let [w, d] = upright ? [1.58, 2.12] : big ? [1.15 * tileScale(), 1.54 * tileScale()] : [1.02, 1.37]   // (upright: a size bigger still, 5 a row — the table is narrow, the discards are what you read)
+  // On a phone the table is a long rectangle and the discards get the room between the names: 17.2
+  // wide by 10.4 deep sideways (12 a row, five rows), and upright 8.4 wide (5 a row) by the table's
+  // depth less the names at either end (see style.css). Once they don't fit, the tiles get smaller
+  // to stay in that room: as big as they can be, in however many rows that takes.
+  const room = !big || !shell ? null : sidewaysPhone.matches ? [17.2, 10.4]
+    : uprightRoom(shell.table.offsetWidth, shell.table.offsetHeight)
+  if (room) {
+    const [across, deep] = room
+    const fits = Math.floor((across + 0.1) / (w + 0.1)) * Math.floor((deep + 0.1) / (d + 0.1))
+    if (pool.length > fits) {
+      w = 0
+      for (let rows = 1; rows <= 20; rows++) {
+        const perRow = Math.ceil(pool.length / rows)
+        w = Math.max(w, Math.min((across + 0.1) / perRow - 0.1, (deep / rows - 0.1) / 1.34) - 0.01)
+      }
+      d = w * 1.34
+    }
+  }
   return pool.map((t, i) => {
     const latest = lastDiscard !== null && i === pool.length - 1
     return part(`pool${ids([t])}`, `${latest}:${w}`,() => tag(box('up', w, d, 0.7, latest ? 'latest' : '', t), t, 'pool'))
@@ -1950,7 +2031,7 @@ let shell: Shell | null = null
 // A player's standing, as shown by their name: points won or lost, or in Family style hands won.
 const standingText = (seat: number) => match.style === 'family'
   ? t(winsOf(match, seat) === 1 ? '{n} win' : '{n} wins', { n: winsOf(match, seat) })
-  : score(match.scores[seat], match.startPoints)
+  : fmt(match.scores[seat])
 
 // ---------- Your record (record.ts) ----------
 // "Best hand 5 faan · 4 of 17 challenges" — the menu card's line
@@ -2053,7 +2134,7 @@ function renderTable() {
     partsBefore = new Map()                           // nothing drawn before is on screen any more
   }
   const sh = shell
-  const top = el('div', 'topbar')
+  const top = el('div', 'topbar' + (moreOpen ? ' more-open' : ''))
   // round and wall: "East round · Hand 3" over "87 tiles left"
   // mid-deal, tiles not yet handed out still count as being in the wall
   const tilesLeft = game.wall.length + (intro && intro.phase !== 'flowers' ? 52 - intro.shown.reduce((a, b) => a + b, 0) : 0)
@@ -2067,6 +2148,10 @@ function renderTable() {
   // three columns: menu | status (centred over the table) | game info and settings
   const leftGroup = el('div', 'tb-left')
   leftGroup.appendChild(chip(ICONS.menu, t('Menu'), () => void openPause()))
+  // (sideways phones: the rest of the buttons fold away behind this, to keep the table clear)
+  const more = chip(ICONS.more, null, () => { moreOpen = !moreOpen; render() }, 'more-chip' + (moreOpen ? ' on' : ''))
+  more.title = moreOpen ? t('Hide the round, rules and sound buttons') : t('Show the round, rules and sound buttons')
+  leftGroup.appendChild(more)
   if (online) {                                       // quick reactions for the others at the table
     const react = chip(emoteArt('👍'), null, () => toggleReactions(react), 'react-chip')
     react.title = t('Send a reaction')
@@ -2090,6 +2175,10 @@ function renderTable() {
   placeAll(sh.pool, poolTiles())
   placeAll(sh.table, [sh.glow.el, ...sh.sides, sh.pool, ...(it && diceKey ? [part('dice', diceKey, () => tableDice(it))] : [])])
   sh.glow.point(it || game.over ? null : game.current)
+  const ci = clockInfo()
+  const tc = ci ? part('clock', `${ci.deadline}:${ci.who}`, () => tableClock(ci)) : null
+  for (const x of sh.scene.querySelectorAll('.table-clock')) if (x !== tc) x.remove()
+  if (tc && tc.parentElement !== sh.scene) sh.scene.appendChild(tc)
 
   // under the table: the action bar (small, rebuilt) and your hand (swapped if it changed)
   const bar = actionBar()
@@ -2150,6 +2239,15 @@ function renderTable() {
 const BANNER_SPOT: Record<string, [number, number]> = {
   0: [0.5, 0.85], 1: [0.97, 0.3], 2: [0.5, 0.15], 3: [0.03, 0.3], middle: [0.5, 0.5],
 }
+// The part of the table in view: on a sideways phone the table runs off the screen and under your
+// hand, so pop-ups are placed within what's left of it.
+function tableInView(scene: HTMLElement): { left: number; top: number; width: number; height: number } {
+  const r = scene.getBoundingClientRect()
+  const rackTop = shell?.rack?.getBoundingClientRect().top ?? innerHeight
+  const left = Math.max(0, r.left), right = Math.min(innerWidth, r.right)
+  const top = Math.max(0, r.top), bottom = Math.min(innerHeight, rackTop, r.bottom)
+  return { left, top, width: right - left, height: Math.max(0, bottom - top) }
+}
 
 // A short pop-up banner over the table. It lives outside #app so re-renders don't restart it,
 // and removes itself when its animation ends. A new banner replaces one already in the same spot.
@@ -2184,7 +2282,7 @@ function toggleReactions(from: HTMLElement) {
 function showReaction(seat: number, emoji: string, bubbled = PHRASES.includes(emoji)) {
   const scene = shell?.scene
   if (!scene || !document.contains(scene)) return
-  const r = scene.getBoundingClientRect()
+  const r = tableInView(scene)
   const [fx, fy] = BANNER_SPOT[String(seat)]
   const art = bubbled ? null : emote(emoji)
   const bubble = el('div', 'reaction' + (bubbled ? ' phrase' : ''), art ? '' : emoji)   // a phrase comes in a speech bubble
@@ -2198,7 +2296,7 @@ function showReaction(seat: number, emoji: string, bubbled = PHRASES.includes(em
 function showBanner(b: Banner, over: HTMLElement) {
   const spot = b.seat === null ? 'middle' : String(b.seat)
   document.querySelector(`.banner[data-spot="${spot}"]`)?.remove()
-  const r = over.getBoundingClientRect()
+  const r = tableInView(over)
   const [fx, fy] = BANNER_SPOT[spot]
   const banner = el('div', `banner ${b.kind}`, b.text)
   banner.dataset.spot = spot
@@ -2214,7 +2312,16 @@ function showBanner(b: Banner, over: HTMLElement) {
 // The cards themselves are in result-cards.ts; these are what they show and the buttons they carry.
 const resultContext = (): ResultContext => ({ match, game, names: NAMES, winTile })
 const seeTable = () => button(t('See the table'), () => { resultClosed = true; render() }, 'act')
-const handOverButtons = () => [continueButton(), seeTable()]
+// Stop after this hand and go to the final scores. Online, only the host can (for everyone).
+function endGameButton(): HTMLElement[] {
+  if (match.over || (online && !online.room?.seats[online.seat ?? -1]?.host)) return []
+  return [button(t('End game'), async () => {
+    if (!(await confirmEnd(true)) || match.over) return
+    if (online) online.endGame()
+    else endGameNow()
+  }, 'act danger')]
+}
+const handOverButtons = () => [continueButton(), seeTable(), ...endGameButton()]
 function finalButtons(): HTMLElement[] {
   const actions: HTMLElement[] = []
   if (online) {                                        // the host starts the next game; everyone else waits

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <!-- A corner of the cloth on a phone (see .table::before in style.css): the lotus from
+       table-mat.svg on the cream border, where the players' racks meet and no tiles go. The cream
+       square also hides the key-fret band where it would run into the corner. -->
+  <rect width="40" height="40" fill="#e2d9c4"/>
+  <g transform="translate(20 25) scale(1.25)">
+    <ellipse cx="-8" cy="4" rx="7.5" ry="2.9" fill="#a9c7b2"/>
+    <ellipse cx="8.5" cy="4.6" rx="6.4" ry="2.5" fill="#b9d2bf"/>
+    <path d="M-8 4 H-2.4 M8.5 4.6 H3.2" stroke="#86a993" stroke-width="0.5"/>
+    <g fill="#fbf8ef" stroke="#7a9f87" stroke-width="0.6" stroke-linejoin="round">
+      <path d="M0 -9 Q4.5 -3.5 0 2 Q-4.5 -3.5 0 -9Z" transform="rotate(-64 0 2)"/>
+      <path d="M0 -9 Q4.5 -3.5 0 2 Q-4.5 -3.5 0 -9Z" transform="rotate(64 0 2)"/>
+      <path d="M0 -10 Q5 -4 0 2 Q-5 -4 0 -10Z" transform="rotate(-32 0 2)"/>
+      <path d="M0 -10 Q5 -4 0 2 Q-5 -4 0 -10Z" transform="rotate(32 0 2)"/>
+      <path d="M0 -11 Q5 -4.5 0 2 Q-5 -4.5 0 -11Z"/>
+    </g>
+    <circle cx="0" cy="-2" r="1.2" fill="#d4b98c"/>
+  </g>
+</svg>

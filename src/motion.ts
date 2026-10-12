@@ -184,17 +184,26 @@ function arc(from: DOMRect, to: DOMRect, end: Keyframe = {}): Keyframe[] {
   ]
 }
 
+// A tile's on-screen box squashed or turned by the tilted table, as a tile of the usual shape (upright,
+// 3 wide to 4 tall) with the same area and centre — so a flying copy keeps its shape the whole way
+// instead of smearing into the shape of the spots it leaves and lands on.
+function natural(r: DOMRect): DOMRect {
+  const w = Math.sqrt((r.width * r.height) / 1.34), h = w * 1.34
+  return new DOMRect(r.left + (r.width - w) / 2, r.top + (r.height - h) / 2, w, h)
+}
+
 // A flat copy of the tile flies from `from` to the real tile's place, then the real tile appears
 // and settles. With `reveal`, the copy starts face down and turns face up halfway.
 function fly(key: string, target: HTMLElement, from: DOMRect, face: string, reveal = '', delay = 0) {
-  const to = target.getBoundingClientRect()
-  if (to.width === 0) return
+  const box = target.getBoundingClientRect()
+  if (box.width === 0) return
+  const to = natural(box)
   const old = inFlight.get(key)
   if (old) {                                // re-routed mid-flight (say, claimed as it landed): carry on from here
     from = old.ghost.getBoundingClientRect()
     old.anim.cancel()
     old.ghost.remove()
-  }
+  } else from = natural(from)
   const g = ghostAt(from, face)
   target.style.visibility = 'hidden'
   const anim = g.animate(arc(from, to), { duration: FLY_MS, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })
@@ -211,12 +220,13 @@ function fly(key: string, target: HTMLElement, from: DOMRect, face: string, reve
     const live = document.querySelector<HTMLElement>(`[data-key="${key}"]`)
     if (!live) return
     live.style.visibility = ''
-    live.animate([{ transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 180, easing: 'ease-out' })
+    live.animate([{ scale: '1.12' }, { scale: '1' }], { duration: 180, easing: 'ease-out' })   // (scale, not transform: tiles tipped up keep their tilt)
   }
 }
 
 // A face-down tile (or a bundle of `n`) off the wall to another player's rack, where it melts into their hand.
 function flyAway(from: DOMRect, to: DOMRect, delay: number, n = 1) {
+  from = natural(from); to = natural(to)
   if (n > 1) { from = row(from, n); to = new DOMRect(to.left - (to.width * (Math.min(n, 4) - 1)) / 2, to.top, to.width * Math.min(n, 4), to.height) }
   const g = ghostAt(from, '', Math.min(n, 4))
   g.animate(arc(from, to, { opacity: 0.2 }), { duration: FLY_MS, delay, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'both' })

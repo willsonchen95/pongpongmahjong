@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6">
+  <!-- One repeat of the key-fret band along the edge of the cloth (as in table-mat.svg), for the
+       top and bottom edges on a phone; table-mat-band-v.svg is the same, turned for the sides. -->
+  <path d="M0 5.2 H2 V1 H8 V4 H5 V2.6 M8 5.2 H10" fill="none" stroke="#a8946c" stroke-width="0.8"/>
+</svg>

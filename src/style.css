@@ -89,13 +89,14 @@ button { font: inherit; cursor: pointer; border: 0; }
   /* 74cqw: the tilt makes the near edge ~1.25× wider than the table, and it must still fit the column */
   --T: min(74cqw, calc((100vh - 300px) / 0.92), 980px);
   --u: calc(var(--T) / 30);
+  position: relative;                                    /* (the online clock sits over its middle) */
   perspective: calc(var(--T) * 1.6);
   margin-top: calc(var(--T) * -0.12);
   margin-bottom: calc(var(--T) * 0.01);
 }
 .table {
   position: relative;
-  width: var(--T);
+  width: var(--TW, var(--T));                            /* (sideways phones: wider than it is deep) */
   height: var(--T);
   border-radius: calc(var(--u) * 0.5);
   background:
@@ -148,6 +149,13 @@ button { font: inherit; cursor: pointer; border: 0; }
   transform-style: preserve-3d;
 }
 .rack-row.winner { outline: calc(var(--u) * 0.1) solid var(--clay); outline-offset: calc(var(--u) * 0.15); }
+.rack-line { display: flex; align-items: flex-end; gap: calc(var(--u) * 0.4); transform-style: preserve-3d; }
+/* The others' racks (sideRack): their hand standing at the edge, and in front of it what they've laid
+   open, lined up from the same end. As deep as the standing hand, a gap and a tile lying down: the gap
+   to the wall is cut by as much, so the wall (and the name inside it) stays where it was. */
+.rack-row.split { height: calc(var(--u) * 2.8); flex-direction: column-reverse; justify-content: flex-start; align-items: flex-start; gap: calc(var(--u) * 0.2); }
+.layer:not([data-seat="0"]) { gap: calc(var(--u) * 0.3); }
+.rack-row.split.revealed { height: auto; }               /* (once the hand is over: its face-up hand, then its sets, lying in two rows — the wall moves in for them) */
 .group { display: flex; gap: calc(var(--u) * 0.04); transform-style: preserve-3d; }
 
 /* The player's name and score, with their seat wind underneath, printed on the cloth inside their wall. */
@@ -197,6 +205,42 @@ button { font: inherit; cursor: pointer; border: 0; }
 }
 @keyframes timer-run { from { transform: scaleX(var(--from)); } to { transform: scaleX(0); } }
 @keyframes timer-hurry { from { background: #c47a68; } to { background: var(--rose); } }
+/* Online: the big clock over the middle of the table (see tableClock). See-through enough to read the
+   discards under it, and taps go through to them; solid red and pulsing for the last 5 seconds. */
+.table-clock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(38, 58, 72, 0.6);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.table-clock svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.tc-track, .tc-ring { fill: none; stroke-width: 3.5; }
+.tc-track { stroke: rgba(255, 255, 255, 0.25); }
+.tc-ring {
+  stroke: #f4efe4;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  animation: clock-run var(--left) linear forwards;
+}
+@keyframes clock-run { from { stroke-dashoffset: var(--from); } to { stroke-dashoffset: 100; } }
+.tc-secs { font-size: 2.1rem; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+.tc-who { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.68rem; font-weight: 800; opacity: 0.9; }
+.table-clock.mine { background: rgba(184, 115, 79, 0.72); }
+.table-clock.hurry { background: var(--rose); animation: clock-hurry 0.5s ease-in-out infinite alternate; }
+@keyframes clock-hurry { to { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(165, 80, 63, 0.35), 0 4px 14px rgba(0, 0, 0, 0.3); } }
+@media (prefers-reduced-motion: reduce) { .table-clock.hurry { animation: none; } }
 .away-text { margin: 0 0 14px; font-size: 1.05rem; opacity: 0.85; text-align: center; }
 .away-card { text-align: center; }
 .away-card .act { width: 100%; }
@@ -289,8 +333,7 @@ button { font: inherit; cursor: pointer; border: 0; }
   gap: calc(var(--u) * 0.1);
   cursor: zoom-in;                                       /* tap it: all the discards up close */
 }
-.pool.big { width: calc(var(--u) * 12.8); }              /* phones: bigger tiles, 9 to a row */
-.pool.big.crowded { width: calc(var(--u) * 12.5); }      /* (late in a long hand: 10 to a row) */
+.pool.big { width: calc(var(--u) * 8.6); }               /* phones: bigger tiles, 6 to a row between the names (and see poolTiles) */
 /* phones (flat table): the newest discard stands out, bigger — it's the one you might claim */
 .lite3d .pool .box.up.latest { transform: scale(1.3); z-index: 1; }
 
@@ -328,6 +371,7 @@ button { font: inherit; cursor: pointer; border: 0; }
   box-shadow: inset 0 0 0 1px var(--line);
 }
 .tb-left, .tb-right { display: flex; align-items: center; gap: 10px; }
+.more-chip { display: none !important; }                /* (sideways phones only) */
 .tb-left { justify-self: start; }
 .tb-right { justify-self: end; }
 /* narrow screens: status on its own row on top, controls split below */
@@ -650,7 +694,10 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   background: linear-gradient(to bottom,
     #6a8597 0, #4d6a7f calc(var(--band) * 0.5), var(--navy) calc(var(--band) - 3px),
     #d9d6cc calc(var(--band) - 3px), #ffffff var(--band), #f1efe6);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+  /* rounded, lit from the left; the ivory body's lower edge, then its shadow on the table */
+  box-shadow:
+    inset 2px 0 0 rgba(255, 255, 255, 0.9), inset -2px 0 0 rgba(120, 100, 60, 0.12), inset 0 -3px 0 #e1dbcc,
+    0 2px 0 #c9c1ad, 0 3px 0 #a99f88, 0 6px 10px rgba(0, 0, 0, 0.4);
 }
 .player-rack .tile.drawn { margin-left: calc(var(--w) * 0.4); }
 .tile.clickable { cursor: pointer; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), box-shadow 0.18s; }
@@ -887,7 +934,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   pointer-events: none;
 }
 .dice-row { display: flex; gap: calc(var(--u) * 0.9); transform-style: preserve-3d; }
-.box.die .face.top {
+.box.die .face {
   box-sizing: border-box;
   padding: calc(var(--u) * 0.22);
   border-radius: calc(var(--u) * 0.25);
@@ -898,7 +945,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   background: linear-gradient(145deg, #ffffff, #ece8de);
 }
 .box.die .face.front, .box.die .face.back, .box.die .face.left, .box.die .face.right {
-  background: #ece8de;
+  background: #e6e1d4;                                   /* the sides a touch darker than the top */
   border-radius: calc(var(--u) * 0.2);
 }
 .box.die { border-radius: calc(var(--u) * 0.25); }
@@ -1574,8 +1621,21 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 @media (max-width: 600px) {
   body { touch-action: manipulation; place-items: start center; }   /* top of the screen; no double-tap zoom */
   #app { padding: 8px 8px 12px; }
-  .wl-name { font-size: calc(var(--u) * 1.35); }
-  .wl-wind { font-size: calc(var(--u) * 1); }
+  .wl-name { font-size: calc(var(--u) * 1); }
+  .wl-wind { font-size: calc(var(--u) * 0.78); }
+  .wind-label { bottom: calc(var(--u) * 7.1); }          /* just inside each wall, so the discards between have room */
+  /* the others' racks a size up (their sets are what you read; the face-down walls set the table's
+     size and stay as they are), the names in a little to match, and the discards bigger still, 5 a row */
+  .layer:not([data-seat="0"]) .rack-row { --u: calc(min(var(--TW) / 25, var(--T) / 30) * 1.12); }
+  .pool.big { width: calc(var(--u) * 8.4); }
+  /* On a long table (upright), yours and the far player's tiles come in from the ends towards the
+     middle, the more the longer it is (--pull, set on .scene below), so the four sides stay close
+     together rather than leaving a long bare stretch between. Their names come in with them, a
+     little further than the walls: the far wall stands up in front of the far name, yours in front of
+     yours, at this tilt. */
+  .layer[data-seat="0"], .layer[data-seat="2"] { padding-bottom: calc(var(--u) * 0.9 + var(--pull, 0px)); }
+  .layer[data-seat="0"] .wind-label { bottom: calc(var(--u) * 7 + var(--pull, 0px)); }
+  .layer[data-seat="2"] .wind-label { bottom: calc(var(--u) * 7.9 + var(--pull, 0px)); }
   .main-col { gap: 6px; }
 
   /* top bar: the status pill across the top, then icon-only buttons and the round below */
@@ -1598,46 +1658,93 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .status-hint { font-size: 0.85rem; }
 
   /* the whole screen used: the top bar at the top, your hand at the bottom where your thumbs are,
-     and the table filling the middle — seen more from above, so it suits a tall screen and its
-     near corners stay on screen */
-  .main-col { min-height: calc(100dvh - 20px); gap: 12px; }
+     and the table filling the middle. Like the screen, the table is a long rectangle here — deeper
+     than it is wide (sideways phones are the other way round) — so it fills the height rather than
+     leaving bare page above and below it. Everything on it is sized to its width, so the far side
+     and yours stay the size they were; the left and right players get the extra length. Seen from
+     your seat, tilted well back under a close camera, so your side comes up big and the far side
+     sits back — as wide as it can be with the left and right players' hands still on screen. */
+  .main-col { min-height: calc(100dvh - 20px); gap: 12px; overflow: clip; overflow-clip-margin: 8px; }   /* (the tilted table's near corners, and its glow, run off the sides: cut at the screen's edge — out past #app's padding — so there's no sideways scrolling) */
   .scene {
-    flex: 1 1 auto;
+    flex: none;                                           /* (its own height, not stretched: see the margin) */
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    --T: min(92cqw, calc(100dvh - 470px), 980px);
-    margin: 0;
+    /* How the tilted table is drawn, measured under this camera (see the steps by screen height after
+       this block): a table T deep and TW wide is drawn about da T - db TW tall, starting ea T - eb TW
+       below its own top, and the strip --pull leaves at its near edge (your side comes in towards the
+       middle on a long table) is drawn about 3.5 band times as tall, and less tilted, the frame and
+       border at that edge draw taller too (ovb, in TW). The scene takes the drawn table,
+       less that strip, which your hand rises over as it stands over the table's edge on a sideways
+       phone; and the table is as deep as fills the height between the top bar and your hand, up to
+       --cap: past that a taller screen sees it from higher up instead (the steps), so the far side
+       and yours stay near each other. */
+    --tilt: 50deg; --da: 0.7236; --db: 0.0949; --ea: 0.2747; --eb: 0.078; --band: 0.392; --ovb: 0; --cap: 2.1;
+    --TW: min(98cqw, 980px);
+    /* (solved for that, with --pull's two pieces below: while it grows, and once it's capped) */
+    --fill: min(calc((100dvh - 290px + var(--TW) * (var(--db) - 0.56 * var(--band) + var(--ovb))) / (var(--da) - 0.56 * var(--band))),
+                calc((100dvh - 290px + var(--TW) * (var(--db) + 0.7 * var(--band) + var(--ovb))) / var(--da)));
+    --T: clamp(var(--TW), var(--fill), calc(var(--TW) * var(--cap)));
+    /* tiles as big as can be with each wall (18 stacks) still on the cloth: on a long table, its
+       ends clear of the cream border; on a near-square one, clear of the walls along the sides */
+    --u: min(calc(var(--TW) / 25), calc(var(--T) / 30));
+    perspective: calc(var(--TW) * 3.6);                   /* (far enough back that, tilted this low, the near corners' racks stay on screen) */
+    --e: calc(var(--T) * var(--ea) - var(--TW) * var(--eb));
+    --pull: min(calc((var(--T) - var(--TW)) * 0.16), calc(var(--TW) * 0.2));   /* (see .layer[data-seat="0"] above; past that, a longer table's extra length is in the middle, where the discards go) */
+    perspective-origin: 50% calc(var(--T) / 2 - var(--e));   /* (the camera over the table's middle, whatever room the scene takes) */
+    height: calc(var(--T) * var(--da) - var(--TW) * var(--db));
+    margin: auto 0 calc(var(--pull) * var(--band) * -3.5 - var(--TW) * var(--ovb));   /* (any room to spare goes above it; your hand rises over the bare strip at its near edge) */
     position: relative;
-    top: calc(var(--T) * -0.06);                          /* the tilt draws it a little low: even out the gaps */
   }
-  .table { transform: rotateX(14deg); }
+  .scene > .table { margin-top: calc(var(--e) * -1); }   /* (the drawn table's top at the scene's) */
+  .table { transform: rotateX(var(--tilt)); }
 
-  /* your hand in two rows of seven, so the tiles are big enough to read and tap; the drawn tile
-     ends the second row */
+  /* your hand in two rows of seven, so the tiles are big enough to read and tap (and no bigger: the
+     table gets the rest of the screen); the drawn tile
+     ends the second row. Always two rows tall, however many tiles you hold (fewer once you've laid
+     sets down), so the table above never grows and shrinks; the first row stays put at the top. */
   .player-rack {
-    --w: min(54px, calc((100cqw - 40px) / 7.4));
+    --w: min(52px, calc((100cqw - 40px) / 7.4));
     box-sizing: border-box;
-    width: 100%;
-    max-width: calc(var(--w) * 7.25 + 44px);             /* seven to a row, so the two rows match */
+    width: 100%;                                         /* (the screen's width, like the table above) */
+    justify-content: center;
+    height: calc(var(--w) * 1.62 * 2 + 6px + 18px);      /* (two rows of tiles, the gap between, the padding) */
     min-width: 0;
+    flex: none;
     flex-wrap: wrap;
-    align-content: flex-end;
-    gap: 10px 4px;
-    padding: 12px 10px 14px;
+    align-content: flex-start;
+    position: relative;
+    z-index: 2;                                          /* (over the table's near edge) */
+    gap: 6px 4px;
+    padding: 8px max(8px, calc((100% - var(--w) * 7.25 - 24px) / 2)) 10px;   /* (seven to a row, centred, so the two rows match) */
     border-radius: 12px;
   }
   .player-rack .tile { border-radius: 6px; }
   .player-rack .tile.drawn { margin-left: calc(var(--w) * 0.2); }
 
-  /* "Your hand" meter */
-  .action-bar { min-height: 0; gap: 6px; }
-  .hand-meter { box-sizing: border-box; width: 100%; gap: 5px 6px; padding: 6px; border-radius: 12px; }
-  .hm-chips { flex: 1 1 100%; gap: 5px; }               /* the chips get their own centred row(s) under the score */
-  .hm-total { padding: 2px 10px; gap: 6px; }
-  .hm-faan { font-size: 1.15rem; }
-  .hm-label, .hm-need { font-size: 0.8rem; }
-  .hm-chip, .hm-way { padding: 3px 9px; font-size: 0.85rem; }
+  /* the top bar is just the menu and ⋯ (see the next block), on the bare page: the status pill only
+     comes back when the connection drops */
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0; background: none; box-shadow: none; }
+  .topbar .status { order: 2; flex: 1 1 100%; }
+  .topbar.more-open .tb-right { position: fixed; z-index: 6; top: 56px; left: 8px; padding: 3px; }   /* (dropping down under the menu: the score is beside it) */
+  /* "Your hand" in the top bar, beside the menu: the score in the middle (its details open below it),
+     and the way to the minimum or the tiles you'd win with on the right — so your hand can sit right
+     under the table. The Kong and Next hand buttons pop up just above your hand. */
+  .action-bar { width: 100%; max-width: none; min-height: 0; flex-wrap: nowrap; align-items: flex-end; gap: 6px; height: 0; }   /* (as wide as your hand; taking no room, it sits in the gap above it, so it never pushes the page into scrolling) */
+  .action-bar > .act { order: -1; }
+  .hm-total-wrap { position: fixed; z-index: 3; top: 4px; left: calc(50% - 85px); }   /* (not a transform: that would move its details card too) */
+  .hm-total-wrap .hm-total { width: 170px; }               /* (wide enough for "1 more to reach minimum 1" on one line) */
+  .hm-total-wrap .hm-card { position: fixed; left: 8px; right: 8px; top: 62px; bottom: auto; width: auto; max-height: calc(100dvh - 72px); }
+  .action-bar .hm-way, .action-bar .hm-ready { position: fixed; z-index: 3; top: 4px; right: 8px; width: calc(50% - 101px); }
+  .action-bar .hm-way:has(~ .hm-ready) { display: none; }   /* (ready to win: that's what matters; the way is in the details) */
+  .action-bar .hm-way { display: block; }                 /* (the label runs into the text) */
+  .action-bar .hm-way-label { margin-right: 4px; }
+  /* both small enough to stay about two lines: the winning tiles side by side, not a list */
+  .action-bar .hm-way, .action-bar .hm-ready { padding: 4px 8px 5px; font-size: 0.68rem; line-height: 1.25; }
+  .action-bar .hm-way-label, .action-bar .hm-ready-label { font-size: 0.66rem; }
+  .action-bar .hm-ready { gap: 1px 7px; }
+  .action-bar .hm-win { gap: 2px; }
+  .action-bar .hm-win .tile.mini { font-size: 0.8rem; }
 
   /* the claim pop-up: full width, buttons share each row */
   .claim-card { width: calc(100vw - 16px); max-width: none; top: auto; bottom: calc(var(--above-rack, 190px) + 8px); padding: 12px 10px 14px; border-width: 3px; }   /* just above your hand, so you can check it while deciding */
@@ -1651,7 +1758,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .claim-effects { font-size: 0.8rem; }
 
   /* end-of-hand card and final standings */
-  .result-card { top: 8px; width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 16px 12px 18px; border-width: 3px; }
+  .result-card { top: 8px; width: calc(100vw - 16px); max-height: calc(100dvh - 32px); padding: 16px 12px 18px; border-width: 3px; }   /* (#app's padding puts it 16px down: as much room below) */
   .result-title { font-size: 1.8rem; }
   .result-sub { font-size: 1.2rem; }
   .result-how { font-size: 0.95rem; }
@@ -1681,115 +1788,298 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .act.big { padding: 12px 20px; font-size: 1.3rem; }
 }
 
+/* Upright on a short phone the table is nearly square, and your name on one line would reach the end
+   of Lin's wall: your wind goes under it */
+@media (max-width: 600px) and (max-height: 760px) {
+  .layer[data-seat="0"] .wind-label { flex-direction: column; align-items: center; gap: 0; }
+}
+/* Upright, on taller screens: the table seen from higher up, step by step, so it fills the height
+   without getting any longer (each step's numbers measured as in .scene above; it reaches --cap at
+   about the next step's height). Past the last, the table may be longer. */
+@media (max-width: 600px) and (min-height: 828px) {
+  .scene { --tilt: 45deg; --da: 0.7821; --db: 0.0881; --ea: 0.2458; --eb: 0.0811; --band: 0.332; --ovb: 0.035; }
+}
+@media (max-width: 600px) and (min-height: 904px) {
+  .scene { --tilt: 40deg; --da: 0.8327; --db: 0.0782; --ea: 0.2168; --eb: 0.082; --band: 0.288; --ovb: 0.068; }
+}
+@media (max-width: 600px) and (min-height: 969px) {
+  .scene { --tilt: 35deg; --da: 0.8755; --db: 0.0662; --ea: 0.1878; --eb: 0.0806; --band: 0.259; --ovb: 0.09; }
+}
+@media (max-width: 600px) and (min-height: 1024px) {
+  .scene { --tilt: 30deg; --da: 0.9111; --db: 0.0531; --ea: 0.159; --eb: 0.0766; --band: 0.244; --ovb: 0.105; --cap: 2.6; }
+}
+
+/* Tablets, and a Fold opened up (touch screens bigger than a phone; html.cull3d, set in index.html):
+   real 3D tiles, but only the faces you can see from your seat are drawn — the top, and the sides
+   turned towards you — about half the work. Each side of the table is drawn as the bottom edge and
+   rotated, so "towards you" is a different face on each: your side's front, the far side's back, and
+   on the left and right their back (towards the middle) plus the end facing you. (Phones do the same:
+   the next block.) */
+html.cull3d .layer .box > .face.left, html.cull3d .layer .box > .face.right, html.cull3d .pool .box > .face:not(.top, .front) { display: none; }
+html.cull3d .layer[data-seat="0"] .box > .face.back { display: none; }
+html.cull3d .layer[data-seat="2"] .box > .face.front { display: none; }
+html.cull3d .layer[data-seat="1"] .box > .face.front, html.cull3d .layer[data-seat="3"] .box > .face.front { display: none; }
+html.cull3d .layer[data-seat="1"] .box > .face.left, html.cull3d .layer[data-seat="3"] .box > .face.right { display: block; }
+
+/* ---------- Phones, upright or sideways: the table ---------- */
+/* The table as seen on a phone either way up: the cloth drawn rather than the printed mat, names in
+   cream on one line, real 3D tiles with only the faces you can see, the controls folded away behind ⋯,
+   and "Your hand" in small cards in the corners (where, is up to each layout). */
+@media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  /* the others' racks: more room between their standing tiles and the sets in front of them, which
+     the steep tilt would otherwise have them lean over (the wall and name move in to match) */
+  .layer:not([data-seat="0"]) .rack-row.split { height: calc(var(--u) * 3.3); gap: calc(var(--u) * 0.7); }
+  .layer:not([data-seat="0"]) .rack-row.split.revealed { height: auto; gap: calc(var(--u) * 0.3); }
+  /* names on one line, the wind beside them, to leave the discards more room */
+  .wind-label { display: flex; justify-content: center; align-items: baseline; gap: calc(var(--u) * 0.5); }
+  /* The table is a long rectangle, like the screen (wider than deep sideways, deeper than wide upright).
+     Each side is drawn as the bottom edge and rotated into place, so the left and right ones are built
+     at the table's depth, and reach across its width. */
+  .layer[data-seat="1"], .layer[data-seat="3"] {
+    inset: auto;
+    left: calc((var(--TW) - var(--T)) / 2);
+    top: calc((var(--T) - var(--TW)) / 2);
+    width: var(--T);
+    height: var(--TW);
+  }
+  /* the cloth: the sage field and cream border of the printed mat, deeper and darker towards the edges
+     so the ivory tiles stand out from it (sideways, the table is a long rectangle, which the square
+     printed mat wouldn't fit) */
+  .table {
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 50%, rgba(25, 70, 50, 0.25), rgba(15, 45, 35, 0.6)),
+      #c2d6c6;
+    box-shadow:
+      inset 0 0 0 calc(var(--u) * 1.6) #e2d9c4,          /* the cream border, and its two fine lines: */
+      inset 0 0 0 calc(var(--u) * 1.67) #a8946c,         /* narrow, under the players' racks, so the walls */
+      inset 0 0 0 calc(var(--u) * 1.82) #e2d9c4,         /* (and the ends broken off them) stay on the cloth */
+      inset 0 0 0 calc(var(--u) * 1.89) #a8946c,
+      inset 0 0 0 calc(var(--u) * 0.12) #e2d9c4,
+      0 0 0 calc(var(--u) * 0.25) #7a5a40,               /* the wooden frame */
+      0 0 0 calc(var(--u) * 0.85) #a08060,
+      0 0 0 calc(var(--u) * 1.05) #6e5038,
+      0 calc(var(--u) * 2) calc(var(--u) * 2.5) rgba(60, 50, 40, 0.25);
+  }
+  /* the printed mat's pictures, over the border (a box-shadow, so it would cover a background): a lotus
+     in each corner, and — since the corners can be under the side racks, or sideways off the screen — a lotus
+     either side of the far rack and your hand too, breaking the key-fret band along the very edge */
+  .table::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    --c: calc(var(--u) * 1.6);                           /* (the border's width) */
+    --b: calc(var(--u) * 0.5);                           /* (the band's) */
+    background:
+      url('./table-mat-corner.svg') left top / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') right top / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') left bottom / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') right bottom / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') 20% top / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') 80% top / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') 20% bottom / var(--c) var(--c) no-repeat,
+      url('./table-mat-corner.svg') 80% bottom / var(--c) var(--c) no-repeat,
+      url('./table-mat-band.svg') 0 calc(var(--u) * 0.2) / calc(var(--b) * 10 / 6) var(--b) repeat-x,
+      url('./table-mat-band.svg') 0 calc(100% - var(--u) * 0.2) / calc(var(--b) * 10 / 6) var(--b) repeat-x,
+      url('./table-mat-band-v.svg') calc(var(--u) * 0.2) 0 / var(--b) calc(var(--b) * 10 / 6) repeat-y,
+      url('./table-mat-band-v.svg') calc(100% - var(--u) * 0.2) 0 / var(--b) calc(var(--b) * 10 / 6) repeat-y;
+  }
+  .wind-label, .wl-name { color: #f4efe4; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+  /* whose turn it is (there's no status pill here): their name lit up, on a clay tag */
+  .wind-label.active, .wind-label.active .wl-name { color: #fff; }
+  .wind-label.active .wl-name { padding: 0 calc(var(--u) * 0.45); border-radius: calc(var(--u) * 0.35); background: var(--clay); text-shadow: none; box-shadow: 0 0 calc(var(--u) * 0.5) rgba(255, 220, 160, 0.6); }
+  .wind-label.winner, .wind-label.winner .wl-name { color: #f3c9a8; }
+  /* Real 3D tiles, with only the faces you can see drawn: see html.cull3d below */
+  .layer .box > .face.left, .layer .box > .face.right, .pool .box > .face:not(.top, .front) { display: none; }
+  .layer[data-seat="0"] .box > .face.back { display: none; }
+  .layer[data-seat="2"] .box > .face.front { display: none; }
+  .layer[data-seat="1"] .box > .face.front, .layer[data-seat="3"] .box > .face.front { display: none; }
+  .layer[data-seat="1"] .box > .face.left, .layer[data-seat="3"] .box > .face.right { display: block; }
+
+  /* the table kept clear: just the menu and ⋯, which unfolds the round, rules and sound buttons. No
+     status pill — "Your turn" and the others' calls pop up over the table, the Pong/Chi box and the
+     clock say the rest — except when the connection drops. */
+  .more-chip { display: inline-flex !important; }
+  .more-chip.on { box-shadow: inset 0 0 0 2px var(--clay); }
+  .topbar:not(.more-open) .tb-right { display: none; }
+  .topbar.more-open .tb-right { display: flex; padding: 3px; border-radius: 999px; background: rgba(251, 248, 242, 0.92); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); }
+  .topbar .status { display: none; }
+  .topbar .status.alert { display: block; }
+
+  /* "Your hand" split up: the score in one card (tap it for the details), and the way to the minimum
+     or the tiles you'd win with in another */
+  .hand-meter { display: contents; }
+  .hm-chips { display: none; }                           /* (they're in the card) */
+  .hm-total {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    gap: 0 6px;
+    width: 150px;
+    box-sizing: border-box;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(251, 248, 242, 0.94);
+    box-shadow: 0 2px 6px rgba(40, 30, 20, 0.18);
+    text-align: left;
+  }
+  .hm-total.ok { background: #e3eee7; border-color: #8fb8a2; }
+  .hm-total-wrap.open .hm-total { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay); }
+  .hm-total-wrap.open { z-index: 46; }                   /* (its details over the tiles flying across the table) */
+  .hm-need { grid-column: 1 / -1; }
+  .hm-more { grid-area: 1 / 3; font-size: 0.85rem; }
+  .hm-faan { font-size: 1rem; }
+  .hm-label, .hm-need { font-size: 0.7rem; }
+  .hm-way, .hm-ready {
+    width: 150px;
+    box-sizing: border-box;
+    gap: 2px 6px;
+    padding: 5px 10px 6px;
+    border: 0;
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 2px var(--clay), 0 2px 6px rgba(40, 30, 20, 0.18);
+    background: #f3e6db;
+    font-size: 0.74rem;
+    text-align: left;
+  }
+  .hm-way { flex-wrap: wrap; }
+  .hm-way-label, .hm-ready-label { flex-basis: 100%; font-size: 0.7rem; }
+}
+
 /* ---------- Phones held sideways ---------- */
-/* Laid out like the computer version: the table on the left, a slim column on the right for the
-   status, buttons and "Your hand", and your hand along the bottom. (A sideways phone is laid out
+/* The whole screen is the table, as in the mahjong apps people know: seen from your seat, tilted well
+   back so it spans the screen side to side with its corners running off it, your hand along the bottom
+   edge, and the controls tucked into the top corners over the frame. (A sideways phone is laid out
    about 1120 wide — see index.html — which keeps it under 600 tall.) */
 @media (orientation: landscape) and (max-height: 600px) {
   body { touch-action: manipulation; place-items: start center; }   /* no double-tap zoom while tapping tiles */
-  #app { padding: 6px 8px 0; }
-  .wl-name { font-size: calc(var(--u) * 1.3); }
-  .wl-wind { font-size: calc(var(--u) * 0.95); }
+  #app { padding: 0; }
+  .wl-name { font-size: calc(var(--u) * 1.05); }
+  .wl-wind { font-size: calc(var(--u) * 0.8); }
 
-  /* the game screen: table | side column, your hand across the bottom */
   .main-col {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 230px;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas: "scene top" "scene meter" "rack meter";   /* your hand right under the table */
-    gap: 6px 10px;
-    height: calc(100dvh - 16px);                         /* a little margin under your hand */
-  }
-  .scene {
-    grid-area: scene;
-    align-self: center;
-    justify-self: center;
-    /* as big as the height above your hand allows, and narrow enough to leave the side column */
-    --T: min(calc((100dvh - 128px) / 0.86), calc((100cqw - 250px) / 1.3), 980px);
-    margin: 0;
-    /* the tilt draws the table lower than its box: lift it so its front edge clears your hand */
+    display: block;
     position: relative;
-    top: calc(var(--T) * -0.1);
+    height: 100dvh;
+    overflow: hidden;
+    /* your hand's tile width, and the height it takes along the bottom */
+    --w: min(48px, calc((100cqw - 40px) / 15.5), calc(100dvh * 0.09));
+    --rack-h: calc(var(--w) * 1.62 + 10px);
   }
+  /* The table, seen from above your hand: high enough to look down onto the tiles and read them.
+     The camera distance scales with the table, so its outline is always the same shape: the far
+     edge 0.31 T above the middle, the row of your sets 0.365 T below it. Everything on it is
+     sized in 1/26ths of it rather than 1/30ths: zoomed in, with less bare cloth between the players. So: as big as fits between the strip of controls on top and your hand — and no
+     wider than lets the side players' sets stay on screen — with your sets just above your hand. */
+  .scene {
+    --T: min(calc((100dvh - var(--rack-h) - 26px) / 0.672), 82cqw, 1000px);
+    --u: calc(var(--T) / 26);
+    --TW: min(calc(var(--T) * 1.35), calc((100cqw - 24px) / 1.22));   /* and wider than deep, to fill the screen (its near end is drawn wider: still on screen) */
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100dvh - var(--rack-h) - var(--T) * (0.375 + 0.5));
+    height: var(--T);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .table { transform: rotateX(42deg); }
+  /* your hand stands over the near edge of the table: your sets and flowers sit just inside it,
+     a size smaller, and your name moves up to stay clear of them */
+  .layer[data-seat="0"] { gap: calc(var(--u) * 0.5); padding-bottom: calc(var(--u) * 2.4); }
+  .layer[data-seat="0"] .rack-row { --u: calc(var(--T) / 26 * 0.72); }
+  .layer:not([data-seat="0"]) .wind-label { bottom: calc(var(--u) * 5.4); }   /* the others' names by their walls, clear of the discards */
+  .layer[data-seat="0"] .wind-label { bottom: calc(var(--u) * 6.8); }   /* (just past your wall, which stands up in front of it) */
+  .layer[data-seat="1"] .wind-label, .layer[data-seat="3"] .wind-label { bottom: calc(var(--u) * 6); }   /* (off the side walls, which lean in) */
+  .layer[data-seat="2"] .wind-label { bottom: calc(var(--u) * 6.3); }   /* (and out from behind the far one) */
+  /* Names on one line, wind beside them, so the discards have room for five rows between yours and
+     the far one; the table is wide, so the discards spread out to make fewer rows: 12 a row, and
+     past 60 discards smaller tiles, to stay in that room (poolTiles in main.ts) */
+  .pool.big { width: calc(var(--u) * 17.2); top: calc(50% + var(--u) * 0.5); }   /* (a little towards you: the far rows' tops lean up towards the far name) */
 
-  /* side column, one tidy panel: the status, then the four buttons in an even row, then the round */
+  /* the controls in a strip along the top: menu, round, rules and sound on the left, the status on the right */
   .topbar {
-    grid-area: top;
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    justify-items: center;
-    gap: 8px 6px;
-    padding: 8px;
-    border-radius: 16px;
+    position: absolute;
+    z-index: 3;
+    top: 6px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    pointer-events: none;                                /* (the gaps between the pieces are table) */
   }
-  .tb-left, .tb-right { display: contents; }               /* their buttons join the panel's grid */
-  .topbar .status { grid-column: 1 / -1; order: -1; width: 100%; }
-  .status-pill { min-width: 0; width: 100%; min-height: 40px; gap: 8px; padding: 3px 10px 3px 3px; }
-  .status-badge { width: 32px; height: 32px; font-size: 1rem; }
-  .status-title { font-size: 0.95rem; }
-  .status-hint { font-size: 0.75rem; }
-  .topbar .chip { height: 36px; gap: 6px; padding: 0 10px 0 3px; font-size: 0.82rem; }
+  .topbar > *, .tb-left > *, .tb-right > * { pointer-events: auto; }
+  .tb-left, .tb-right { display: flex; gap: 6px; pointer-events: none; }
+  .tb-right { order: 1; }
+  .topbar .status { order: 2; margin-left: auto; width: min(300px, 28vw); }
+  .status-pill { min-width: 0; width: 100%; min-height: 36px; gap: 8px; padding: 2px 10px 2px 2px; }
+  .status-badge { width: 30px; height: 30px; font-size: 0.95rem; }
+  .status-title { font-size: 0.92rem; }
+  .status-hint { font-size: 0.72rem; }
+  .topbar .chip { height: 36px; gap: 6px; padding: 0 10px 0 3px; font-size: 0.8rem; }
   .topbar .chip-icon { width: 28px; height: 28px; }
   .topbar .chip-icon svg { width: 17px; height: 17px; }
   .topbar .chip:not(.round) { width: 36px; padding: 0; justify-content: center; }
   .topbar .chip:not(.round) .chip-label { display: none; }
-  .chip.round { grid-column: 1 / -1; order: 1; justify-self: stretch; min-width: 0; }
+  .chip.round { order: -1; min-width: 0; }
   .chip.round .chip-icon { font-size: 0.95rem; }
-  .chip.round .chip-stack { min-width: 0; overflow: hidden; }
-  .chip.round .chip-stack > span { overflow: hidden; text-overflow: ellipsis; }
-  .chip.info strong { font-size: 0.95rem; }
+  .chip.info strong { font-size: 0.9rem; }
 
-  /* "Your hand" under the buttons, in a matching panel that runs to the bottom (scrolling if long) */
+  /* the Kong button, and the buttons for moving on once a hand is over, in the bottom-left corner */
   .action-bar {
-    grid-area: meter;
-    align-self: stretch;
+    position: absolute;
+    z-index: 3;
+    bottom: 8px;
+    left: 8px;
+    flex-direction: column-reverse;
+    max-width: 160px;
     min-height: 0;
-    overflow-y: auto;
-    flex-direction: column;
     flex-wrap: nowrap;
-    justify-content: flex-start;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 6px;
   }
-  .hand-meter {
-    box-sizing: border-box;
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    padding: 8px;
-    border: 0;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.45);
-    box-shadow: inset 0 0 0 1px var(--line);
-  }
-  .hand-meter > * { align-self: center; }
-  .hm-chips { justify-content: center; }
-  .hm-total { padding: 2px 8px; gap: 5px; }
-  .hm-faan { font-size: 1.05rem; }
-  .hm-label, .hm-need { font-size: 0.72rem; }
-  .hm-chip, .hm-way { padding: 2px 8px; font-size: 0.78rem; }
-  .hm-card { position: fixed; left: auto; right: 8px; bottom: auto; top: 8px; max-height: calc(100dvh - 16px); width: min(420px, 70vw); }
+  /* "Your hand" is split between the two empty corners, clear of everyone's tiles: the score under
+     the menu buttons (tap it for the details, which open below it), and the way to the minimum or
+     the tiles you'd win with to the right of your hand */
+  .hm-total-wrap { position: fixed; z-index: 3; top: 54px; left: 8px; }
+  .hm-way, .hm-ready { position: fixed; z-index: 3; right: 8px; }
+  .hm-way { bottom: 8px; }
+  .hm-ready { bottom: 8px; }
+  .hm-way:has(~ .hm-ready) { bottom: 76px; }             /* (both: the way stacked above) */
+  .hm-card { position: fixed; left: 8px; right: auto; top: 112px; bottom: auto; max-height: calc(100dvh - 120px); width: min(420px, 60vw); }
   .action-bar .act { padding: 6px 14px; font-size: 1rem; }
 
-  /* your hand: one row along the bottom, as on a computer */
+  /* your hand: big tiles along the bottom edge, standing on the near edge of the table */
   .player-rack {
-    grid-area: rack;
-    justify-self: center;
-    /* fits across the table's column, and stays short enough to leave the table room on a short screen */
-    --w: min(54px, calc((100cqw - 310px) / 14.8), calc(100dvh * 0.12));
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    --w: inherit;
     min-width: 0;
     gap: 2px;
-    padding: 6px 10px 8px;
+    padding: 4px 10px 6px;
+    background: none;
+    border: 0;
+    box-shadow: none;
   }
-  .player-rack .tile { border-radius: 5px; }
+  .player-rack .tile { border-radius: 6px; }
   .player-rack .tile.drawn { margin-left: calc(var(--w) * 0.3); }
 
   /* the claim box over the table */
-  .claim-card { left: calc((100% - 240px) / 2); top: 6px; bottom: auto; width: min(560px, calc(100% - 260px)); padding: 10px 12px 12px; border-width: 3px; }
-  .claim-head { gap: 10px; margin-bottom: 8px; font-size: 1.05rem; }
-  .tile.claim-tile { width: 38px; height: 51px; border-radius: 5px; }
+  .claim-card { top: auto; bottom: calc(var(--rack-h) + 4px); width: min(540px, calc(100% - 40px)); padding: 8px 12px 10px; border-width: 3px; }   /* just above your hand: the clock and the discards stay in view */
+  .claim-head { gap: 10px; margin-bottom: 6px; font-size: 1rem; }
+  .tile.claim-tile { width: 30px; height: 40px; border-radius: 4px; }
   .claim-options { gap: 8px; }
   .claim-btn { flex: 1 1 120px; min-width: 0; padding: 8px 8px 6px; }
   .claim-label { font-size: 1.2rem; }
@@ -1799,6 +2089,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 
   /* end-of-hand card and final standings: the faan and scores side by side, scrolling if need be */
   .result-card { top: 4px; width: min(680px, calc(100vw - 16px)); max-height: calc(100dvh - 8px); padding: 12px 16px 14px; border-width: 3px; }
+  .result-card .result-actions { bottom: -14px; margin: 0 -16px -14px; padding: 10px 16px 12px; }   /* (its padding here) */
   .result-title { font-size: 1.6rem; }
   .result-sub { font-size: 1.1rem; }
   .result-how { font-size: 0.9rem; }
@@ -1862,21 +2153,13 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
   .setup-q { margin-top: 14px; }
 }
 
-/* Extra-wide sideways screens (a folded Fold's cover screen; a phone browser with its address bar):
-   the table is limited by the short height and leaves room either side, so tilt it further back —
-   it gets wider and everything on it bigger, while still fitting above your hand. */
-@media (orientation: landscape) and (max-height: 470px) {
-  .scene {
-    --T: min(calc((100dvh - 128px) / 0.74), calc((100cqw - 250px) / 1.3), 980px);
-    top: calc(var(--T) * -0.12);
-  }
-  .table { transform: rotateX(48deg); }
-}
-
 /* ---------- Phones, upright or sideways: pop-ups and other screens ---------- */
 /* Everything that floats over the game, and the screens around it, in phone sizes: smaller cards,
    tighter spacing and text a step down, so nothing reads as a zoomed-in close-up. */
 @media (max-width: 600px), (orientation: landscape) and (max-height: 600px) {
+  /* the end-of-hand card's buttons stay in view at its foot, the scores scrolling under them, so
+     "Next hand" is never hidden below the bottom of a short screen */
+  .result-actions { position: sticky; bottom: -18px; z-index: 1; margin: 0 -12px -18px; padding: 10px 12px 14px; background: linear-gradient(rgba(251, 248, 242, 0), var(--card) 14px); }   /* (out to the card's padding: upright, 12 at the sides and 18 below) */
   /* New game, Play online and the room: the buttons stay at the bottom of the screen while you scroll */
   .setup .setup-actions {
     position: sticky;
@@ -1976,20 +2259,70 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
    second. So there (html.lite3d, set in index.html) each tile is one flat face with a strip of its
    ivory layer and blue back showing beneath, and the whole table is tilted as a single picture: the
    phone draws it once, and tiles flying over it cost next to nothing. */
-.lite3d .table, .lite3d .layer, .lite3d .rack-row, .lite3d .group, .lite3d .pool, .lite3d .wall, .lite3d .box { transform-style: flat; }
+.lite3d .table, .lite3d .layer, .lite3d .rack-row, .lite3d .rack-line, .lite3d .group, .lite3d .pool, .lite3d .wall, .lite3d .box { transform-style: flat; }
 .lite3d .box > .face:not(.top) { display: none; }
 .lite3d .face.top { transform: none; }
 .lite3d .table { box-shadow: 0 0 0 calc(var(--u) * 0.25) #7a5a40, 0 0 0 calc(var(--u) * 0.85) #a08060, 0 0 0 calc(var(--u) * 1.05) #6e5038; }
 .lite3d .table::after { display: none; }
-/* tiles lying face up: the face, then their ivory layer and blue back as a strip along the near edge */
-.lite3d .box.up { box-shadow: 0 calc(var(--u) * 0.14) 0 #d8d4c8, 0 calc(var(--u) * 0.32) 0 var(--navy); border-radius: calc(var(--u) * 0.12); }
-.lite3d .box.up.latest { box-shadow: 0 0 0 calc(var(--u) * 0.1) var(--clay), 0 calc(var(--u) * 0.32) 0 var(--navy); }
-.lite3d .box.up.facedown { box-shadow: 0 calc(var(--u) * 0.14) 0 var(--navy), 0 calc(var(--u) * 0.32) 0 var(--ivory); }
-/* the wall: blue backs on top, the two layers of each stack as strips beneath */
-.lite3d .box.down2 { box-shadow: 0 calc(var(--u) * 0.18) 0 var(--ivory), 0 calc(var(--u) * 0.32) 0 var(--navy), 0 calc(var(--u) * 0.48) 0 var(--ivory); border-radius: calc(var(--u) * 0.1); }
-.lite3d .box.down1 { box-shadow: 0 calc(var(--u) * 0.18) 0 var(--ivory); border-radius: calc(var(--u) * 0.1); }
+/* Each tile's sides are drawn as strips beneath its face: an ivory layer and a blue back. They're
+   always on the side nearest you (--sx/--sy: which way "towards you" is on each player's side, as
+   each side is drawn as the bottom edge and rotated into place), so every tile on the table shows
+   the face you'd really see. The steeper the table's tilt, the more of a tile's sides you'd see:
+   --lift makes the strips deeper to match. Faces are lit, sides shaded, with a shadow on the felt. */
+.lite3d .table { --sx: 0; --sy: 1; --lift: 1; }
+.lite3d .layer[data-seat="1"] { --sx: -1; --sy: 0; }
+.lite3d .layer[data-seat="2"] { --sx: 0; --sy: -1; }
+.lite3d .layer[data-seat="3"] { --sx: 1; --sy: 0; }
+.lite3d .box { --d: calc(var(--u) * var(--lift) * 0.32); --side-ivory: #dcd5c4; --side-navy: #2c4352; }
+.lite3d .box.down2, .lite3d .box.down1 { --d: calc(var(--u) * var(--lift) * 0.3); }   /* (per tile: a wall stack is two) */
+/* tiles lying face up: ivory layer, then the blue back */
+.lite3d .box.up {
+  border-radius: calc(var(--u) * 0.12);
+  box-shadow:
+    calc(var(--sx) * var(--d) * 0.55) calc(var(--sy) * var(--d) * 0.55) 0 var(--side-ivory),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 var(--side-navy),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) calc(var(--u) * 0.35) rgba(0, 0, 0, 0.45);
+}
+.lite3d .box.up .face.top {
+  background: linear-gradient(170deg, #ffffff 30%, #ece7da);
+  box-shadow: inset 0 0 0 calc(var(--u) * 0.04) rgba(110, 90, 60, 0.4), inset 0 0 calc(var(--u) * 0.2) rgba(120, 100, 60, 0.15);
+}
+.lite3d .box.up.bonus .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.08) var(--clay); }
+.lite3d .box.up.latest .face.top { box-shadow: inset 0 0 0 calc(var(--u) * 0.1) var(--clay); }
+.lite3d .box.up.latest { box-shadow: 0 0 0 calc(var(--u) * 0.1) var(--clay), calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 var(--side-navy); }
+.lite3d .box.up.facedown .face.top { background: linear-gradient(160deg, #5f7f95, #3f5a6d); }
+.lite3d .box.up.facedown {
+  box-shadow:
+    calc(var(--sx) * var(--d) * 0.45) calc(var(--sy) * var(--d) * 0.45) 0 var(--side-navy),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 var(--side-ivory),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) calc(var(--u) * 0.35) rgba(0, 0, 0, 0.45);
+}
+/* the wall, face down: blue backs on top, and each stack's two tiles in layers beneath */
+.lite3d .box.down2 .face.top, .lite3d .box.down1 .face.top {
+  background: linear-gradient(170deg, #5f7f95, #3f5a6d);
+  box-shadow: inset 0 0 0 calc(var(--u) * 0.035) rgba(255, 255, 255, 0.18);
+}
+.lite3d .box.down2 {
+  border-radius: calc(var(--u) * 0.1);
+  box-shadow:
+    calc(var(--sx) * var(--d) * 0.45) calc(var(--sy) * var(--d) * 0.45) 0 var(--side-navy),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 var(--side-ivory),
+    calc(var(--sx) * var(--d) * 1.45) calc(var(--sy) * var(--d) * 1.45) 0 var(--side-navy),
+    calc(var(--sx) * var(--d) * 2) calc(var(--sy) * var(--d) * 2) 0 var(--side-ivory),
+    calc(var(--sx) * var(--d) * 2) calc(var(--sy) * var(--d) * 2) calc(var(--u) * 0.35) rgba(0, 0, 0, 0.45);
+}
+.lite3d .box.down1 {
+  border-radius: calc(var(--u) * 0.1);
+  box-shadow:
+    calc(var(--sx) * var(--d) * 0.45) calc(var(--sy) * var(--d) * 0.45) 0 var(--side-navy),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 var(--side-ivory),
+    calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) calc(var(--u) * 0.35) rgba(0, 0, 0, 0.45);
+}
 /* the others' hands, standing: a row of tile backs with their ivory tops */
-.lite3d .box.stand { height: calc(var(--u) * 1.3 * var(--ts, 1)); box-shadow: 0 calc(var(--u) * 0.12) 0 var(--navy-dark); }
+.lite3d .box.stand {
+  height: calc(var(--u) * 1.3 * var(--ts, 1));
+  box-shadow: calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) 0 #22313c, calc(var(--sx) * var(--d)) calc(var(--sy) * var(--d)) calc(var(--u) * 0.35) rgba(0, 0, 0, 0.45);
+}
 .lite3d .box.stand .face.top { background: var(--seam), linear-gradient(to bottom, var(--ivory) 0 20%, #4d6a7f 20%, var(--navy-dark)); border-radius: calc(var(--u) * 0.1); }
 .lite3d .table-dice .box.die { box-shadow: 0 calc(var(--u) * 0.2) 0 #c9c3b4; }
 
