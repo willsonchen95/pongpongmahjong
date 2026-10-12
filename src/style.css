@@ -1410,6 +1410,12 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 .menu-card.primary:not(:disabled):hover { border-color: var(--jade-dark); }
 .menu-card.primary .mc-icon { background: rgba(255, 255, 255, 0.2); }
 .menu-card.primary .mc-sub { opacity: 0.92; }
+/* Quick play: the first thing on the menu, a size bigger than the rest */
+.menu-card.quick { padding-top: 20px; padding-bottom: 20px; }
+.menu-card.quick .mc-icon { width: 64px; height: 64px; }
+.menu-card.quick .mc-icon svg { width: 32px; height: 32px; }
+.menu-card.quick .mc-title { font-size: 1.75rem; }
+.menu-card.quick.primary { box-shadow: 0 6px 18px rgba(47, 107, 84, 0.35); }
 /* Learn to play: a warm clay accent so beginners spot it */
 .menu-card.learn .mc-icon { background: var(--clay); color: #fff; }
 /* the headings over each way to play */

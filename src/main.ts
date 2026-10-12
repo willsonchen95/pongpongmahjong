@@ -813,6 +813,15 @@ async function coachForState() {
 // A single hand against easy bots, with every tip shown again from the start: short enough to finish
 // before a newcomer gives up, and then "Another hand" or a whole East round.
 const GUIDED_HANDS = 1
+
+// Quick play, the big button at the top of the menu: one hand straight away, no setup — the rules
+// last chosen (Hong Kong style, 1 faan, normal bots the first time), and any tips not yet seen.
+// After it, "Another hand" or a whole East round, as after the guided hand.
+function startQuickGame() {
+  track('quick-game')
+  startMatch(settings.bots, GUIDED_HANDS)
+}
+
 function startGuidedGame() {
   tipsSeen = new Set()
   saveTipsSeen()
@@ -919,7 +928,10 @@ function renderMenu() {
   }
   const fresh = !(started && !match.over)
   cards.append(
-    menuCard(MENU_ICONS.play, t('New game'), t('Play at your own pace — choose the rules'), renderStylePick, fresh ? 'primary' : ''),
+    // the first thing a visitor sees: big and green, one tap to a game (green only while there's no
+    // game to continue, which is then the main action)
+    menuCard(MENU_ICONS.quick, t('Quick play'), t('One hand against the computer — starts right away'), () => void startNewIfOk(startQuickGame), 'quick' + (fresh ? ' primary' : '')),
+    menuCard(MENU_ICONS.play, t('New game'), t('Play at your own pace — choose the rules'), renderStylePick),
     menuCard(MENU_ICONS.learn, t('Learn to play'), t('One short guided hand — tips explain every step'), () => void startNewIfOk(startGuidedGame), 'learn',
       tipsSeen.size === 0 ? t('New to mahjong? Start here') : ''),
     menuCard(MENU_ICONS.record, t('Your record'), recordLine(), openRecord, 'record-card'),
@@ -2331,8 +2343,8 @@ function finalButtons(): HTMLElement[] {
     else actions.push(el('div', 'result-next', t('{host} can start another game — friends can join with code {code} until then.', { host: hostName ?? t('The host'), code: online.code })))
     actions.push(button(t('Leave room'), leaveOnline, 'act'))
   } else if (match.hands) {                          // after the guided hand: another, or a whole round
-    actions.push(button(t('Another hand'), () => startMatch('easy', GUIDED_HANDS), 'act primary'),
-      button(t('Play a whole East round'), () => startMatch('easy'), 'act'),   // (the guided game set one round)
+    actions.push(button(t('Another hand'), () => startMatch(match.bots, GUIDED_HANDS), 'act primary'),   // (the guided hand's easy bots, or Quick play's)
+      button(t('Play a whole East round'), () => startMatch(match.bots), 'act'),   // (the guided game set one round)
       button(t('Main menu'), renderMenu, 'act'))
   } else {
     actions.push(button(t('Play again'), () => startMatch(), 'act primary'), button(t('Main menu'), renderMenu, 'act'))

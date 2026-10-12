@@ -7,6 +7,7 @@ export const CHANGELOG: Release[] = [
   {
     version: '1.2.0', date: '2026-10-12',
     notes: [
+      'Quick play: one tap on the menu starts a hand against the computer straight away — no setup.',
       'Phones look like a real table: tiles with real depth, a sage cloth with a lotus border, and the table filling the screen, held upright or sideways.',
       'Bigger tiles on the table on phones, so the discards and the other players’ sets are easy to read.',
       'The other players’ hands stand at the back of their rack with their sets laid in front — and stay on the table when the hand is over.',

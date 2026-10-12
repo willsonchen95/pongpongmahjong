@@ -100,6 +100,8 @@ export const lyingTile = (t: Tile, cls = '') => box('up', 1.15 * tileScale(), 1.
 
 // Icons on the main menu's cards and buttons.
 export const MENU_ICONS = {
+  // a lightning bolt: a game straight away
+  quick: svgIcon('<path d="M13.5 2.5 5 13.5h6l-1.5 8 8.5-11h-6z"/>'),
   // a cup of tea: sit down for a game
   play: svgIcon('<path d="M4 10h13v3a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6z"/><path d="M17 11.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8.5 3.5c-.8 1 .8 2 0 3M12.5 3.5c-.8 1 .8 2 0 3"/><path d="M3 21.5h16"/>'),
   // an abacus: Hong Kong style, where the points are counted

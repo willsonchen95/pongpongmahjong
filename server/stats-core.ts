@@ -6,6 +6,7 @@
 export const EVENTS = {
   open: 'Opened the game',
   'guided-game': 'Guided games started',
+  'quick-game': 'Quick play games started',
   'bot-game': 'Games vs bots started',
   'hand-done': 'Hands vs bots played',
   'hand-won': 'Hands vs bots won',
