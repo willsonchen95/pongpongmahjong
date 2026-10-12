@@ -2323,7 +2323,7 @@ function showBanner(b: Banner, over: HTMLElement) {
 // ---------- End of a hand, end of the game ----------
 // The cards themselves are in result-cards.ts; these are what they show and the buttons they carry.
 const resultContext = (): ResultContext => ({ match, game, names: NAMES, winTile })
-const seeTable = () => button(t('See the table'), () => { resultClosed = true; render() }, 'act')
+const seeTable = () => button(t('See the table'), () => { resultClosed = true; render() }, 'act ghost')
 // Stop after this hand and go to the final scores. Online, only the host can (for everyone).
 function endGameButton(): HTMLElement[] {
   if (match.over || (online && !online.room?.seats[online.seat ?? -1]?.host)) return []
@@ -2344,7 +2344,7 @@ function finalButtons(): HTMLElement[] {
     actions.push(button(t('Leave room'), leaveOnline, 'act'))
   } else if (match.hands) {                          // after the guided hand: another, or a whole round
     actions.push(button(t('Another hand'), () => startMatch(match.bots, GUIDED_HANDS), 'act primary'),   // (the guided hand's easy bots, or Quick play's)
-      button(t('Play a whole East round'), () => startMatch(match.bots), 'act'),   // (the guided game set one round)
+      button(t('Play a whole East round'), () => startMatch(match.bots), 'act warm'),   // (the guided game set one round)
       button(t('Main menu'), renderMenu, 'act'))
   } else {
     actions.push(button(t('Play again'), () => startMatch(), 'act primary'), button(t('Main menu'), renderMenu, 'act'))

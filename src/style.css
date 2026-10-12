@@ -467,9 +467,16 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 .status.mine .status-badge, .status.win .status-badge { background: var(--clay); }
 
 .action-bar { position: relative; z-index: 1; min-height: 60px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
-.act { padding: 10px 28px; border-radius: 12px; background: #6b7378; color: #fff; font-size: 1.4rem; font-weight: 700; box-shadow: 0 3px 0 #4c5357; }
+/* Buttons in the tea-house colours: navy like the tiles' backs by default, jade for the main action,
+   clay for a second way forward, and a navy outline for the lightest choice */
+.act { padding: 10px 28px; border-radius: 12px; background: var(--navy); color: #fff; font-size: 1.4rem; font-weight: 700; box-shadow: 0 3px 0 var(--navy-dark); }
 .act.primary { background: var(--jade); box-shadow: 0 3px 0 var(--jade-dark); }
-.act:active { transform: translateY(2px); box-shadow: 0 1px 0 #4c5357; }
+.act.warm { background: var(--clay); box-shadow: 0 3px 0 #8a5338; }
+.act.ghost { background: var(--card); color: var(--navy); box-shadow: inset 0 0 0 2px var(--navy), 0 3px 0 rgba(38, 58, 72, 0.25); }
+.act:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--navy-dark); }
+.act.primary:active { box-shadow: 0 1px 0 var(--jade-dark); }
+.act.warm:active { box-shadow: 0 1px 0 #8a5338; }
+.act.ghost:active { box-shadow: inset 0 0 0 2px var(--navy); }
 .act .tile.mini { font-size: 1.1rem; }
 .bar-hint { font-size: 1.2rem; opacity: 0.9; }
 
@@ -1223,6 +1230,7 @@ button.chip:focus-visible { outline: 3px solid var(--clay); outline-offset: 2px;
 .dialog-actions { display: flex; flex-direction: column; gap: 10px; }
 .dialog-actions .act { width: 100%; }
 .act.danger { background: var(--rose); box-shadow: 0 3px 0 #7d3a2e; }
+.act.danger:active { box-shadow: 0 1px 0 #7d3a2e; }
 
 /* ---------- Main menu ---------- */
 .menu-page {
