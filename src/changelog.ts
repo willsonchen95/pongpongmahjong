@@ -5,6 +5,19 @@ export interface Release { version: string; date: string; notes: string[] }   //
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.2.0', date: '2026-10-12',
+    notes: [
+      'Phones look like a real table: tiles with real depth, a sage cloth with a lotus border, and the table filling the screen, held upright or sideways.',
+      'Bigger tiles on the table on phones, so the discards and the other players’ sets are easy to read.',
+      'The other players’ hands stand at the back of their rack with their sets laid in front — and stay on the table when the hand is over.',
+      'A clearer screen on phones: the buttons fold away behind ⋯, your score and tips sit in the corners, and whose turn it is lights up on the table.',
+      'End the game from the result screen, between hands.',
+      'Learn to play is now one short guided hand, and your record counts hands.',
+      'Starting points: each player starts with points and the game ends when someone runs out.',
+      'Online: a countdown on the table shows how long is left to play or call.',
+    ],
+  },
+  {
     version: '1.1.0', date: '2026-10-09',
     notes: [
       'Bahasa Indonesia: switch between English and Indonesian on the main menu (EN | ID). Phones set to Indonesian start in Indonesian.',

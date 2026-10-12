@@ -725,5 +725,13 @@ export const ID: Record<string, string> = {
   'Private online rooms with friends — share a code; bots fill any empty seats.': 'Ruangan online pribadi bersama teman — bagikan kode; bot mengisi kursi yang kosong.',
   'Record your own Pong!, Chi!, Kong! and Mahjong! calls for your friends to hear.': 'Rekam seruan Pong!, Chi!, Kong!, dan Mahjong!-mu sendiri untuk didengar temanmu.',
   'Installs like an app on phones, and plays against the bots offline.': 'Bisa dipasang seperti aplikasi di ponsel, dan dimainkan melawan bot secara offline.',
+  'Phones look like a real table: tiles with real depth, a sage cloth with a lotus border, and the table filling the screen, held upright or sideways.': 'Ponsel terlihat seperti meja sungguhan: ubin dengan ketebalan nyata, kain hijau dengan pinggiran teratai, dan meja memenuhi layar, tegak maupun miring.',
+  'Bigger tiles on the table on phones, so the discards and the other players’ sets are easy to read.': 'Ubin di meja lebih besar di ponsel, jadi buangan dan set pemain lain mudah dibaca.',
+  'The other players’ hands stand at the back of their rack with their sets laid in front — and stay on the table when the hand is over.': 'Tangan pemain lain berdiri di belakang raknya dengan set mereka di depan — dan tetap di meja saat ronde selesai.',
+  'A clearer screen on phones: the buttons fold away behind ⋯, your score and tips sit in the corners, and whose turn it is lights up on the table.': 'Layar ponsel lebih rapi: tombol terlipat di balik ⋯, skor dan petunjukmu ada di sudut, dan giliran siapa menyala di meja.',
+  'End the game from the result screen, between hands.': 'Akhiri permainan dari layar hasil, di antara ronde.',
+  'Learn to play is now one short guided hand, and your record counts hands.': 'Belajar bermain sekarang satu ronde singkat yang dipandu, dan catatanmu menghitung ronde.',
+  'Starting points: each player starts with points and the game ends when someone runs out.': 'Poin awal: setiap pemain mulai dengan poin dan permainan berakhir saat ada yang kehabisan.',
+  'Online: a countdown on the table shows how long is left to play or call.': 'Online: hitungan mundur di meja menunjukkan sisa waktu untuk bermain atau memanggil.',
   'Bahasa Indonesia: switch between English and Indonesian on the main menu (EN | ID). Phones set to Indonesian start in Indonesian.': 'Bahasa Indonesia: ganti antara bahasa Inggris dan Indonesia di menu utama (EN | ID). Ponsel berbahasa Indonesia langsung mulai dalam bahasa Indonesia.',
 }
