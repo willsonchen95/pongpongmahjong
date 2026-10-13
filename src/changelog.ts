@@ -9,6 +9,8 @@ export const CHANGELOG: Release[] = [
     notes: [
       'Quick play: one tap on the menu starts a hand against the computer straight away — no setup.',
       'Phones look like a real table: tiles with real depth, a sage cloth with a lotus border, and the table filling the screen, held upright or sideways.',
+      'The table adjusts to your phone: upright and sideways are both clearer and easier to see.',
+      'Tiles that looked flat now look more three-dimensional, with more texture.',
       'Bigger tiles on the table on phones, so the discards and the other players’ sets are easy to read.',
       'The other players’ hands stand at the back of their rack with their sets laid in front — and stay on the table when the hand is over.',
       'A clearer screen on phones: the buttons fold away behind ⋯, your score and tips sit in the corners, and whose turn it is lights up on the table.',
