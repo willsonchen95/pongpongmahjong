@@ -19,7 +19,7 @@ everyone at the table, so that's where most of the automated tests are:
 | `src/i18n.test.ts` | Every English text has an Indonesian translation |
 | `src/changelog.test.ts` | The changelog and the version number stay in step |
 
-124 tests in all, run on every push by GitHub Actions together with typechecks and a build.
+125 tests in all, run on every push by GitHub Actions together with typechecks and a build.
 
 **Make cheating impossible by design.** The room server runs the game with the same rules engine as
 the browser. A player's browser only *asks* to make a move, the server decides whether it's legal,
@@ -152,3 +152,19 @@ version 1.1.0:
   sign-up*, and an About page explains what the game keeps and sends, and why it was made.
 - **A score reveal that teaches:** each faan pattern appears in turn and lights up its tiles, so new
   players learn *why* a hand scored.
+
+### A rule that was right, but confusing
+
+After version 1.2.0 a player suggested that Chi should be allowed from any player, because they
+kept drawing while waiting for the one tile they needed to finish an all-Chi hand.
+
+- **Investigation:** I read the code instead of guessing. Chi is only allowed from the player before
+  you, which is the standard Hong Kong rule. Winning on a discard is allowed from *anyone*, but only
+  if the hand reaches the minimum faan. The player was most likely on a 1-faan minimum with a hand
+  that scored 0. I confirmed this by playing the same situation with a 0-faan minimum, where the win
+  is offered.
+- **Decision:** the rule stays as it is, because changing it would make it a different game. This is
+  the *confusion* kind of feedback above: change what the game says, not what it does.
+- **Next:** the game already explains when a finished hand is below the minimum. The next release
+  will name it (a "chicken hand") and explain, in the tips and rules, that a Chi comes only from the
+  player before you.
